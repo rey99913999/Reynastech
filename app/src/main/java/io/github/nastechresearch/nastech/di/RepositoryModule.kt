@@ -4,6 +4,7 @@ import android.content.Context
 import io.github.nastechresearch.nastech.data.files.FileFolders
 import io.github.nastechresearch.nastech.data.files.FilesManager
 import io.github.nastechresearch.nastech.data.files.SkillManager
+import io.github.nastechresearch.nastech.data.memory.ConversationMemoryEngine
 import io.github.nastechresearch.nastech.data.repository.ConversationRepository
 import io.github.nastechresearch.nastech.data.repository.FavoriteRepository
 import io.github.nastechresearch.nastech.data.repository.FolderRepository
@@ -29,6 +30,10 @@ val repositoryModule = module {
 
     single {
         MemoryRepository(get())
+    }
+
+    single {
+        ConversationMemoryEngine(get())
     }
 
     single {

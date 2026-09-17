@@ -28,6 +28,8 @@ import io.github.nastechresearch.nastech.data.datastore.SettingsStore
 import io.github.nastechresearch.nastech.data.datastore.getCurrentAssistant
 import io.github.nastechresearch.nastech.data.datastore.getCurrentChatModel
 import io.github.nastechresearch.nastech.data.files.FilesManager
+import io.github.nastechresearch.nastech.data.memory.ConversationMemoryEngine
+import io.github.nastechresearch.nastech.data.memory.ConversationMemoryRuntime
 import io.github.nastechresearch.nastech.data.model.Assistant
 import io.github.nastechresearch.nastech.data.model.Avatar
 import io.github.nastechresearch.nastech.data.model.Conversation
@@ -41,8 +43,10 @@ import io.github.nastechresearch.nastech.ui.hooks.writeStringPreference
 import io.github.nastechresearch.nastech.ui.hooks.ChatInputState
 import io.github.nastechresearch.nastech.utils.UiState
 import io.github.nastechresearch.nastech.utils.UpdateChecker
+import kotlinx.coroutines.Dispatchers
 import java.util.Locale
 import kotlin.uuid.Uuid
+import org.koin.core.context.GlobalContext
 
 private const val TAG = "ChatVM"
 
@@ -58,12 +62,10 @@ class ChatVM(
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
-    var chatListInitialized by mutableStateOf(false) // 聊天列表是否已经滚动到底部
+    var chatListInitialized by mutableStateOf(false)
 
-    // 聊天输入状态 - 保存在 ViewModel 中避免 TransactionTooLargeException
     val inputState = ChatInputState()
 
-    // 异步任务 (从ChatService获取，响应式)
     val conversationJob: StateFlow<Job?> =
         chatService
             .getGenerationJobStateFlow(_conversationId)
@@ -78,114 +80,99 @@ class ChatVM(
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     init {
-        // 添加对话引用
         chatService.addConversationReference(_conversationId)
-
-        // 初始化对话
         viewModelScope.launch {
             chatService.initializeConversation(_conversationId)
         }
-
-        // 记住对话ID, 方便下次启动恢复
         context.writeStringPreference("lastConversationId", _conversationId.toString())
     }
 
     override fun onCleared() {
         super.onCleared()
-        // 移除对话引用
         chatService.removeConversationReference(_conversationId)
+        ConversationMemoryRuntime.clear(_conversationId.toString())
     }
 
-    // 用户设置
     val settings: StateFlow<Settings> =
         settingsStore.settingsFlow.stateIn(viewModelScope, SharingStarted.Eagerly, Settings.dummy())
 
-    // 网络搜索(每个助手独立)
     val enableWebSearch = settings.map {
         it.getCurrentAssistant().enableWebSearch
     }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    // 当前模型
     val currentChatModel = settings.map { settings ->
         settings.getCurrentChatModel()
     }.stateIn(viewModelScope, SharingStarted.Lazily, null)
 
-    // 错误状态
     val errors: StateFlow<List<ChatError>> = chatService.errors
 
     fun dismissError(id: Uuid) = chatService.dismissError(id)
 
     fun clearAllErrors() = chatService.clearAllErrors()
 
-    // 生成完成
     val generationDoneFlow: SharedFlow<Uuid> = chatService.generationDoneFlow
-
-    // MCP管理器
     val mcpManager = chatService.mcpManager
 
-    // 更新设置
     fun updateSettings(newSettings: Settings): Job {
         return viewModelScope.launch {
             val oldSettings = settings.value
-            // 检查用户头像是否有变化，如果有则删除旧头像
             checkUserAvatarDelete(oldSettings, newSettings)
             settingsStore.update(newSettings)
         }
     }
 
-    // 检查用户头像删除
     private fun checkUserAvatarDelete(oldSettings: Settings, newSettings: Settings) {
         val oldAvatar = oldSettings.displaySetting.userAvatar
         val newAvatar = newSettings.displaySetting.userAvatar
-
         if (oldAvatar is Avatar.Image && oldAvatar != newAvatar) {
             filesManager.deleteChatFiles(listOf(oldAvatar.url.toUri()))
         }
     }
 
-    // 设置聊天模型
     fun setChatModel(assistant: Assistant, model: Model) {
         viewModelScope.launch {
             settingsStore.update { settings ->
                 settings.copy(
                     assistants = settings.assistants.map {
-                        if (it.id == assistant.id) {
-                            it.copy(
-                                chatModelId = model.id
-                            )
-                        } else {
-                            it
-                        }
+                        if (it.id == assistant.id) it.copy(chatModelId = model.id) else it
                     })
             }
         }
     }
 
-    // Update checker
     val updateState =
         updateChecker.checkUpdate().stateIn(viewModelScope, SharingStarted.Eagerly, UiState.Loading)
 
-    /**
-     * 处理消息发送
-     *
-     * @param content 消息内容
-     * @param answer 是否触发消息生成，如果为false，则仅添加消息到消息列表中
-     */
-    fun handleMessageSend(content: List<UIMessagePart>,answer: Boolean = true) {
+    fun handleMessageSend(content: List<UIMessagePart>, answer: Boolean = true) {
         if (content.isEmptyInputMessage()) return
 
-        chatService.sendMessage(_conversationId, content, answer)
+        viewModelScope.launch(Dispatchers.Default) {
+            val text = content
+                .filterIsInstance<UIMessagePart.Text>()
+                .joinToString("\n") { it.text }
+                .trim()
+
+            if (text.isNotEmpty()) {
+                ConversationMemoryRuntime.register(_conversationId.toString(), text)
+                try {
+                    GlobalContext.get().get<ConversationMemoryEngine>()
+                        .ingestUserMessage(_conversationId.toString(), text)
+                } catch (_: Exception) {
+                    // Memory is optional; a local memory failure must never block chat sending.
+                }
+            }
+
+            chatService.sendMessage(_conversationId, content, answer)
+        }
     }
 
     fun handleMessageEdit(parts: List<UIMessagePart>, messageId: Uuid) {
         if (parts.isEmptyInputMessage()) return
-
         viewModelScope.launch {
             chatService.editMessage(_conversationId, messageId, parts)
         }
     }
 
-    /** Queue a complete draft behind the current response without cancelling that response. */
     fun queueMessage(content: List<UIMessagePart>): Boolean =
         chatService.queueMessage(_conversationId, content)
 
@@ -199,9 +186,8 @@ class ChatVM(
         )
     }
 
-    suspend fun forkMessage(message: UIMessage): Conversation {
-        return chatService.forkConversationAtMessage(_conversationId, message.id)
-    }
+    suspend fun forkMessage(message: UIMessage): Conversation =
+        chatService.forkConversationAtMessage(_conversationId, message.id)
 
     fun deleteMessage(message: UIMessage) {
         viewModelScope.launch {
@@ -217,10 +203,7 @@ class ChatVM(
         )
     }
 
-    fun regenerateAtMessage(
-        message: UIMessage,
-        regenerateAssistantMsg: Boolean = true
-    ) {
+    fun regenerateAtMessage(message: UIMessage, regenerateAssistantMsg: Boolean = true) {
         chatService.regenerateAtMessage(_conversationId, message, regenerateAssistantMsg)
     }
 
@@ -228,8 +211,7 @@ class ChatVM(
         toolCallId: String,
         approved: Boolean,
         reason: String = "",
-        scope: io.github.nastechresearch.nastech.service.ChatService.ApprovalScope =
-            io.github.nastechresearch.nastech.service.ChatService.ApprovalScope.Once,
+        scope: ChatService.ApprovalScope = ChatService.ApprovalScope.Once,
         toolName: String? = null,
     ) {
         chatService.handleToolApproval(
@@ -242,57 +224,46 @@ class ChatVM(
         )
     }
 
-    fun handleToolAnswer(
-        toolCallId: String,
-        answer: String,
-    ) {
+    fun handleToolAnswer(toolCallId: String, answer: String) {
         chatService.handleToolApproval(_conversationId, toolCallId, approved = true, answer = answer)
     }
 
     fun stopGeneration() {
-        viewModelScope.launch {
-            chatService.stopGeneration(_conversationId)
-        }
+        viewModelScope.launch { chatService.stopGeneration(_conversationId) }
     }
 
     fun saveConversationAsync() {
-        viewModelScope.launch {
-            chatService.saveConversation(_conversationId, conversation.value)
-        }
+        viewModelScope.launch { chatService.saveConversation(_conversationId, conversation.value) }
     }
 
     fun updateTitle(title: String) {
         viewModelScope.launch {
-            val updatedConversation = conversation.value.copy(title = title)
-            chatService.saveConversation(_conversationId, updatedConversation)
+            chatService.saveConversation(_conversationId, conversation.value.copy(title = title))
         }
     }
 
     fun deleteConversation(conversation: Conversation): Job =
         viewModelScope.launch {
+            try {
+                GlobalContext.get().get<ConversationMemoryEngine>().clearMemory(conversation.id.toString())
+            } catch (_: Exception) {
+                // Keep deletion of the raw conversation independent from optional memory cleanup.
+            }
+            ConversationMemoryRuntime.clear(conversation.id.toString())
             conversationRepo.deleteConversation(conversation)
         }
 
     fun updatePinnedStatus(conversation: Conversation) {
-        viewModelScope.launch {
-            conversationRepo.togglePinStatus(conversation.id)
-        }
+        viewModelScope.launch { conversationRepo.togglePinStatus(conversation.id) }
     }
 
     fun moveConversationToAssistant(conversation: Conversation, targetAssistantId: Uuid) {
         viewModelScope.launch {
             val conversationFull = conversationRepo.getConversationById(conversation.id) ?: return@launch
-            // Folders are per-assistant groupings; after switching assistant the old folder is
-            // not visible under the new one, so clear the assignment to avoid losing the chat.
             val updatedConversation = conversationFull.copy(
                 assistantId = targetAssistantId,
                 folderId = null,
             )
-            // Drop any "Allow for this chat" grants the user gave the previous assistant.
-            // The grants apply to a tool surface the new assistant may use very differently
-            // (different prompt, different tool list), and the user authorised them under
-            // the old persona's behaviour, not this one's. Persistent "Always Allow" grants
-            // stay (they were granted globally) but ChatScope is reset.
             io.github.nastechresearch.nastech.data.ai.tools.ToolApprovalAllowList.clearChat(conversation.id)
             if (conversation.id == _conversationId) {
                 chatService.saveConversation(_conversationId, updatedConversation)
@@ -315,9 +286,7 @@ class ChatVM(
     }
 
     fun generateSuggestion(conversation: Conversation) {
-        viewModelScope.launch {
-            chatService.generateSuggestion(_conversationId, conversation)
-        }
+        viewModelScope.launch { chatService.generateSuggestion(_conversationId, conversation) }
     }
 
     fun clearTranslationField(messageId: Uuid) {
@@ -325,9 +294,7 @@ class ChatVM(
     }
 
     fun updateConversation(newConversation: Conversation) {
-        chatService.updateConversationState(_conversationId) {
-            newConversation
-        }
+        chatService.updateConversationState(_conversationId) { newConversation }
     }
 
     fun toggleMessageFavorite(node: MessageNode) {
@@ -349,15 +316,10 @@ class ChatVM(
             chatService.updateConversationState(_conversationId) { currentConversation ->
                 currentConversation.copy(
                     messageNodes = currentConversation.messageNodes.map { existingNode ->
-                        if (existingNode.id == node.id) {
-                            existingNode.copy(isFavorite = !currentlyFavorited)
-                        } else {
-                            existingNode
-                        }
+                        if (existingNode.id == node.id) existingNode.copy(isFavorite = !currentlyFavorited) else existingNode
                     }
                 )
             }
         }
     }
-
 }
