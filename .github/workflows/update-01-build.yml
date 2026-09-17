@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - update-01-conversation-memory
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -49,12 +52,12 @@ jobs:
             "ndk;29.0.14206865"
 
       - name: Prepare release signing configuration
-        shell: bash
         env:
           SIGNING_KEYSTORE: ${{ secrets.SIGNING_KEYSTORE }}
           SIGNING_STORE_PASS: ${{ secrets.SIGNING_STORE_PASS }}
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
           SIGNING_KEY_PASS: ${{ secrets.SIGNING_KEY_PASS }}
+        shell: bash
         run: |
           if [ -n "$SIGNING_KEYSTORE" ] && [ -n "$SIGNING_STORE_PASS" ] && [ -n "$SIGNING_KEY_ALIAS" ] && [ -n "$SIGNING_KEY_PASS" ]; then
             printf '%s' "$SIGNING_KEYSTORE" | base64 --decode > app/nastech-release.jks
