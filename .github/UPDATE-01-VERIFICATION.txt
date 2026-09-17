@@ -1,1 +1,1 @@
-Temporary CI trigger for Update 01 verification. Remove after the release build is verified.
+Triggering a normal main push so the isolated Update 01 release workflow executes.
