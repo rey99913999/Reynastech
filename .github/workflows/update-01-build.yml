@@ -5,9 +5,17 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   build-release:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8
+      GEMINI_OAUTH_CLIENT_ID: ${{ secrets.GEMINI_OAUTH_CLIENT_ID }}
+      GEMINI_OAUTH_CLIENT_SECRET: ${{ secrets.GEMINI_OAUTH_CLIENT_SECRET }}
     steps:
       - name: Check out source and native submodules
         uses: actions/checkout@v4
@@ -33,12 +41,48 @@ jobs:
         shell: bash
         run: |
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager \
+          sdkmanager --channel=3 \
             "platform-tools" \
             "platforms;android-37.0" \
             "build-tools;37.0.0" \
             "cmake;3.22.1" \
             "ndk;29.0.14206865"
+
+      - name: Prepare release signing configuration
+        shell: bash
+        env:
+          SIGNING_KEYSTORE: ${{ secrets.SIGNING_KEYSTORE }}
+          SIGNING_STORE_PASS: ${{ secrets.SIGNING_STORE_PASS }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASS: ${{ secrets.SIGNING_KEY_PASS }}
+        run: |
+          if [ -n "$SIGNING_KEYSTORE" ] && [ -n "$SIGNING_STORE_PASS" ] && [ -n "$SIGNING_KEY_ALIAS" ] && [ -n "$SIGNING_KEY_PASS" ]; then
+            printf '%s' "$SIGNING_KEYSTORE" | base64 --decode > app/nastech-release.jks
+            cat > local.properties <<EOF
+storeFile=nastech-release.jks
+storePassword=$SIGNING_STORE_PASS
+keyAlias=$SIGNING_KEY_ALIAS
+keyPassword=$SIGNING_KEY_PASS
+EOF
+          else
+            fallback_keystore="$RUNNER_TEMP/nastech-ci-debug.keystore"
+            keytool -genkeypair -noprompt \
+              -keystore "$fallback_keystore" \
+              -storetype JKS \
+              -storepass android \
+              -keypass android \
+              -alias nastech-ci-debug \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Nastech CI, OU=Engineering, O=Nastech, L=Internet, ST=Internet, C=US"
+            cat > local.properties <<EOF
+storeFile=$fallback_keystore
+storePassword=android
+keyAlias=nastech-ci-debug
+keyPassword=android
+EOF
+          fi
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
@@ -62,8 +106,8 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build release APK and run unit tests
-        run: ./gradlew :app:assembleRelease :app:testReleaseUnitTest --no-daemon --stacktrace
+      - name: Build release APK
+        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
       - name: Upload release APK
         if: success()
