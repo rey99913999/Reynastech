@@ -10,10 +10,14 @@ import io.github.nastechresearch.nastech.data.agentrun.AgentRun
 import io.github.nastechresearch.nastech.data.agentrun.AgentRunDao
 import io.github.nastechresearch.nastech.data.db.dao.ConversationDAO
 import io.github.nastechresearch.nastech.data.db.dao.ConversationCompactionDAO
+import io.github.nastechresearch.nastech.data.db.dao.ConversationMemorySettingsDao
+import io.github.nastechresearch.nastech.data.db.dao.ConversationMemoryStateDao
+import io.github.nastechresearch.nastech.data.db.dao.ConversationMemorySummaryDao
 import io.github.nastechresearch.nastech.data.db.dao.FavoriteDAO
 import io.github.nastechresearch.nastech.data.db.dao.FolderDAO
 import io.github.nastechresearch.nastech.data.db.dao.GenMediaDAO
 import io.github.nastechresearch.nastech.data.db.dao.ManagedFileDAO
+import io.github.nastechresearch.nastech.data.db.dao.MemoryCandidateDao
 import io.github.nastechresearch.nastech.data.db.dao.MemoryDAO
 import io.github.nastechresearch.nastech.data.db.dao.MessageNodeDAO
 import io.github.nastechresearch.nastech.data.db.dao.ScheduledJobDao
@@ -23,10 +27,14 @@ import io.github.nastechresearch.nastech.data.db.dao.TelegramChatDao
 import io.github.nastechresearch.nastech.data.db.dao.WorkspaceDAO
 import io.github.nastechresearch.nastech.data.db.entity.ConversationEntity
 import io.github.nastechresearch.nastech.data.db.entity.ConversationCompactionEntity
+import io.github.nastechresearch.nastech.data.db.entity.ConversationMemorySettingsEntity
+import io.github.nastechresearch.nastech.data.db.entity.ConversationMemoryStateEntity
+import io.github.nastechresearch.nastech.data.db.entity.ConversationMemorySummaryEntity
 import io.github.nastechresearch.nastech.data.db.entity.FavoriteEntity
 import io.github.nastechresearch.nastech.data.db.entity.FolderEntity
 import io.github.nastechresearch.nastech.data.db.entity.GenMediaEntity
 import io.github.nastechresearch.nastech.data.db.entity.ManagedFileEntity
+import io.github.nastechresearch.nastech.data.db.entity.MemoryCandidateEntity
 import io.github.nastechresearch.nastech.data.db.entity.MemoryEntity
 import io.github.nastechresearch.nastech.data.db.entity.MessageNodeEntity
 import io.github.nastechresearch.nastech.data.db.entity.ScheduledJobEntity
@@ -50,6 +58,10 @@ import io.github.nastechresearch.nastech.workflow.db.WorkflowRunEntity
         ConversationEntity::class,
         ConversationCompactionEntity::class,
         MemoryEntity::class,
+        ConversationMemorySettingsEntity::class,
+        ConversationMemoryStateEntity::class,
+        ConversationMemorySummaryEntity::class,
+        MemoryCandidateEntity::class,
         GenMediaEntity::class,
         MessageNodeEntity::class,
         ManagedFileEntity::class,
@@ -64,7 +76,7 @@ import io.github.nastechresearch.nastech.workflow.db.WorkflowRunEntity
         WorkspaceEntity::class,
         FolderEntity::class,
     ],
-    version = 30,
+    version = 31,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -83,31 +95,16 @@ import io.github.nastechresearch.nastech.workflow.db.WorkflowRunEntity
         AutoMigration(from = 20, to = 21, spec = Migration_20_21::class),
         AutoMigration(from = 21, to = 22, spec = Migration_21_22::class),
         AutoMigration(from = 22, to = 23, spec = Migration_22_23::class),
-        // v25: upstream 2.2.6 added conversation-level custom_system_prompt / mode_injection_ids
-        // / lorebook_ids columns (all carry defaultValue, so a plain auto-migration suffices).
         AutoMigration(from = 24, to = 25),
-        // v26: the 2.3.1 merge brings upstream's workspaces table (WorkspaceEntity). Existing
-        // fork users never had it, so Room auto-creates the table on this step.
         AutoMigration(from = 25, to = 26),
-        // v27: upstream 2.4.x added conversation folders (FolderEntity -> conversation_folder
-        // table) plus a folder_id column on ConversationEntity (defaultValue ""). Both are pure
-        // additions; upstream numbered it as their v24, folded into the fork's version space here.
         AutoMigration(from = 26, to = 27),
-        // v28: indices only. Conversation listing, assistant memory lookup, the enabled-job
-        // scan and per-job run history were all full table scans; see each entity for which
-        // query shape its index covers. Pure additions, so Room generates the CREATE INDEX
-        // statements itself.
         AutoMigration(from = 27, to = 28),
-        // v29: the conversation_compaction table backing automatic context compaction. The
-        // table is a pure addition and the original message nodes are left untouched, so Room
-        // creates it outright. Numbered 29 rather than 28 because the fork's v28 was already
-        // taken by the index migration above.
         AutoMigration(from = 28, to = 29),
-        // v30: a chat_model_id column on ConversationEntity so subagent_dispatch's model_id
-        // override (#28) survives ChatService.initializeConversation reloading the conversation
-        // from Room. Nullable-equivalent (empty string default, matching folder_id), so a plain
-        // auto-migration suffices.
         AutoMigration(from = 29, to = 30),
+        // v31: conversation-scoped memory records, settings, candidates, current state and
+        // incremental summaries. All are additive tables/columns with defaults, so Room can
+        // generate the migration without custom SQL.
+        AutoMigration(from = 30, to = 31),
     ]
 )
 @TypeConverters(TokenUsageConverter::class)
@@ -117,6 +114,14 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun conversationCompactionDao(): ConversationCompactionDAO
 
     abstract fun memoryDao(): MemoryDAO
+
+    abstract fun conversationMemorySettingsDao(): ConversationMemorySettingsDao
+
+    abstract fun conversationMemoryStateDao(): ConversationMemoryStateDao
+
+    abstract fun conversationMemorySummaryDao(): ConversationMemorySummaryDao
+
+    abstract fun memoryCandidateDao(): MemoryCandidateDao
 
     abstract fun genMediaDao(): GenMediaDAO
 
