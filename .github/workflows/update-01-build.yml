@@ -1,13 +1,10 @@
-# Update 01 verification remains branch-local; main also validates the PR via update-01-pr-build.yml.
 name: Update 01 memory build
 
 on:
   push:
     branches:
-      - update-01-conversation-memory
-  pull_request:
-    branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -45,10 +42,9 @@ jobs:
         shell: bash
         run: |
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager --channel=3 \
+          sdkmanager \
             "platform-tools" \
-            "platforms;android-37.0" \
-            "build-tools;37.0.0" \
+            "platforms;android-37" \
             "cmake;3.22.1" \
             "ndk;29.0.14206865"
 
