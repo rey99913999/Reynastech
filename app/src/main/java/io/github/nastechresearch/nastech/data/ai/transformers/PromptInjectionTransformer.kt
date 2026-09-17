@@ -3,25 +3,30 @@ package io.github.nastechresearch.nastech.data.ai.transformers
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import io.github.nastechresearch.nastech.data.memory.ConversationMemoryEngine
+import io.github.nastechresearch.nastech.data.memory.ConversationMemoryRuntime
 import io.github.nastechresearch.nastech.data.model.Assistant
 import io.github.nastechresearch.nastech.data.model.InjectionPosition
 import io.github.nastechresearch.nastech.data.model.PromptInjection
 import io.github.nastechresearch.nastech.data.model.Lorebook
 import io.github.nastechresearch.nastech.data.model.extractContextForMatching
 import io.github.nastechresearch.nastech.data.model.isTriggered
+import kotlinx.coroutines.runBlocking
+import org.koin.core.context.GlobalContext
 import kotlin.uuid.Uuid
 
 /**
  * 提示词注入转换器
  *
- * 根据 Assistant 关联的 ModeInjection 和 Lorebook 进行提示词注入
+ * 根据 Assistant 关联的 ModeInjection 和 Lorebook 进行提示词注入。
+ * Conversation Memory is appended only to the provider-bound copy; raw chat history is untouched.
  */
 object PromptInjectionTransformer : InputMessageTransformer {
     override suspend fun transform(
         ctx: TransformerContext,
         messages: List<UIMessage>,
     ): List<UIMessage> {
-        return transformMessages(
+        val injected = transformMessages(
             messages = messages,
             assistant = ctx.assistant,
             modeInjections = ctx.settings.modeInjections,
@@ -29,7 +34,52 @@ object PromptInjectionTransformer : InputMessageTransformer {
             conversationModeInjectionIds = ctx.conversationModeInjectionIds,
             conversationLorebookIds = ctx.conversationLorebookIds,
         )
+
+        return appendConversationMemory(injected)
     }
+}
+
+/**
+ * Resolve the current provider-bound turn to its conversation and inject only the memories
+ * selected inside the configured token budget. The runtime bridge is intentionally short-lived;
+ * when it cannot resolve a conversation, this transformer simply leaves the input unchanged.
+ */
+private suspend fun appendConversationMemory(messages: List<UIMessage>): List<UIMessage> {
+    val latestUserText = messages.lastOrNull { it.role == MessageRole.USER }
+        ?.parts
+        ?.filterIsInstance<UIMessagePart.Text>()
+        ?.joinToString("\n") { it.text }
+        ?.trim()
+        ?: return messages
+    if (latestUserText.isBlank()) return messages
+
+    val conversationId = ConversationMemoryRuntime.resolve(latestUserText) ?: return messages
+    val engine = runCatching {
+        GlobalContext.get().get<ConversationMemoryEngine>()
+    }.getOrNull() ?: return messages
+
+    val memoryContext = runCatching {
+        engine.buildContext(conversationId, latestUserText)
+    }.getOrNull().orEmpty()
+    if (memoryContext.isBlank()) return messages
+
+    val result = messages.toMutableList()
+    val systemIndex = result.indexOfFirst { it.role == MessageRole.SYSTEM }
+    if (systemIndex >= 0) {
+        val system = result[systemIndex]
+        val parts = system.parts.toMutableList()
+        val lastTextIndex = parts.indexOfLast { it is UIMessagePart.Text }
+        if (lastTextIndex >= 0) {
+            val part = parts[lastTextIndex] as UIMessagePart.Text
+            parts[lastTextIndex] = part.copy(text = part.text + "\n\n" + memoryContext)
+        } else {
+            parts.add(UIMessagePart.Text(memoryContext))
+        }
+        result[systemIndex] = system.copy(parts = parts)
+    } else {
+        result.add(0, UIMessage.system(memoryContext))
+    }
+    return result
 }
 
 /**
