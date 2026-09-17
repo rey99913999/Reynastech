@@ -28,6 +28,8 @@ import io.github.nastechresearch.nastech.data.datastore.SettingsStore
 import io.github.nastechresearch.nastech.data.datastore.getCurrentAssistant
 import io.github.nastechresearch.nastech.data.datastore.getCurrentChatModel
 import io.github.nastechresearch.nastech.data.files.FilesManager
+import io.github.nastechresearch.nastech.data.memory.ConversationMemoryEngine
+import io.github.nastechresearch.nastech.data.memory.ConversationMemoryRuntime
 import io.github.nastechresearch.nastech.data.model.Assistant
 import io.github.nastechresearch.nastech.data.model.Avatar
 import io.github.nastechresearch.nastech.data.model.Conversation
@@ -41,8 +43,10 @@ import io.github.nastechresearch.nastech.ui.hooks.writeStringPreference
 import io.github.nastechresearch.nastech.ui.hooks.ChatInputState
 import io.github.nastechresearch.nastech.utils.UiState
 import io.github.nastechresearch.nastech.utils.UpdateChecker
+import kotlinx.coroutines.Dispatchers
 import java.util.Locale
 import kotlin.uuid.Uuid
+import org.koin.core.context.GlobalContext
 
 private const val TAG = "ChatVM"
 
@@ -94,6 +98,7 @@ class ChatVM(
         super.onCleared()
         // 移除对话引用
         chatService.removeConversationReference(_conversationId)
+        ConversationMemoryRuntime.clear(_conversationId.toString())
     }
 
     // 用户设置
@@ -171,10 +176,25 @@ class ChatVM(
      * @param content 消息内容
      * @param answer 是否触发消息生成，如果为false，则仅添加消息到消息列表中
      */
-    fun handleMessageSend(content: List<UIMessagePart>,answer: Boolean = true) {
+    fun handleMessageSend(content: List<UIMessagePart>, answer: Boolean = true) {
         if (content.isEmptyInputMessage()) return
 
-        chatService.sendMessage(_conversationId, content, answer)
+        viewModelScope.launch(Dispatchers.Default) {
+            val text = content
+                .filterIsInstance<UIMessagePart.Text>()
+                .joinToString("\n") { it.text }
+                .trim()
+
+            if (text.isNotEmpty()) {
+                ConversationMemoryRuntime.register(_conversationId.toString(), text)
+                runCatching {
+                    GlobalContext.get().get<ConversationMemoryEngine>()
+                        .ingestUserMessage(_conversationId.toString(), text)
+                }
+            }
+
+            chatService.sendMessage(_conversationId, content, answer)
+        }
     }
 
     fun handleMessageEdit(parts: List<UIMessagePart>, messageId: Uuid) {
@@ -270,6 +290,10 @@ class ChatVM(
 
     fun deleteConversation(conversation: Conversation): Job =
         viewModelScope.launch {
+            runCatching {
+                GlobalContext.get().get<ConversationMemoryEngine>().clearMemory(conversation.id.toString())
+            }
+            ConversationMemoryRuntime.clear(conversation.id.toString())
             conversationRepo.deleteConversation(conversation)
         }
 
