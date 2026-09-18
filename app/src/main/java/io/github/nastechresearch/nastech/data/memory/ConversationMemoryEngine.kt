@@ -8,6 +8,7 @@ import io.github.nastechresearch.nastech.data.db.entity.ConversationMemorySummar
 import io.github.nastechresearch.nastech.data.db.entity.MemoryCandidateEntity
 import io.github.nastechresearch.nastech.data.db.entity.MemoryEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -81,7 +82,7 @@ class ConversationMemoryEngine(
         applyCandidate(candidate.toCandidate())
         candidateDao.setStatus(candidateId, "APPROVED")
         updateSummaries(conversationId)
-        return findSimilar(conversationId, candidate.content).firstOrNull()
+        return findSimilar(conversationId, candidate.content).firstOrNull()?.toConversationMemory()
     }
 
     suspend fun rejectCandidate(conversationId: String, candidateId: Long) {
@@ -92,8 +93,8 @@ class ConversationMemoryEngine(
     }
 
     fun observePendingCandidates(conversationId: String): Flow<List<ConversationMemoryCandidate>> =
-        candidateDao.observePending(conversationId).let { flow ->
-            kotlinx.coroutines.flow.map(flow) { list -> list.map { it.toCandidate() } }
+        candidateDao.observePending(conversationId).map { list ->
+            list.map { it.toCandidate() }
         }
 
     suspend fun memorySearch(
