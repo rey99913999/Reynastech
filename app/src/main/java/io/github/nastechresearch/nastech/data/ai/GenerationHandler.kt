@@ -453,6 +453,8 @@ class GenerationHandler(
         conversationModeInjectionIds: Set<Uuid> = emptySet(),
         conversationLorebookIds: Set<Uuid> = emptySet(),
         workspaceCwd: String? = null,
+        allowedToolNames: Set<String>? = null,
+        deniedToolNames: Set<String> = emptySet(),
     ): Flow<GenerationChunk> = flow {
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
         val providerImpl = providerManager.getProviderByType(provider)
@@ -525,17 +527,27 @@ class GenerationHandler(
                     ).let(this::addAll)
                 }
                 addAll(tools)
+            }.filter { tool ->
+                (allowedToolNames == null || tool.name in allowedToolNames) &&
+                    tool.name !in deniedToolNames
             }
 
             val toolsInternal = if (baseTools.isEmpty()) {
                 baseTools
             } else {
-                baseTools + buildStructuredPlanTool(
-                    json = json,
-                    availableTools = baseTools,
-                    engine = localExecutionEngine,
-                    isToolAutoApproved = isToolAutoApproved,
-                )
+                buildList {
+                    addAll(baseTools)
+                    if (allowedToolNames == null || "execute_structured_plan" in allowedToolNames) {
+                        add(
+                            buildStructuredPlanTool(
+                                json = json,
+                                availableTools = baseTools,
+                                engine = localExecutionEngine,
+                                isToolAutoApproved = isToolAutoApproved,
+                            )
+                        )
+                    }
+                }.filter { tool -> tool.name !in deniedToolNames } 
             }
 
             // Check if we have tool calls ready to continue after user interaction.
