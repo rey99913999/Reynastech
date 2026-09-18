@@ -568,18 +568,11 @@ private fun MemoryItem(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            IconButton(
-                onClick = { onEditMemory(memory) }
-            ) {
-                Icon(me.rerere.hugeicons.HugeIcons.PencilEdit01, null)
+            TextButton(onClick = { onEditMemory(memory) }) {
+                Text("Edit")
             }
-            IconButton(
-                onClick = { onDeleteMemory(memory) }
-            ) {
-                Icon(
-                    me.rerere.hugeicons.HugeIcons.Delete01,
-                    stringResource(R.string.assistant_page_delete)
-                )
+            TextButton(onClick = { onDeleteMemory(memory) }) {
+                Text(stringResource(R.string.assistant_page_delete))
             }
         }
     }
