@@ -141,7 +141,23 @@ fun TaskDetailPage(
 
                 item { Text("Steps", style = MaterialTheme.typography.titleMedium) }
                 items(steps, key = { it.id }) { step ->
-                    StepRow(step)
+                    StepRow(
+                        step = step,
+                        onVerifyExisting = if (step.status == TaskStepStatus.FAILED.name) {
+                            {
+                                scope.launch {
+                                    taskManager.prepareRetry(taskId, step.id, existingResultIsValid = true)
+                                }
+                            }
+                        } else null,
+                        onRetry = if (step.status == TaskStepStatus.FAILED.name) {
+                            {
+                                scope.launch {
+                                    taskManager.prepareRetry(taskId, step.id, existingResultIsValid = false)
+                                }
+                            }
+                        } else null,
+                    )
                 }
 
                 item { Text("Checkpoints", style = MaterialTheme.typography.titleMedium) }
@@ -198,7 +214,11 @@ fun TaskDetailPage(
 }
 
 @Composable
-private fun StepRow(step: TaskStepEntity) {
+private fun StepRow(
+    step: TaskStepEntity,
+    onVerifyExisting: (() -> Unit)? = null,
+    onRetry: (() -> Unit)? = null,
+) {
     val status = runCatching { TaskStepStatus.valueOf(step.status) }
         .getOrDefault(TaskStepStatus.PENDING)
     Column(
@@ -237,6 +257,16 @@ private fun StepRow(step: TaskStepEntity) {
                     (step.verificationHint?.let { ": " + it } ?: ""),
                 style = MaterialTheme.typography.bodySmall,
             )
+        }
+        if (onVerifyExisting != null || onRetry != null) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                onVerifyExisting?.let { action ->
+                    TextButton(onClick = action) { Text("Result already exists") }
+                }
+                onRetry?.let { action ->
+                    TextButton(onClick = action) { Text("Retry step") }
+                }
+            }
         }
     }
 }
