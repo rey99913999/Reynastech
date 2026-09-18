@@ -116,10 +116,8 @@ import io.github.nastechresearch.nastech.workflow.db.WorkflowRunEntity
         AutoMigration(from = 27, to = 28),
         AutoMigration(from = 28, to = 29),
         AutoMigration(from = 29, to = 30),
-        // v31: conversation-scoped memory records, settings, candidates, current state and
-        // incremental summaries. All are additive tables/columns with defaults, so Room can
-        // generate the migration without custom SQL.
-        AutoMigration(from = 30, to = 31),
+        // v31 is handled by explicit Migration_30_31 in DataSourceModule to avoid requiring
+        // a generated v31 schema during KSP processing.
     ]
 )
 @TypeConverters(TokenUsageConverter::class)
