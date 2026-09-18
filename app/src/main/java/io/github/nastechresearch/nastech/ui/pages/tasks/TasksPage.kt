@@ -36,7 +36,6 @@ import io.github.nastechresearch.nastech.data.task.TaskStatus
 import io.github.nastechresearch.nastech.data.task.TaskStepSpec
 import io.github.nastechresearch.nastech.ui.components.nav.BackButton
 import io.github.nastechresearch.nastech.ui.context.LocalNavController
-import io.github.nastechresearch.nastech.ui.hooks.readStringPreference
 import io.github.nastechresearch.nastech.ui.theme.CustomColors
 import io.github.nastechresearch.nastech.utils.plus
 import kotlinx.coroutines.launch
@@ -174,8 +173,7 @@ private fun CreateTaskDialog(
     val scope = rememberCoroutineScope()
     var goal by remember { mutableStateOf("") }
     var steps by remember { mutableStateOf("") }
-    val conversationId =
-        readStringPreference("lastConversationId", "")?.takeIf { it.isNotBlank() }.orEmpty()
+    val conversationId = ""
 
     AlertDialog(
         onDismissRequest = onDismiss,
