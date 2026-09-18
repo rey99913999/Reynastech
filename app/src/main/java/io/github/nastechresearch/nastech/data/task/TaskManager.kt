@@ -311,6 +311,16 @@ class TaskManager(
 
     suspend fun saveCheckpoint(taskId: String, note: String? = null): String? {
         val task = db.taskDao().getById(taskId) ?: return null
+        val policy = getPolicy(task.conversationId)
+        if (!policy.saveCheckpoints) {
+            audit(
+                taskId = taskId,
+                eventType = "CHECKPOINT_SKIPPED",
+                status = task.status,
+                message = "Checkpoint persistence is disabled by task policy.",
+            )
+            return null
+        }
         val steps = db.taskStepDao().listForTask(taskId)
         val checkpointId = Uuid.random().toString()
         val summary = buildString {
@@ -326,7 +336,11 @@ class TaskManager(
             stateSummary = summary,
         )
         db.taskCheckpointDao().insert(checkpoint)
-        db.taskDao().upsert(task.copy(updatedAt = checkpoint.createdAt))
+        task.currentStepId?.let { stepId ->
+            db.taskStepDao().getById(stepId)?.let { step ->
+                db.taskStepDao().upsert(step.copy(checkpointId = checkpointId))
+            }
+        }
         audit(
             taskId = taskId,
             eventType = "CHECKPOINT_SAVED",
@@ -367,10 +381,21 @@ class TaskManager(
         val checkpoint = db.taskCheckpointDao().latestForTask(taskId)
         val now = System.currentTimeMillis()
         val newProgress = progress(taskId)
+        val verificationRequired = next.requiresVerification || next.status == TaskStepStatus.FAILED.name
+        val resumedStatus = if (verificationRequired) {
+            TaskStatus.WAITING_FOR_USER.name
+        } else {
+            TaskStatus.RUNNING.name
+        }
+        val pausedReason = if (verificationRequired) {
+            "Verification required before retry: " + (next.verificationHint ?: "check whether the step result already exists.")
+        } else {
+            null
+        }
         val resumedTask = task.copy(
-            status = TaskStatus.RUNNING.name,
+            status = resumedStatus,
             currentStepId = next.id,
-            pausedReason = null,
+            pausedReason = pausedReason,
             progress = newProgress,
             updatedAt = now,
         )
@@ -378,14 +403,27 @@ class TaskManager(
         audit(
             taskId = taskId,
             eventType = "RESUME",
-            status = TaskStatus.RUNNING.name,
-            message = "Resuming from the last successful step.",
+            status = resumedStatus,
+            message = if (verificationRequired) {
+                "Task restored; waiting for verification before retry."
+            } else {
+                "Resuming from the last successful step."
+            },
         )
+        if (verificationRequired) {
+            audit(
+                taskId = taskId,
+                stepId = next.id,
+                eventType = "WAITING_FOR_VERIFICATION",
+                status = TaskStatus.WAITING_FOR_USER.name,
+                message = pausedReason,
+            )
+        }
         return TaskResumePlan(
             task = resumedTask,
             checkpoint = checkpoint,
             nextStep = next,
-            verificationRequired = next.requiresVerification || next.status == TaskStepStatus.FAILED.name,
+            verificationRequired = verificationRequired,
         )
     }
 
