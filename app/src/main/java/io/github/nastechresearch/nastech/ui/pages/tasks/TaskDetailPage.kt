@@ -78,6 +78,13 @@ fun TaskDetailPage(
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                if (task != null && task?.status !in setOf(TaskStatus.COMPLETED.name, TaskStatus.CANCELLED.name)) {
+                    TextButton(onClick = {
+                        scope.launch { taskManager.saveCheckpoint(taskId, "Manual checkpoint") }
+                    }) {
+                        Text("Checkpoint")
+                    }
+                }
                 when (task?.status) {
                     TaskStatus.RUNNING.name -> {
                         TextButton(onClick = { scope.launch { taskManager.pauseTask(taskId) } }) {
@@ -288,6 +295,54 @@ private fun PolicyEditor(
             label = { Text("Retry delay (ms)") },
             singleLine = true,
         )
+        Text(
+            "On tool failure: " + initial.onToolFailure.name
+        )
+        TextButton(onClick = {
+            val next = when (initial.onToolFailure) {
+                io.github.nastechresearch.nastech.data.task.TaskToolFailurePolicy.RETRY ->
+                    io.github.nastechresearch.nastech.data.task.TaskToolFailurePolicy.ALTERNATIVE_TOOL
+                io.github.nastechresearch.nastech.data.task.TaskToolFailurePolicy.ALTERNATIVE_TOOL ->
+                    io.github.nastechresearch.nastech.data.task.TaskToolFailurePolicy.AGENT_DECIDES
+                io.github.nastechresearch.nastech.data.task.TaskToolFailurePolicy.AGENT_DECIDES ->
+                    io.github.nastechresearch.nastech.data.task.TaskToolFailurePolicy.ASK_USER
+                io.github.nastechresearch.nastech.data.task.TaskToolFailurePolicy.ASK_USER ->
+                    io.github.nastechresearch.nastech.data.task.TaskToolFailurePolicy.RETRY
+            }
+            onSave(
+                initial.copy(
+                    saveCheckpoints = saveCheckpoints,
+                    resumeAfterAppClose = resumeAfterClose,
+                    sensitiveActionsRequireApproval = sensitiveApproval,
+                    retryCount = retryCount.toIntOrNull() ?: initial.retryCount,
+                    retryDelayMs = retryDelay.toLongOrNull() ?: initial.retryDelayMs,
+                    onToolFailure = next,
+                )
+            )
+        }) {
+            Text("Change tool-failure policy")
+        }
+        Text("Unrecoverable error: " + initial.onUnrecoverableError.name)
+        TextButton(onClick = {
+            val next = when (initial.onUnrecoverableError) {
+                io.github.nastechresearch.nastech.data.task.TaskUnrecoverablePolicy.PAUSE ->
+                    io.github.nastechresearch.nastech.data.task.TaskUnrecoverablePolicy.FAIL
+                io.github.nastechresearch.nastech.data.task.TaskUnrecoverablePolicy.FAIL ->
+                    io.github.nastechresearch.nastech.data.task.TaskUnrecoverablePolicy.PAUSE
+            }
+            onSave(
+                initial.copy(
+                    saveCheckpoints = saveCheckpoints,
+                    resumeAfterAppClose = resumeAfterClose,
+                    sensitiveActionsRequireApproval = sensitiveApproval,
+                    retryCount = retryCount.toIntOrNull() ?: initial.retryCount,
+                    retryDelayMs = retryDelay.toLongOrNull() ?: initial.retryDelayMs,
+                    onUnrecoverableError = next,
+                )
+            )
+        }) {
+            Text("Change unrecoverable-error policy")
+        }
         TextButton(
             onClick = {
                 onSave(
