@@ -16,8 +16,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,6 +34,7 @@ import io.github.nastechresearch.nastech.data.agentconfig.ConversationAgentConfi
 import io.github.nastechresearch.nastech.data.agentconfig.ConversationAgentConfigRepository
 import io.github.nastechresearch.nastech.data.agentconfig.ConversationAgentDefinition
 import io.github.nastechresearch.nastech.data.agentconfig.ConversationAgentWorkflowEdge
+import kotlinx.coroutines.launch
 import io.github.nastechresearch.nastech.data.datastore.SettingsStore
 import io.github.nastechresearch.nastech.data.memory.ConversationMemoryMode
 import org.koin.compose.koinInject
