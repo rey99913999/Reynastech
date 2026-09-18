@@ -196,15 +196,17 @@ fun TaskDetailPage(
 
                 item { Text("Recovery policy", style = MaterialTheme.typography.titleMedium) }
                 policy?.let { currentPolicy ->
-                    PolicyEditor(
-                        initial = currentPolicy,
-                        onSave = { newPolicy ->
-                            scope.launch {
-                                taskManager.savePolicy(current.conversationId, newPolicy)
-                                policy = newPolicy
-                            }
-                        },
-                    )
+                    item {
+                        PolicyEditor(
+                            initial = currentPolicy,
+                            onSave = { newPolicy ->
+                                scope.launch {
+                                    taskManager.savePolicy(current.conversationId, newPolicy)
+                                    policy = newPolicy
+                                }
+                            },
+                        )
+                    }
                 }
             } ?: item {
                 Text("Task not found.", modifier = Modifier.padding(16.dp))
