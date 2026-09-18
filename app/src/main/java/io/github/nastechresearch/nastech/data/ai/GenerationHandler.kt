@@ -455,6 +455,7 @@ class GenerationHandler(
         workspaceCwd: String? = null,
         allowedToolNames: Set<String>? = null,
         deniedToolNames: Set<String> = emptySet(),
+        forceApprovalForTool: (String) -> Boolean = { false },
     ): Flow<GenerationChunk> = flow {
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
         val providerImpl = providerManager.getProviderByType(provider)
@@ -698,7 +699,8 @@ class GenerationHandler(
                             ))
                         }
                         // Tool needs approval and state is Auto:
-                        toolDef?.needsApproval(tool.inputAsJson()) == true &&
+                        (toolDef?.needsApproval(tool.inputAsJson()) == true ||
+                            forceApprovalForTool(tool.toolName)) &&
                             tool.approvalState is ToolApprovalState.Auto -> {
                             // Fresh per-tool auto-approval check (was a frozen pre-
                             // resolved set). Costs a DataStore.first() per tool but tools
