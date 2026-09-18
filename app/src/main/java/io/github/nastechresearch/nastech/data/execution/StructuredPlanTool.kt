@@ -2,7 +2,6 @@ package io.github.nastechresearch.nastech.data.execution
 
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
@@ -106,26 +105,30 @@ fun buildStructuredPlanTool(
             )
         },
         execute = { params ->
-            val plan = runCatching {
+            val planResult = runCatching {
                 json.decodeFromJsonElement(StructuredExecutionPlan.serializer(), params)
-            }.getOrElse { error ->
-                return@Tool listOf(
+            }
+            if (planResult.isFailure) {
+                listOf(
                     UIMessagePart.Text(
-                        "invalid_execution_plan: " + (error.message ?: error.javaClass.simpleName).take(500)
+                        "invalid_execution_plan: " +
+                            (planResult.exceptionOrNull()?.message
+                                ?: planResult.exceptionOrNull()?.javaClass?.simpleName
+                                ?: "unknown").take(500)
+                    )
+                )
+            } else {
+                val result = engine.execute(
+                    plan = planResult.getOrThrow(),
+                    tools = availableTools,
+                    isToolAutoApproved = isToolAutoApproved,
+                )
+                listOf(
+                    UIMessagePart.Text(
+                        json.encodeToString(ExecutionPlanResult.serializer(), result)
                     )
                 )
             }
-
-            val result = engine.execute(
-                plan = plan,
-                tools = availableTools,
-                isToolAutoApproved = isToolAutoApproved,
-            )
-            listOf(
-                UIMessagePart.Text(
-                    json.encodeToString(ExecutionPlanResult.serializer(), result)
-                )
-            )
         }
     )
 }
