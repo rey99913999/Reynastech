@@ -46,6 +46,7 @@ import io.github.nastechresearch.nastech.data.db.migrations.Migration_15_16
 import io.github.nastechresearch.nastech.data.db.migrations.Migration_23_24
 import io.github.nastechresearch.nastech.data.db.migrations.Migration_30_31
 import io.github.nastechresearch.nastech.data.db.migrations.Migration_31_32
+import io.github.nastechresearch.nastech.data.db.migrations.Migration_32_33
 import io.github.nastechresearch.nastech.data.ai.mcp.McpManager
 import io.github.nastechresearch.nastech.data.agentrun.AgentRunBootRecovery
 import io.github.nastechresearch.nastech.data.agentrun.AgentRunRepository
@@ -71,7 +72,7 @@ val dataSourceModule = module {
         val context: Context = get()
         Room.databaseBuilder(context, AppDatabase::class.java, "rikka_hub")
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-            .addMigrations(Migration_6_7, Migration_11_12, Migration_13_14, Migration_14_15, Migration_15_16, Migration_23_24, Migration_30_31, Migration_31_32)
+            .addMigrations(Migration_6_7, Migration_11_12, Migration_13_14, Migration_14_15, Migration_15_16, Migration_23_24, Migration_30_31, Migration_31_32, Migration_32_33)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
                     // Both steps below are best-effort FTS setup: a failure here (missing dict
