@@ -51,12 +51,10 @@ class ConversationAgentRuntime {
 
     fun systemAddendum(config: ConversationAgentConfig, agent: ConversationAgentDefinition?): String {
         if (!config.enabled || !config.autonomousTaskMode) return ""
-        val agentLines = config.enabledAgents.joinToString("
-") {
+        val agentLines = config.enabledAgents.joinToString("\n") {
             "- ${it.name.ifBlank { it.role.name.lowercase() }} role=${it.role.name} activation=${it.activation.name} model=${it.modelId ?: "default"}"
         }
-        val workflowLines = config.workflow.joinToString("
-") {
+        val workflowLines = config.workflow.joinToString("\n") {
             "- ${it.fromAgentId} -> ${it.toAgentId}${it.condition.takeIf(String::isNotBlank)?.let { condition -> " when $condition" } ?: ""}"
         }
         return buildString {
