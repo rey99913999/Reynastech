@@ -59,6 +59,9 @@ import io.github.nastechresearch.nastech.data.ai.transformers.onGenerationFinish
 import io.github.nastechresearch.nastech.data.ai.transformers.transforms
 import io.github.nastechresearch.nastech.data.ai.transformers.visualTransforms
 import io.github.nastechresearch.nastech.data.ai.limits.ToolRuntimeLimits
+import io.github.nastechresearch.nastech.data.execution.LocalExecutionEngine
+import io.github.nastechresearch.nastech.data.execution.ToolOutputPreprocessor
+import io.github.nastechresearch.nastech.data.execution.buildStructuredPlanTool
 import io.github.nastechresearch.nastech.data.ai.tools.buildMemoryTools
 import io.github.nastechresearch.nastech.data.datastore.Settings
 import io.github.nastechresearch.nastech.data.datastore.findModelById
@@ -412,6 +415,7 @@ class GenerationHandler(
     private val conversationRepo: ConversationRepository,
     private val aiLoggingManager: AILoggingManager,
     private val systemPromptBuilder: SystemPromptBuilder,
+    private val localExecutionEngine: LocalExecutionEngine,
 ) {
     fun generateText(
         settings: Settings,
@@ -499,7 +503,7 @@ class GenerationHandler(
 
             Log.i(TAG, "streamText: start step #$stepIndex (${model.id})")
 
-            val toolsInternal = buildList {
+            val baseTools = buildList {
                 Log.i(TAG, "generateInternal: build tools($assistant)")
                 if (assistant.enableMemory) {
                     val memoryAssistantId = if (assistant.useGlobalMemory) {
@@ -521,6 +525,17 @@ class GenerationHandler(
                     ).let(this::addAll)
                 }
                 addAll(tools)
+            }
+
+            val toolsInternal = if (baseTools.isEmpty()) {
+                baseTools
+            } else {
+                baseTools + buildStructuredPlanTool(
+                    json = json,
+                    availableTools = baseTools,
+                    engine = localExecutionEngine,
+                    isToolAutoApproved = isToolAutoApproved,
+                )
             }
 
             // Check if we have tool calls ready to continue after user interaction.
@@ -1279,28 +1294,40 @@ class GenerationHandler(
         output: List<UIMessagePart>,
         hasShellAccess: Boolean,
     ): List<UIMessagePart> {
-        val textParts = output.filterIsInstance<UIMessagePart.Text>()
-        val nonTextParts = output.filter { it !is UIMessagePart.Text }
+        val preprocessed = output.map { part ->
+            if (part is UIMessagePart.Text) {
+                part.copy(text = ToolOutputPreprocessor.preprocess(part.text))
+            } else {
+                part
+            }
+        }
+
+        val textParts = preprocessed.filterIsInstance<UIMessagePart.Text>()
+        val nonTextParts = preprocessed.filter { it !is UIMessagePart.Text }
         val totalChars = textParts.sumOf { it.text.length }
 
-        if (totalChars <= MAX_TOOL_OUTPUT_CHARS || !hasShellAccess) return output
+        if (totalChars <= MAX_TOOL_OUTPUT_CHARS || !hasShellAccess) return preprocessed
 
-        Log.i(TAG, "maybeTruncateToolOutput: truncating tool $toolCallId output ($totalChars chars)")
+        Log.i(
+            TAG,
+            "maybeTruncateToolOutput: truncating tool " + toolCallId +
+                " output (" + totalChars + " chars)"
+        )
 
         val fullText = textParts.joinToString("\n") { it.text }
         val preview = fullText.take(TOOL_OUTPUT_PREVIEW_CHARS)
 
-        val fileName = "${toolCallId}.txt"
+        val fileName = toolCallId + ".txt"
         val outputDir = File(context.filesDir, FileFolders.TOOL_OUTPUTS).apply { mkdirs() }
         File(outputDir, fileName).writeText(fullText)
 
         return listOf(
             UIMessagePart.Text(
                 buildString {
-                    appendLine("[Tool output truncated: $totalChars characters total]")
-                    appendLine("Full output saved to: /tool_outputs/$fileName")
-                    appendLine("Use shell to read: `cat /tool_outputs/$fileName`")
-                    appendLine("Use shell to search: `grep \"pattern\" /tool_outputs/$fileName`")
+                    appendLine("[Tool output truncated: " + totalChars + " characters total]")
+                    appendLine("Full output saved to: /tool_outputs/" + fileName)
+                    appendLine("Use shell to read: `cat /tool_outputs/" + fileName + "`")
+                    appendLine("Use shell to search: `grep \"pattern\" /tool_outputs/" + fileName + "`")
                     appendLine()
                     append(preview)
                 }

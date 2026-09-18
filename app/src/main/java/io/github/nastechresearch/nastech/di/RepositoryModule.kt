@@ -6,6 +6,8 @@ import io.github.nastechresearch.nastech.data.files.FilesManager
 import io.github.nastechresearch.nastech.data.files.SkillManager
 import io.github.nastechresearch.nastech.data.memory.ConversationMemoryEngine
 import io.github.nastechresearch.nastech.data.task.TaskManager
+import io.github.nastechresearch.nastech.data.execution.ExecutionTelemetry
+import io.github.nastechresearch.nastech.data.execution.LocalExecutionEngine
 import io.github.nastechresearch.nastech.data.repository.ConversationRepository
 import io.github.nastechresearch.nastech.data.repository.FavoriteRepository
 import io.github.nastechresearch.nastech.data.repository.FolderRepository
@@ -40,6 +42,10 @@ val repositoryModule = module {
     single {
         TaskManager(get())
     }
+
+    single { ExecutionTelemetry(get()) }
+
+    single { LocalExecutionEngine(taskManager = get(), telemetry = get()) }
 
     single {
         GenMediaRepository(get())
