@@ -53,6 +53,7 @@ fun TaskDetailPage(
     val steps by taskManager.observeSteps(taskId).collectAsStateWithLifecycle(initialValue = emptyList())
     val checkpoints by taskManager.observeCheckpoints(taskId).collectAsStateWithLifecycle(initialValue = emptyList())
     val audit by taskManager.observeAudit(taskId).collectAsStateWithLifecycle(initialValue = emptyList())
+    val executionUsage by taskManager.observeExecutionUsage(taskId).collectAsStateWithLifecycle(initialValue = null)
     var policy by remember(task?.conversationId) { mutableStateOf<TaskPolicy?>(null) }
 
     LaunchedEffect(task?.conversationId) {
@@ -136,6 +137,41 @@ fun TaskDetailPage(
                             color = MaterialTheme.colorScheme.error,
                             modifier = Modifier.padding(top = 4.dp),
                         )
+                    }
+                }
+
+                item {
+                    executionUsage?.let { usage ->
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(3.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Execution efficiency", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "Planner calls: " + usage.plannerCalls +
+                                    " • Recovery calls: " + usage.recoveryCalls
+                            )
+                            Text(
+                                "Tool calls: " + usage.toolCalls +
+                                    " • Local executions: " + usage.localToolExecutions
+                            )
+                            Text(
+                                "LLM calls avoided by local plans: " + usage.llmCallsAvoided
+                            )
+                            Text(
+                                "Tool context chars observed: " + usage.toolContextChars
+                            )
+                            val actualProviderTokens =
+                                usage.plannerInputTokens + usage.plannerOutputTokens +
+                                    usage.recoveryInputTokens + usage.recoveryOutputTokens +
+                                    usage.visionInputTokens + usage.visionOutputTokens +
+                                    usage.verifierInputTokens + usage.verifierOutputTokens
+                            if (actualProviderTokens > 0L) {
+                                Text("Provider tokens reported: " + actualProviderTokens)
+                            } else {
+                                Text("Provider token counts: unavailable from provider data")
+                            }
+                        }
                     }
                 }
 
