@@ -84,6 +84,7 @@ import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.LeftToRightListBullet
 import me.rerere.hugeicons.stroke.Menu03
 import me.rerere.hugeicons.stroke.MessageAdd01
+import me.rerere.hugeicons.stroke.Setting07
 import io.github.nastechresearch.nastech.R
 import io.github.nastechresearch.nastech.data.datastore.GlassSurface
 import io.github.nastechresearch.nastech.data.datastore.Settings
@@ -346,6 +347,9 @@ private fun ChatPageContent(
                     previewMode = previewMode,
                     onNewChat = {
                         navigateToChatPage(navController)
+                    },
+                    onCustomize = {
+                        navController.backStack.add(Screen.ConversationCustomization(conversation.id.toString()))
                     },
                     onClickMenu = {
                         previewMode = !previewMode
@@ -914,6 +918,7 @@ private fun TopBar(
     previewMode: Boolean,
     onClickMenu: () -> Unit,
     onNewChat: () -> Unit,
+    onCustomize: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val startedAt = remember(conversation.id, conversation.createAt) {
@@ -939,6 +944,9 @@ private fun TopBar(
             )
         },
         actions = {
+            IconButton(onClick = onCustomize) {
+                Icon(HugeIcons.Setting07, "Conversation customization")
+            }
             IconButton(onClick = onClickMenu) {
                 Icon(
                     if (previewMode) HugeIcons.Cancel01 else HugeIcons.LeftToRightListBullet,
