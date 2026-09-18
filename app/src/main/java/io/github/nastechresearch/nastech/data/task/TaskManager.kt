@@ -18,6 +18,9 @@ class TaskManager(
     fun observeAudit(taskId: String): Flow<List<TaskAuditLogEntity>> =
         db.taskAuditLogDao().observeForTask(taskId)
 
+    fun observeExecutionUsage(taskId: String) =
+        db.taskExecutionUsageDao().observe(taskId)
+
     suspend fun getTask(taskId: String): TaskEntity? = db.taskDao().getById(taskId)
 
     suspend fun getPolicy(conversationId: String): TaskPolicy =
