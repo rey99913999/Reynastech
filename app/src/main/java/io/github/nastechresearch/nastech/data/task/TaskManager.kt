@@ -32,11 +32,12 @@ class TaskManager(
         goal: String,
         steps: List<TaskStepSpec>,
         parentTaskId: String? = null,
-        policy: TaskPolicy = TaskPolicy(),
+        policy: TaskPolicy? = null,
     ): String {
         require(goal.isNotBlank()) { "Task goal cannot be blank" }
         require(steps.isNotEmpty()) { "Task requires at least one step" }
 
+        val effectivePolicy = policy ?: getPolicy(conversationId)
         val now = System.currentTimeMillis()
         val taskId = Uuid.random().toString()
         val task = TaskEntity(
@@ -63,7 +64,7 @@ class TaskManager(
         db.withTransaction {
             db.taskDao().upsert(task)
             db.taskStepDao().upsertAll(entities)
-            db.taskSettingsDao().upsert(policy.toEntity(conversationId))
+            db.taskSettingsDao().upsert(effectivePolicy.toEntity(conversationId))
             audit(taskId, eventType = "START", status = TaskStatus.PENDING.name, message = "Task created")
         }
         return taskId
@@ -354,15 +355,24 @@ class TaskManager(
         val running = db.taskDao().listByStatus(TaskStatus.RUNNING.name)
         for (task in running.filter { it.updatedAt < processStartAtMs }) {
             val policy = getPolicy(task.conversationId)
-            if (policy.resumeAfterAppClose) {
-                pauseTask(task.taskId, "Application restarted; the task can be resumed.")
-                audit(
-                    taskId = task.taskId,
-                    eventType = "PROCESS_RESTART",
-                    status = TaskStatus.PAUSED.name,
-                    message = "Recovered a previously running task after application restart.",
-                )
-            }
+            pauseTask(
+                task.taskId,
+                if (policy.resumeAfterAppClose) {
+                    "Application restarted; the task can be resumed."
+                } else {
+                    "Application restarted; automatic resume is disabled by task policy."
+                },
+            )
+            audit(
+                taskId = task.taskId,
+                eventType = "PROCESS_RESTART",
+                status = TaskStatus.PAUSED.name,
+                message = if (policy.resumeAfterAppClose) {
+                    "Recovered a previously running task after application restart."
+                } else {
+                    "Recovered a running task without auto-resume because task policy disabled it."
+                },
+            )
         }
     }
 
