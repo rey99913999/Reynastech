@@ -27,7 +27,6 @@ class LocalExecutionEngine(
         telemetry.recordPlan(
             taskId = plan.taskId,
             stepCount = plan.steps.size,
-            llmCallsAvoided = (plan.steps.size - 1).coerceAtLeast(0),
         )
 
         for (step in plan.steps) {
@@ -58,7 +57,6 @@ class LocalExecutionEngine(
                     status = ExecutionStepStatus.REPLAN_REQUIRED,
                     error = "Step requires a higher execution level: " + step.level.name,
                 )
-                telemetry.recordPartialReplan(plan.taskId)
                 break
             }
 
@@ -189,6 +187,9 @@ class LocalExecutionEngine(
             )
         }
 
+        val llmCallsAvoided = (done - 1).coerceAtLeast(0)
+        telemetry.recordLlmCallsAvoided(plan.taskId, llmCallsAvoided)
+
         return ExecutionPlanResult(
             goal = plan.goal,
             status = status,
@@ -196,7 +197,7 @@ class LocalExecutionEngine(
             attemptedCount = results.size,
             results = results,
             partialReplan = partialReplan,
-            llmCallsAvoided = (done - 1).coerceAtLeast(0),
+            llmCallsAvoided = llmCallsAvoided,
         )
     }
 
