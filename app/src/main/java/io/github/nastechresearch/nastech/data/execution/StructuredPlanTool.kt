@@ -68,20 +68,20 @@ fun buildStructuredPlanTool(
                                 put("kind", buildJsonObject {
                                     put("type", JsonPrimitive("string"))
                                     put("enum", kotlinx.serialization.json.buildJsonArray {
-                                        add("TOOL")
-                                        add("VERIFY")
-                                        add("RETURN")
-                                        add("DECIDE")
-                                        add("RECOVER")
+                                        add(JsonPrimitive("TOOL"))
+                                        add(JsonPrimitive("VERIFY"))
+                                        add(JsonPrimitive("RETURN"))
+                                        add(JsonPrimitive("DECIDE"))
+                                        add(JsonPrimitive("RECOVER"))
                                     })
                                 })
                                 put("level", buildJsonObject {
                                     put("type", JsonPrimitive("string"))
                                     put("enum", kotlinx.serialization.json.buildJsonArray {
-                                        add("LOCAL_DETERMINISTIC")
-                                        add("LOCAL_RULES")
-                                        add("VISION")
-                                        add("LLM")
+                                        add(JsonPrimitive("LOCAL_DETERMINISTIC"))
+                                        add(JsonPrimitive("LOCAL_RULES"))
+                                        add(JsonPrimitive("VISION"))
+                                        add(JsonPrimitive("LLM"))
                                     })
                                 })
                                 put("toolName", buildJsonObject { put("type", JsonPrimitive("string")) })
@@ -97,7 +97,7 @@ fun buildStructuredPlanTool(
                                 })
                             })
                             put("required", kotlinx.serialization.json.buildJsonArray {
-                                add("id")
+                                add(JsonPrimitive("id"))
                             })
                         })
                     })
