@@ -34,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -61,7 +62,9 @@ import io.github.nastechresearch.nastech.ui.hooks.EditStateContent
 import io.github.nastechresearch.nastech.ui.hooks.rememberSharedPreferenceString
 import io.github.nastechresearch.nastech.ui.hooks.useEditState
 import io.github.nastechresearch.nastech.ui.theme.CustomColors
-import org.koin.androidx.compose.koinInject
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -278,9 +281,9 @@ private fun AssistantMemoryContent(
                 },
                 modifier = Modifier.align(Alignment.CenterEnd)
             ) {
-                Icon(
-                    imageVector = me.rerere.hugeicons.HugeIcons.Add01,
-                    contentDescription = null
+                Text(
+                    text = "+",
+                    style = MaterialTheme.typography.titleLarge,
                 )
             }
         }
@@ -333,14 +336,14 @@ private fun ConversationMemoryPanel() {
     var candidates by remember(conversationId) { mutableStateOf<List<ConversationMemoryCandidate>>(emptyList()) }
     var showExport by remember { mutableStateOf(false) }
     var exportText by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
     var editingId by remember { mutableStateOf<Int?>(null) }
     var editingContent by remember { mutableStateOf("") }
 
     suspend fun refresh() {
         settings = engine.getSettings(conversationId)
         memories = engine.memorySearch(conversationId, "", tokenBudget = 16_000)
-        candidates = engine.observePendingCandidates(conversationId)
-            .kotlinx.coroutines.flow.first()
+        candidates = engine.observePendingCandidates(conversationId).first()
     }
 
     LaunchedEffect(conversationId) {
@@ -368,7 +371,7 @@ private fun ConversationMemoryPanel() {
                     SegmentedButton(
                         selected = currentSettings.mode == mode,
                         onClick = {
-                            kotlinx.coroutines.GlobalScope.launch {
+                            scope.launch {
                                 engine.setMode(conversationId, mode)
                                 settings = engine.getSettings(conversationId)
                             }
