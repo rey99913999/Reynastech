@@ -151,6 +151,8 @@ import io.github.nastechresearch.nastech.ui.pages.setting.SettingTelegramPage
 import io.github.nastechresearch.nastech.ui.pages.setting.SettingWebPage
 import io.github.nastechresearch.nastech.ui.pages.share.handler.ShareHandlerPage
 import io.github.nastechresearch.nastech.ui.pages.stats.StatsPage
+import io.github.nastechresearch.nastech.ui.pages.tasks.TaskDetailPage
+import io.github.nastechresearch.nastech.ui.pages.tasks.TasksPage
 import io.github.nastechresearch.nastech.ui.pages.translator.TranslatorPage
 import io.github.nastechresearch.nastech.ui.pages.webview.WebViewPage
 import io.github.nastechresearch.nastech.ui.pages.welcome.NastechWelcomeOverlay
@@ -601,6 +603,14 @@ class RouteActivity : ComponentActivity() {
                                 io.github.nastechresearch.nastech.ui.pages.setting.scheduledjobs.ScheduledJobsScreen()
                             }
 
+                            entry<Screen.Tasks> {
+                                TasksPage()
+                            }
+
+                            entry<Screen.TaskDetail> { key ->
+                                TaskDetailPage(taskId = key.id)
+                            }
+
                             entry<Screen.SettingBrowser> {
                                 io.github.nastechresearch.nastech.ui.pages.setting.browser.SettingBrowserPage()
                             }
@@ -909,6 +919,12 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingScheduledJobs : Screen
+
+    @Serializable
+    data object Tasks : Screen
+
+    @Serializable
+    data class TaskDetail(val id: String) : Screen
 
     @Serializable
     data object SettingBrowser : Screen

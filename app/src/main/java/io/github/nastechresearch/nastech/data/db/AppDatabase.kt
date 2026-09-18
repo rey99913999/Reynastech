@@ -18,6 +18,11 @@ import io.github.nastechresearch.nastech.data.db.dao.FolderDAO
 import io.github.nastechresearch.nastech.data.db.dao.GenMediaDAO
 import io.github.nastechresearch.nastech.data.db.dao.ManagedFileDAO
 import io.github.nastechresearch.nastech.data.db.dao.MemoryCandidateDao
+import io.github.nastechresearch.nastech.data.task.TaskAuditLogDao
+import io.github.nastechresearch.nastech.data.task.TaskCheckpointDao
+import io.github.nastechresearch.nastech.data.task.TaskDao
+import io.github.nastechresearch.nastech.data.task.TaskSettingsDao
+import io.github.nastechresearch.nastech.data.task.TaskStepDao
 import io.github.nastechresearch.nastech.data.db.dao.MemoryDAO
 import io.github.nastechresearch.nastech.data.db.dao.MessageNodeDAO
 import io.github.nastechresearch.nastech.data.db.dao.ScheduledJobDao
@@ -42,6 +47,11 @@ import io.github.nastechresearch.nastech.data.db.entity.ScheduledJobRunEntity
 import io.github.nastechresearch.nastech.data.db.entity.SshHostEntity
 import io.github.nastechresearch.nastech.data.db.entity.TelegramChatEntity
 import io.github.nastechresearch.nastech.data.db.entity.WorkspaceEntity
+import io.github.nastechresearch.nastech.data.task.TaskAuditLogEntity
+import io.github.nastechresearch.nastech.data.task.TaskCheckpointEntity
+import io.github.nastechresearch.nastech.data.task.TaskEntity
+import io.github.nastechresearch.nastech.data.task.TaskSettingsEntity
+import io.github.nastechresearch.nastech.data.task.TaskStepEntity
 import io.github.nastechresearch.nastech.data.db.migrations.Migration_16_17
 import io.github.nastechresearch.nastech.data.db.migrations.Migration_20_21
 import io.github.nastechresearch.nastech.data.db.migrations.Migration_21_22
@@ -75,8 +85,13 @@ import io.github.nastechresearch.nastech.workflow.db.WorkflowRunEntity
         AgentRun::class,
         WorkspaceEntity::class,
         FolderEntity::class,
+        TaskEntity::class,
+        TaskStepEntity::class,
+        TaskCheckpointEntity::class,
+        TaskAuditLogEntity::class,
+        TaskSettingsEntity::class,
     ],
-    version = 31,
+    version = 32,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -101,10 +116,8 @@ import io.github.nastechresearch.nastech.workflow.db.WorkflowRunEntity
         AutoMigration(from = 27, to = 28),
         AutoMigration(from = 28, to = 29),
         AutoMigration(from = 29, to = 30),
-        // v31: conversation-scoped memory records, settings, candidates, current state and
-        // incremental summaries. All are additive tables/columns with defaults, so Room can
-        // generate the migration without custom SQL.
-        AutoMigration(from = 30, to = 31),
+        // v31 is handled by explicit Migration_30_31 in DataSourceModule to avoid requiring
+        // a generated v31 schema during KSP processing.
     ]
 )
 @TypeConverters(TokenUsageConverter::class)
@@ -148,6 +161,16 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun workspaceDao(): WorkspaceDAO
 
     abstract fun folderDao(): FolderDAO
+
+    abstract fun taskDao(): TaskDao
+
+    abstract fun taskStepDao(): TaskStepDao
+
+    abstract fun taskCheckpointDao(): TaskCheckpointDao
+
+    abstract fun taskAuditLogDao(): TaskAuditLogDao
+
+    abstract fun taskSettingsDao(): TaskSettingsDao
 }
 
 object TokenUsageConverter {
