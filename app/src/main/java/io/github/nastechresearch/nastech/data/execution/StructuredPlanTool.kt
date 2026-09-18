@@ -2,6 +2,7 @@ package io.github.nastechresearch.nastech.data.execution
 
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.JsonPrimitive
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
@@ -45,27 +46,27 @@ fun buildStructuredPlanTool(
             InputSchema.Obj(
                 properties = buildJsonObject {
                     put("goal", buildJsonObject {
-                        put("type", "string")
-                        put("description", "The original logical goal")
+                        put("type", JsonPrimitive("string"))
+                        put("description", JsonPrimitive("The original logical goal"))
                     })
                     put("logicalPlan", buildJsonObject {
-                        put("type", "string")
-                        put("description", "Optional human-readable logical plan")
+                        put("type", JsonPrimitive("string"))
+                        put("description", JsonPrimitive("Optional human-readable logical plan"))
                     })
                     put("taskId", buildJsonObject {
-                        put("type", "string")
-                        put("description", "Optional Update 02 task id to reuse its state/checkpoints")
+                        put("type", JsonPrimitive("string"))
+                        put("description", JsonPrimitive("Optional Update 02 task id to reuse its state/checkpoints"))
                     })
                     put("steps", buildJsonObject {
-                        put("type", "array")
-                        put("minItems", 1)
-                        put("maxItems", 32)
+                        put("type", JsonPrimitive("array"))
+                        put("minItems", JsonPrimitive(1))
+                        put("maxItems", JsonPrimitive(32))
                         put("items", buildJsonObject {
-                            put("type", "object")
+                            put("type", JsonPrimitive("object"))
                             put("properties", buildJsonObject {
-                                put("id", buildJsonObject { put("type", "string") })
+                                put("id", buildJsonObject { put("type", JsonPrimitive("string")) })
                                 put("kind", buildJsonObject {
-                                    put("type", "string")
+                                    put("type", JsonPrimitive("string"))
                                     put("enum", kotlinx.serialization.json.buildJsonArray {
                                         add("TOOL")
                                         add("VERIFY")
@@ -75,7 +76,7 @@ fun buildStructuredPlanTool(
                                     })
                                 })
                                 put("level", buildJsonObject {
-                                    put("type", "string")
+                                    put("type", JsonPrimitive("string"))
                                     put("enum", kotlinx.serialization.json.buildJsonArray {
                                         add("LOCAL_DETERMINISTIC")
                                         add("LOCAL_RULES")
@@ -83,16 +84,16 @@ fun buildStructuredPlanTool(
                                         add("LLM")
                                     })
                                 })
-                                put("toolName", buildJsonObject { put("type", "string") })
-                                put("args", buildJsonObject { put("type", "object") })
-                                put("logicalGoal", buildJsonObject { put("type", "string") })
-                                put("expectedResult", buildJsonObject { put("type", "string") })
-                                put("requiresVerification", buildJsonObject { put("type", "boolean") })
-                                put("approvalRequired", buildJsonObject { put("type", "boolean") })
-                                put("taskStepId", buildJsonObject { put("type", "string") })
+                                put("toolName", buildJsonObject { put("type", JsonPrimitive("string")) })
+                                put("args", buildJsonObject { put("type", JsonPrimitive("object")) })
+                                put("logicalGoal", buildJsonObject { put("type", JsonPrimitive("string")) })
+                                put("expectedResult", buildJsonObject { put("type", JsonPrimitive("string")) })
+                                put("requiresVerification", buildJsonObject { put("type", JsonPrimitive("boolean")) })
+                                put("approvalRequired", buildJsonObject { put("type", JsonPrimitive("boolean")) })
+                                put("taskStepId", buildJsonObject { put("type", JsonPrimitive("string")) })
                                 put("alternativeToolNames", buildJsonObject {
-                                    put("type", "array")
-                                    put("items", buildJsonObject { put("type", "string") })
+                                    put("type", JsonPrimitive("array"))
+                                    put("items", buildJsonObject { put("type", JsonPrimitive("string")) })
                                 })
                             })
                             put("required", kotlinx.serialization.json.buildJsonArray {
