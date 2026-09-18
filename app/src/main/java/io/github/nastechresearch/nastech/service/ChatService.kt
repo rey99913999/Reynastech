@@ -1139,7 +1139,13 @@ class ChatService(
                     add(workspaceReminderTransformer)
                 },
                 outputTransformers = outputTransformers,
-                tools = conversationAgentRuntime.filterTools(
+                tools = if (
+                    agentConfig.enabled &&
+                    agentConfig.autonomousTaskMode &&
+                    agentConfig.autonomyLevel == AgentAutonomyLevel.PLAN_ONLY
+                ) {
+                    emptyList()
+                } else conversationAgentRuntime.filterTools(
                     activeAgent,
                     buildList {
                     if (assistant.enableWebSearch) {
@@ -1236,6 +1242,11 @@ class ChatService(
                     agentConfig.maxTurns
                 } else {
                     io.github.nastechresearch.nastech.data.ai.limits.ToolRuntimeLimits.maxToolSteps
+                },
+                forceApprovalForTool = { toolName ->
+                    agentConfig.enabled &&
+                        agentConfig.autonomousTaskMode &&
+                        conversationAgentRuntime.isSensitiveTool(toolName)
                 },
             ).onCompletion { completionCause ->
                 // 取消 Live Update 通知
