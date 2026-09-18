@@ -9,12 +9,21 @@ class ExecutionTelemetry(
 ) {
     private val mutex = Mutex()
 
-    suspend fun recordPlan(taskId: String?, stepCount: Int, llmCallsAvoided: Int) {
+    suspend fun recordPlan(taskId: String?, stepCount: Int) {
         update(taskId) { current ->
             current.copy(
                 plannerCalls = current.plannerCalls + 1,
                 plannedSteps = current.plannedSteps + stepCount,
-                llmCallsAvoided = current.llmCallsAvoided + llmCallsAvoided,
+                updatedAt = System.currentTimeMillis(),
+            )
+        }
+    }
+
+    suspend fun recordLlmCallsAvoided(taskId: String?, count: Int) {
+        if (count <= 0) return
+        update(taskId) { current ->
+            current.copy(
+                llmCallsAvoided = current.llmCallsAvoided + count,
                 updatedAt = System.currentTimeMillis(),
             )
         }
