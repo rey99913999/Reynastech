@@ -105,6 +105,7 @@ import io.github.nastechresearch.nastech.ui.pages.assistant.detail.AssistantProm
 import io.github.nastechresearch.nastech.ui.pages.assistant.detail.AssistantRequestPage
 import io.github.nastechresearch.nastech.ui.pages.backup.BackupPage
 import io.github.nastechresearch.nastech.ui.pages.chat.ChatPage
+import io.github.nastechresearch.nastech.ui.pages.chat.ConversationCustomizationPage
 import io.github.nastechresearch.nastech.ui.pages.chat.MeshGradientBackground
 import io.github.nastechresearch.nastech.ui.pages.debug.DebugPage
 import io.github.nastechresearch.nastech.ui.pages.developer.DeveloperPage
@@ -429,6 +430,10 @@ class RouteActivity : ComponentActivity() {
                                     files = key.files.map { it.toUri() },
                                     nodeId = key.nodeId?.let { Uuid.parse(it) }
                                 )
+                            }
+
+                            entry<Screen.ConversationCustomization> { key ->
+                                ConversationCustomizationPage(conversationId = key.conversationId)
                             }
 
                             entry<Screen.Home> {
@@ -793,6 +798,9 @@ sealed interface Screen : NavKey {
         val files: List<String> = emptyList(),
         val nodeId: String? = null
     ) : Screen
+
+    @Serializable
+    data class ConversationCustomization(val conversationId: String) : Screen
 
     @Serializable
     data object Home : Screen

@@ -89,6 +89,9 @@ import io.github.nastechresearch.nastech.data.ai.transformers.WorkspaceReminderT
 import io.github.nastechresearch.nastech.data.event.AppEvent
 import io.github.nastechresearch.nastech.data.event.AppEventBus
 import io.github.nastechresearch.nastech.data.datastore.SettingsStore
+import io.github.nastechresearch.nastech.data.agentconfig.ConversationAgentConfigRepository
+import io.github.nastechresearch.nastech.data.agentconfig.ConversationAgentRuntime
+import io.github.nastechresearch.nastech.data.agentconfig.AgentAutonomyLevel
 import io.github.nastechresearch.nastech.data.datastore.Settings
 import io.github.nastechresearch.nastech.data.datastore.AutoCompactionThresholdMode
 import io.github.nastechresearch.nastech.data.datastore.findModelById
@@ -229,6 +232,8 @@ class ChatService(
     private val toolApprovalPreferences: io.github.nastechresearch.nastech.data.preferences.ToolApprovalPreferences,
     private val workspaceRepository: WorkspaceRepository,
     private val folderRepository: FolderRepository,
+    private val conversationAgentConfigRepository: ConversationAgentConfigRepository,
+    private val conversationAgentRuntime: ConversationAgentRuntime,
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
@@ -947,12 +952,32 @@ class ChatService(
         val initialConversation = getConversationFlow(conversationId).value
         val assistant = settings.getAssistantById(initialConversation.assistantId)
             ?: settings.getCurrentAssistant()
-        val model = settings.findModelById(
+        val configuredAgent = conversationAgentConfigRepository.get(conversationId.toString())
+        val agentConfig = if (conversationAgentRuntime.hasAgentLoop(configuredAgent)) {
+            addError(
+                IllegalStateException("Agent workflow loop detected; autonomous routing has been paused for this turn."),
+                conversationId,
+            )
+            configuredAgent.copy(autonomousTaskMode = false)
+        } else {
+            configuredAgent
+        }
+        val fallbackModel = settings.findModelById(
             initialConversation.chatModelId ?: assistant.chatModelId ?: settings.chatModelId
         )
             ?: throw IllegalStateException(
                 "No chat model selected. Pick one in Settings → Default models, or send /model in Telegram."
             )
+        val hasVisualInput = initialConversation.currentMessages
+            .flatMap { it.parts }
+            .any { it is UIMessagePart.Image }
+        val activeAgent = conversationAgentRuntime.selectAgentForTurn(agentConfig, hasVisualInput)
+        val routedModelId = conversationAgentRuntime.resolveModelId(
+            agent = activeAgent,
+            fallbackModel = fallbackModel,
+            settings = settings,
+        )
+        val model = settings.findModelById(routedModelId) ?: fallbackModel
         // Defence against an upstream-Settings bug where disabling all providers can leave
         // the assistant's chatModelId pointing at a model whose provider has enabled=false:
         // the model lookup walks every provider regardless of state, so without this gate
@@ -1026,32 +1051,12 @@ class ChatService(
                 // anything else) gets its runtime context into the system prompt without
                 // having to plumb a parameter all the way through sendMessage. Returns null
                 // for in-app conversations that didn't register one.
-                systemAddendum = io.github.nastechresearch.nastech.data.ai.tools
-                    .ConversationSystemAddendum.get(conversationId),
+                systemAddendum = listOf(
+                    io.github.nastechresearch.nastech.data.ai.tools.ConversationSystemAddendum.get(conversationId),
+                    conversationAgentRuntime.systemAddendum(agentConfig, activeAgent),
+                ).filter { it.isNotBlank() }.joinToString("\n"),
                 isToolAutoApproved = { toolName ->
-                    // YOLO mode ("I AM STUPID" toggle in Settings → Tool approvals): every
-                    // tool auto-approves. User opted into this explicitly. HARDLINE still
-                    // blocks rm -rf / et al — that check runs BEFORE auto-approval in
-                    // GenerationHandler, so YOLO can't smuggle one through.
-                    //
-                    // Headless conversations (cron-driven) also auto-approve EVERY tool;
-                    // the user pre-authorised the schedule itself at job-creation time
-                    // and there's no UI surface to prompt at fire time.
-                    //
-                    // Otherwise: "Allow for this chat" (in-memory, per-conversation) OR
-                    // "Always Allow" (DataStore-backed, across the whole app). The
-                    // Once-grant lives in the message itself as
-                    // ToolApprovalState.Approved, so it's already handled by the regular
-                    // Pending → Approved transition.
-                    //
-                    // ask_user is a human-input request, NOT a permission gate. It must pause
-                    // for the user whenever there's a surface to ask on (the in-app question card
-                    // or the Telegram clarify flow), so it ignores YOLO and the allow-lists —
-                    // otherwise it auto-executes its placeholder body and returns
-                    // ask_user_unavailable. In a headless run (cron / sub-agent) there's nobody to
-                    // answer, so it still auto-approves there and falls through to that graceful
-                    // envelope instead of hanging the turn.
-                    if (toolName == "ask_user") {
+                    val baseApproved = if (toolName == "ask_user") {
                         io.github.nastechresearch.nastech.data.ai.tools.HeadlessConversations
                             .shouldAutoApprove(conversationId)
                     } else {
@@ -1062,6 +1067,7 @@ class ChatService(
                                 .isAllowedForChat(conversationId, toolName) ||
                             toolApprovalPreferences.current().contains(toolName)
                     }
+                    conversationAgentRuntime.autoApprove(agentConfig, toolName, baseApproved)
                 },
                 onAfterToolExecution = { generatedMessages ->
                     if (messageRange != null || !settings.enableAutoCompaction) {
@@ -1133,7 +1139,15 @@ class ChatService(
                     add(workspaceReminderTransformer)
                 },
                 outputTransformers = outputTransformers,
-                tools = buildList {
+                tools = if (
+                    agentConfig.enabled &&
+                    agentConfig.autonomousTaskMode &&
+                    agentConfig.autonomyLevel == AgentAutonomyLevel.PLAN_ONLY
+                ) {
+                    emptyList()
+                } else conversationAgentRuntime.filterTools(
+                    activeAgent,
+                    buildList {
                     if (assistant.enableWebSearch) {
                         addAll(createSearchTools(settings))
                     }
@@ -1220,6 +1234,19 @@ class ChatService(
                             )
                         )
                     }
+                    },
+                ),
+                deniedToolNames = activeAgent?.deniedTools ?: emptySet(),
+                allowedToolNames = activeAgent?.allowedTools?.takeIf { it.isNotEmpty() },
+                maxSteps = if (agentConfig.enabled && agentConfig.autonomousTaskMode) {
+                    agentConfig.maxTurns
+                } else {
+                    io.github.nastechresearch.nastech.data.ai.limits.ToolRuntimeLimits.maxToolSteps
+                },
+                forceApprovalForTool = { toolName ->
+                    agentConfig.enabled &&
+                        agentConfig.autonomousTaskMode &&
+                        conversationAgentRuntime.isSensitiveTool(toolName)
                 },
             ).onCompletion { completionCause ->
                 // 取消 Live Update 通知

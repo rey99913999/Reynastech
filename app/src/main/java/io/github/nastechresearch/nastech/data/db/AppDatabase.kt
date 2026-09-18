@@ -8,6 +8,9 @@ import androidx.room.TypeConverters
 import me.rerere.ai.core.TokenUsage
 import io.github.nastechresearch.nastech.data.agentrun.AgentRun
 import io.github.nastechresearch.nastech.data.agentrun.AgentRunDao
+import io.github.nastechresearch.nastech.data.agentconfig.ConversationAgentConfigDao
+import io.github.nastechresearch.nastech.data.agentconfig.ConversationAgentConfigEntity
+import io.github.nastechresearch.nastech.data.agentconfig.ConversationAgentTemplateEntity
 import io.github.nastechresearch.nastech.data.db.dao.ConversationDAO
 import io.github.nastechresearch.nastech.data.db.dao.ConversationCompactionDAO
 import io.github.nastechresearch.nastech.data.db.dao.ConversationMemorySettingsDao
@@ -59,6 +62,7 @@ import io.github.nastechresearch.nastech.data.db.migrations.Migration_20_21
 import io.github.nastechresearch.nastech.data.db.migrations.Migration_21_22
 import io.github.nastechresearch.nastech.data.db.migrations.Migration_22_23
 import io.github.nastechresearch.nastech.data.db.migrations.Migration_32_33
+import io.github.nastechresearch.nastech.data.db.migrations.Migration_33_34
 import io.github.nastechresearch.nastech.data.db.migrations.Migration_8_9
 import io.github.nastechresearch.nastech.utils.JsonInstant
 import io.github.nastechresearch.nastech.workflow.db.WorkflowDao
@@ -94,8 +98,10 @@ import io.github.nastechresearch.nastech.workflow.db.WorkflowRunEntity
         TaskAuditLogEntity::class,
         TaskSettingsEntity::class,
         TaskExecutionUsageEntity::class,
+        ConversationAgentConfigEntity::class,
+        ConversationAgentTemplateEntity::class,
     ],
-    version = 33,
+    version = 34,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -177,6 +183,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun taskSettingsDao(): TaskSettingsDao
 
     abstract fun taskExecutionUsageDao(): TaskExecutionUsageDao
+
+    abstract fun conversationAgentConfigDao(): ConversationAgentConfigDao
 }
 
 object TokenUsageConverter {
