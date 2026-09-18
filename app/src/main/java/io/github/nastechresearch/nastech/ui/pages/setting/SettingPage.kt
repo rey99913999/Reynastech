@@ -275,6 +275,14 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         headlineContent = { Text(stringResource(R.string.setting_page_scheduled_jobs)) },
                     )
                     item(
+                        onClick = { navController.navigate(Screen.Tasks) },
+                        leadingContent = { Icon(HugeIcons.Robot01, null) },
+                        supportingContent = {
+                            Text("Durable task state, checkpoints, recovery, and resume")
+                        },
+                        headlineContent = { Text("Tasks") },
+                    )
+                    item(
                         onClick = { navController.navigate(Screen.SettingTelegram) },
                         leadingContent = { Icon(HugeIcons.Telegram, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_telegram_desc)) },
