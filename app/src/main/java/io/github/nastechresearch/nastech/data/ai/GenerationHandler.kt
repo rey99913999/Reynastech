@@ -1294,28 +1294,40 @@ class GenerationHandler(
         output: List<UIMessagePart>,
         hasShellAccess: Boolean,
     ): List<UIMessagePart> {
-        val textParts = output.filterIsInstance<UIMessagePart.Text>()
-        val nonTextParts = output.filter { it !is UIMessagePart.Text }
+        val preprocessed = output.map { part ->
+            if (part is UIMessagePart.Text) {
+                part.copy(text = ToolOutputPreprocessor.preprocess(part.text))
+            } else {
+                part
+            }
+        }
+
+        val textParts = preprocessed.filterIsInstance<UIMessagePart.Text>()
+        val nonTextParts = preprocessed.filter { it !is UIMessagePart.Text }
         val totalChars = textParts.sumOf { it.text.length }
 
-        if (totalChars <= MAX_TOOL_OUTPUT_CHARS || !hasShellAccess) return output
+        if (totalChars <= MAX_TOOL_OUTPUT_CHARS || !hasShellAccess) return preprocessed
 
-        Log.i(TAG, "maybeTruncateToolOutput: truncating tool $toolCallId output ($totalChars chars)")
+        Log.i(
+            TAG,
+            "maybeTruncateToolOutput: truncating tool " + toolCallId +
+                " output (" + totalChars + " chars)"
+        )
 
         val fullText = textParts.joinToString("\n") { it.text }
         val preview = fullText.take(TOOL_OUTPUT_PREVIEW_CHARS)
 
-        val fileName = "${toolCallId}.txt"
+        val fileName = toolCallId + ".txt"
         val outputDir = File(context.filesDir, FileFolders.TOOL_OUTPUTS).apply { mkdirs() }
         File(outputDir, fileName).writeText(fullText)
 
         return listOf(
             UIMessagePart.Text(
                 buildString {
-                    appendLine("[Tool output truncated: $totalChars characters total]")
-                    appendLine("Full output saved to: /tool_outputs/$fileName")
-                    appendLine("Use shell to read: `cat /tool_outputs/$fileName`")
-                    appendLine("Use shell to search: `grep \"pattern\" /tool_outputs/$fileName`")
+                    appendLine("[Tool output truncated: " + totalChars + " characters total]")
+                    appendLine("Full output saved to: /tool_outputs/" + fileName)
+                    appendLine("Use shell to read: `cat /tool_outputs/" + fileName + "`")
+                    appendLine("Use shell to search: `grep \"pattern\" /tool_outputs/" + fileName + "`")
                     appendLine()
                     append(preview)
                 }
