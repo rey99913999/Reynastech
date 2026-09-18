@@ -33,7 +33,8 @@ class SystemPromptBuilder {
             if (assistantPrompt.isNotBlank()) append(assistantPrompt)
             if (toolPrompts.isNotEmpty()) {
                 if (isNotEmpty()) appendLine()
-                appendLine("Tool cost guidance: prefer low-cost text tools before expensive visual or broad tools. Use read_window_tree/browser_get_text before screenshots when text is enough, and avoid repeating high-cost tools unless the state likely changed.")
+                appendLine("Tool cost guidance: prefer deterministic/local tools first. For multi-step deterministic work, prefer execute_structured_plan so several safe steps can run locally without an LLM round-trip after every action.")
+                appendLine("UI observation guidance: use UI tree/readers before screenshots; use OCR or vision only when the relevant element is not recoverable locally; never sacrifice verification merely to reduce tokens.")
                 toolPrompts.forEachIndexed { index, toolPrompt ->
                     if (index > 0) appendLine()
                     append(toolPrompt)
