@@ -9,6 +9,7 @@ import io.github.nastechresearch.nastech.data.task.TaskManager
 import io.github.nastechresearch.nastech.data.execution.ExecutionTelemetry
 import io.github.nastechresearch.nastech.data.execution.LocalExecutionEngine
 import io.github.nastechresearch.nastech.data.agentconfig.ConversationAgentConfigRepository
+import io.github.nastechresearch.nastech.data.agentconfig.ConversationAgentRuntime
 import io.github.nastechresearch.nastech.data.repository.ConversationRepository
 import io.github.nastechresearch.nastech.data.repository.FavoriteRepository
 import io.github.nastechresearch.nastech.data.repository.FolderRepository
@@ -48,6 +49,7 @@ val repositoryModule = module {
 
     single { LocalExecutionEngine(taskManager = get(), telemetry = get()) }
 
+    single { ConversationAgentRuntime() }
     single { ConversationAgentConfigRepository(database = get(), memoryEngine = get(), taskManager = get()) }
 
     single {
