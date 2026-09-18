@@ -349,7 +349,7 @@ private fun ChatPageContent(
                         navigateToChatPage(navController)
                     },
                     onCustomize = {
-                        navController.backStack.add(Screen.ConversationCustomization(conversation.id.toString()))
+                        navController.navigate(Screen.ConversationCustomization(conversation.id.toString()))
                     },
                     onClickMenu = {
                         previewMode = !previewMode
