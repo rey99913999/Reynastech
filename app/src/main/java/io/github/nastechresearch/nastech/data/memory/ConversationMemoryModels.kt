@@ -75,6 +75,7 @@ data class MemoryRetrievalResult(
     val memory: ConversationMemory,
 )
 
+@Serializable
 data class ConversationMemory(
     val id: Int,
     val conversationId: String,
@@ -92,6 +93,7 @@ data class ConversationMemory(
     val frozen: Boolean,
 )
 
+@Serializable
 data class ConversationMemorySettings(
     val conversationId: String,
     val mode: ConversationMemoryMode = ConversationMemoryMode.OFF,
@@ -99,6 +101,7 @@ data class ConversationMemorySettings(
     val tokenBudget: Int = 2_000,
 )
 
+@Serializable
 data class CurrentConversationState(
     val conversationId: String,
     val goal: String = "",
