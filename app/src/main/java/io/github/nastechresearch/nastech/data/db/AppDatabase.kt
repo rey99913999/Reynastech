@@ -52,10 +52,13 @@ import io.github.nastechresearch.nastech.data.task.TaskCheckpointEntity
 import io.github.nastechresearch.nastech.data.task.TaskEntity
 import io.github.nastechresearch.nastech.data.task.TaskSettingsEntity
 import io.github.nastechresearch.nastech.data.task.TaskStepEntity
+import io.github.nastechresearch.nastech.data.execution.TaskExecutionUsageEntity
+import io.github.nastechresearch.nastech.data.execution.TaskExecutionUsageDao
 import io.github.nastechresearch.nastech.data.db.migrations.Migration_16_17
 import io.github.nastechresearch.nastech.data.db.migrations.Migration_20_21
 import io.github.nastechresearch.nastech.data.db.migrations.Migration_21_22
 import io.github.nastechresearch.nastech.data.db.migrations.Migration_22_23
+import io.github.nastechresearch.nastech.data.db.migrations.Migration_32_33
 import io.github.nastechresearch.nastech.data.db.migrations.Migration_8_9
 import io.github.nastechresearch.nastech.utils.JsonInstant
 import io.github.nastechresearch.nastech.workflow.db.WorkflowDao
@@ -90,8 +93,9 @@ import io.github.nastechresearch.nastech.workflow.db.WorkflowRunEntity
         TaskCheckpointEntity::class,
         TaskAuditLogEntity::class,
         TaskSettingsEntity::class,
+        TaskExecutionUsageEntity::class,
     ],
-    version = 32,
+    version = 33,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -171,6 +175,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun taskAuditLogDao(): TaskAuditLogDao
 
     abstract fun taskSettingsDao(): TaskSettingsDao
+
+    abstract fun taskExecutionUsageDao(): TaskExecutionUsageDao
 }
 
 object TokenUsageConverter {
