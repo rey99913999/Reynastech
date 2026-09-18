@@ -169,6 +169,41 @@ fun ConversationCustomizationPage(conversationId: String) {
                         },
                     )
                 }
+                if (config.agents.isEmpty()) {
+                    OutlinedButton(onClick = {
+                        persist(
+                            config.copy(
+                                enabled = true,
+                                autonomousTaskMode = true,
+                                agents = listOf(
+                                    ConversationAgentDefinition(
+                                        id = UUID.randomUUID().toString(),
+                                        name = "Planner",
+                                        role = AgentRole.PLANNER,
+                                        activation = AgentActivation.TASK_START,
+                                        outputType = AgentOutputType.PLAN,
+                                    ),
+                                    ConversationAgentDefinition(
+                                        id = UUID.randomUUID().toString(),
+                                        name = "Executor",
+                                        role = AgentRole.EXECUTOR,
+                                        activation = AgentActivation.ALWAYS,
+                                    ),
+                                    ConversationAgentDefinition(
+                                        id = UUID.randomUUID().toString(),
+                                        name = "Verifier",
+                                        role = AgentRole.VERIFIER,
+                                        activation = AgentActivation.ON_REVIEW,
+                                        outputType = AgentOutputType.VERIFICATION,
+                                    ),
+                                ),
+                                workflow = emptyList(),
+                            )
+                        )
+                    }) {
+                        Text("Create Planner + Executor + Verifier")
+                    }
+                }
                 OutlinedButton(onClick = {
                     editingId = null
                     agentName = ""
