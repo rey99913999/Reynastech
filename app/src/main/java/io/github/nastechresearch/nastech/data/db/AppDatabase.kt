@@ -120,7 +120,6 @@ import io.github.nastechresearch.nastech.workflow.db.WorkflowRunEntity
         // incremental summaries. All are additive tables/columns with defaults, so Room can
         // generate the migration without custom SQL.
         AutoMigration(from = 30, to = 31),
-        AutoMigration(from = 31, to = 32),
     ]
 )
 @TypeConverters(TokenUsageConverter::class)
