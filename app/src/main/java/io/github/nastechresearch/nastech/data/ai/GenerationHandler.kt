@@ -59,6 +59,9 @@ import io.github.nastechresearch.nastech.data.ai.transformers.onGenerationFinish
 import io.github.nastechresearch.nastech.data.ai.transformers.transforms
 import io.github.nastechresearch.nastech.data.ai.transformers.visualTransforms
 import io.github.nastechresearch.nastech.data.ai.limits.ToolRuntimeLimits
+import io.github.nastechresearch.nastech.data.execution.LocalExecutionEngine
+import io.github.nastechresearch.nastech.data.execution.ToolOutputPreprocessor
+import io.github.nastechresearch.nastech.data.execution.buildStructuredPlanTool
 import io.github.nastechresearch.nastech.data.ai.tools.buildMemoryTools
 import io.github.nastechresearch.nastech.data.datastore.Settings
 import io.github.nastechresearch.nastech.data.datastore.findModelById
@@ -412,6 +415,7 @@ class GenerationHandler(
     private val conversationRepo: ConversationRepository,
     private val aiLoggingManager: AILoggingManager,
     private val systemPromptBuilder: SystemPromptBuilder,
+    private val localExecutionEngine: LocalExecutionEngine,
 ) {
     fun generateText(
         settings: Settings,
@@ -499,7 +503,7 @@ class GenerationHandler(
 
             Log.i(TAG, "streamText: start step #$stepIndex (${model.id})")
 
-            val toolsInternal = buildList {
+            val baseTools = buildList {
                 Log.i(TAG, "generateInternal: build tools($assistant)")
                 if (assistant.enableMemory) {
                     val memoryAssistantId = if (assistant.useGlobalMemory) {
@@ -521,6 +525,17 @@ class GenerationHandler(
                     ).let(this::addAll)
                 }
                 addAll(tools)
+            }
+
+            val toolsInternal = if (baseTools.isEmpty()) {
+                baseTools
+            } else {
+                baseTools + buildStructuredPlanTool(
+                    json = json,
+                    availableTools = baseTools,
+                    engine = localExecutionEngine,
+                    isToolAutoApproved = isToolAutoApproved,
+                )
             }
 
             // Check if we have tool calls ready to continue after user interaction.
