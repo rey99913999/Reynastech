@@ -37,7 +37,6 @@ import io.github.nastechresearch.nastech.ui.context.LocalNavController
 import io.github.nastechresearch.nastech.ui.theme.CustomColors
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Package
-import me.rerere.hugeicons.stroke.Upload04
 import me.rerere.hugeicons.stroke.Settings03
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -102,7 +101,7 @@ fun PluginManagerScreen(vm: PluginManagerViewModel = koinViewModel()) {
                             ) { Text("Install URL") }
                             TextButton(
                                 onClick = { picker.launch(arrayOf("application/zip", "application/octet-stream")) },
-                            ) { Icon(HugeIcons.Upload04, null); Text("Local package") }
+                            ) { Text("Local package") }
                         }
                         Text(
                             "Plugins are installed disabled. Skills, MCP connections, tools, and permissions activate only through their explicit bindings.",
