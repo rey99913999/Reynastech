@@ -23,7 +23,11 @@ import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import io.github.nastechresearch.nastech.data.ai.tools.local.AccessibilityServiceHandle
+import io.github.nastechresearch.nastech.data.ai.tools.local.defaultFilter
+import io.github.nastechresearch.nastech.data.ai.tools.local.nodeToJson
 import io.github.nastechresearch.nastech.service.RikkaAccessibilityService
+import io.github.nastechresearch.nastech.data.datastore.findModelById
+import io.github.nastechresearch.nastech.data.datastore.findProvider
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
@@ -90,10 +94,10 @@ class VisionPipeline(
             val nodes = mutableListOf<kotlinx.serialization.json.JsonObject>()
             svc.traverseTree(
                 root = root,
-                filter = ::io.github.nastechresearch.nastech.data.ai.tools.local.defaultFilter,
+                filter = ::defaultFilter,
                 cap = 2000,
                 emit = { node, _, index ->
-                    nodes += io.github.nastechresearch.nastech.data.ai.tools.local.nodeToJson(
+                    nodes += nodeToJson(
                         node,
                         root.windowId,
                         index,
