@@ -2,6 +2,7 @@ package io.github.nastechresearch.nastech.workflow.recording
 
 import android.graphics.Bitmap
 import android.graphics.Rect
+import android.os.Build
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import io.github.nastechresearch.nastech.service.RikkaAccessibilityService
@@ -217,7 +218,7 @@ object WorkflowRecordingController {
             val y = if (bounds.size == 4) (bounds[1] + bounds[3]) / 2f else null
             val eventText = event.text.joinToString(" ").takeIf(String::isNotBlank)
                 ?.let { if (node?.isPassword == true) "<redacted>" else it }
-            val direction = if (kind == RecordingActionKind.SCROLL) {
+            val direction = if (kind == RecordingActionKind.SCROLL && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 when {
                     event.scrollDeltaY > 0 -> "up"
                     event.scrollDeltaY < 0 -> "down"
