@@ -19,6 +19,8 @@ data class WorkflowAction(
 )
 
 /**
+ * Debugger-aware outcome of one workflow fire; RUNNING/PAUSED/CANCELLED are execution states.
+ *
  * Outcome of one workflow fire.
  *  - SUCCESS / FAILED — actually ran
  *  - SKIPPED_CONDITIONS — at least one condition evaluated false
