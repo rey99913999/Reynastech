@@ -18,6 +18,8 @@ import io.github.nastechresearch.nastech.data.db.dao.FolderDAO
 import io.github.nastechresearch.nastech.data.db.dao.GenMediaDAO
 import io.github.nastechresearch.nastech.data.db.dao.ManagedFileDAO
 import io.github.nastechresearch.nastech.data.db.dao.MemoryCandidateDao
+import io.github.nastechresearch.nastech.data.db.dao.ConversationAgentConfigDao
+import io.github.nastechresearch.nastech.data.db.dao.AgentTemplateDao
 import io.github.nastechresearch.nastech.data.task.TaskAuditLogDao
 import io.github.nastechresearch.nastech.data.task.TaskCheckpointDao
 import io.github.nastechresearch.nastech.data.task.TaskDao
@@ -33,6 +35,8 @@ import io.github.nastechresearch.nastech.data.db.dao.WorkspaceDAO
 import io.github.nastechresearch.nastech.data.db.entity.ConversationEntity
 import io.github.nastechresearch.nastech.data.db.entity.ConversationCompactionEntity
 import io.github.nastechresearch.nastech.data.db.entity.ConversationMemorySettingsEntity
+import io.github.nastechresearch.nastech.data.db.entity.ConversationAgentConfigEntity
+import io.github.nastechresearch.nastech.data.db.entity.AgentTemplateEntity
 import io.github.nastechresearch.nastech.data.db.entity.ConversationMemoryStateEntity
 import io.github.nastechresearch.nastech.data.db.entity.ConversationMemorySummaryEntity
 import io.github.nastechresearch.nastech.data.db.entity.FavoriteEntity
@@ -59,6 +63,7 @@ import io.github.nastechresearch.nastech.data.db.migrations.Migration_20_21
 import io.github.nastechresearch.nastech.data.db.migrations.Migration_21_22
 import io.github.nastechresearch.nastech.data.db.migrations.Migration_22_23
 import io.github.nastechresearch.nastech.data.db.migrations.Migration_32_33
+import io.github.nastechresearch.nastech.data.db.migrations.Migration_33_34
 import io.github.nastechresearch.nastech.data.db.migrations.Migration_8_9
 import io.github.nastechresearch.nastech.utils.JsonInstant
 import io.github.nastechresearch.nastech.workflow.db.WorkflowDao
@@ -94,8 +99,10 @@ import io.github.nastechresearch.nastech.workflow.db.WorkflowRunEntity
         TaskAuditLogEntity::class,
         TaskSettingsEntity::class,
         TaskExecutionUsageEntity::class,
+        ConversationAgentConfigEntity::class,
+        AgentTemplateEntity::class,
     ],
-    version = 33,
+    version = 34,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -177,6 +184,10 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun taskSettingsDao(): TaskSettingsDao
 
     abstract fun taskExecutionUsageDao(): TaskExecutionUsageDao
+
+    abstract fun conversationAgentConfigDao(): ConversationAgentConfigDao
+
+    abstract fun agentTemplateDao(): AgentTemplateDao
 }
 
 object TokenUsageConverter {

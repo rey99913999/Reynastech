@@ -65,6 +65,8 @@ import io.github.nastechresearch.nastech.utils.sendNotification
 import io.github.nastechresearch.nastech.R
 import io.github.nastechresearch.nastech.data.ai.GenerationChunk
 import io.github.nastechresearch.nastech.data.ai.GenerationHandler
+import io.github.nastechresearch.nastech.data.agent.ConversationAgentRuntime
+import io.github.nastechresearch.nastech.data.agent.buildAutonomousTaskTool
 import io.github.nastechresearch.nastech.data.ai.ContextBudgetPlanner
 import io.github.nastechresearch.nastech.data.ai.ContextCompactionPlanner
 import io.github.nastechresearch.nastech.data.ai.ContextCompactionPresentation
@@ -229,6 +231,7 @@ class ChatService(
     private val toolApprovalPreferences: io.github.nastechresearch.nastech.data.preferences.ToolApprovalPreferences,
     private val workspaceRepository: WorkspaceRepository,
     private val folderRepository: FolderRepository,
+    private val conversationAgentRuntime: ConversationAgentRuntime,
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
@@ -1217,6 +1220,17 @@ class ChatService(
                                 execute = {
                                     mcpManager.callTool(serverId, tool.name, it.jsonObject)
                                 },
+                            )
+                        )
+                    }
+                    if (conversationAgentRuntime.isEnabled(conversationId.toString())) {
+                        val agentToolSet = this.map { it.name }
+                        add(
+                            buildAutonomousTaskTool(
+                                runtime = conversationAgentRuntime,
+                                conversationId = conversationId,
+                                parentAssistantId = assistant.id,
+                                availableTools = agentToolSet,
                             )
                         )
                     }
