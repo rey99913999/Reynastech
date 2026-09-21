@@ -28,8 +28,8 @@ android {
         applicationId = "io.github.nastechresearch.nastech"
         minSdk = 26
         targetSdk = 37
-        versionCode = 192
-        versionName = "2.4.24"
+        versionCode = 193
+        versionName = "2.4.25"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -263,6 +263,7 @@ dependencies {
     // quickie (qrcode scanner)
     implementation(libs.quickie.bundled)
     implementation(libs.barcode.scanning)
+    implementation(libs.text.recognition)
     implementation(libs.androidx.camera.core)
 
     // Room
