@@ -254,7 +254,8 @@ val appModule = module {
             skillManager = get(),
             toolApprovalPreferences = get(),
             workspaceRepository = get(),
-            folderRepository = get()
+            folderRepository = get(),
+            conversationAgentRuntime = get()
         )
     }
 
