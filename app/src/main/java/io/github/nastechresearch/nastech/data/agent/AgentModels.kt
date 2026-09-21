@@ -75,9 +75,24 @@ fun defaultAgentDefinitions(): List<AgentDefinition> = listOf(
         systemInstructions = "Break the user's goal into a concise executable plan. Do not perform side effects.",
     ),
     AgentDefinition(
+        name = "Vision",
+        role = AgentRole.VISION,
+        systemInstructions = "Observe the current screen only when visual context is needed. Prefer UI Tree and OCR-derived structured data. Return structured JSON with target, elements, bounds, state, and confidence. Do not execute actions.",
+        allowedTools = listOf(
+            "vision_capture",
+            "ocr_extract",
+            "ui_find_visual_target",
+            "vision_analyze",
+            "vision_verify_state",
+        ),
+        activationCondition = AgentActivationCondition.HAS_VISUAL_SIGNAL,
+        autonomyLevel = AgentAutonomyLevel.SAFE_AUTO,
+        outputType = AgentOutputType.STRUCTURED,
+    ),
+    AgentDefinition(
         name = "Executor",
         role = AgentRole.EXECUTOR,
-        systemInstructions = "Execute the approved plan using only granted tools and verify important actions.",
+        systemInstructions = "Execute the approved plan using only granted tools and verify important actions. Use ui_find_visual_target before coordinate actions when a stable UI element is available.",
         allowedTools = listOf("*"),
     ),
     AgentDefinition(
@@ -89,10 +104,18 @@ fun defaultAgentDefinitions(): List<AgentDefinition> = listOf(
 
 fun defaultWorkflow(configAgents: List<AgentDefinition>): List<AgentWorkflowEdge> {
     val planner = configAgents.firstOrNull { it.role == AgentRole.PLANNER }?.id
+    val vision = configAgents.firstOrNull { it.role == AgentRole.VISION }?.id
     val executor = configAgents.firstOrNull { it.role == AgentRole.EXECUTOR }?.id
     val verifier = configAgents.firstOrNull { it.role == AgentRole.VERIFIER }?.id
     return buildList {
-        if (planner != null && executor != null) add(AgentWorkflowEdge(planner, executor))
+        if (planner != null && vision != null) add(
+            AgentWorkflowEdge(planner, vision, condition = "visual-context-when-needed"),
+        )
+        if (vision != null && executor != null) {
+            add(AgentWorkflowEdge(vision, executor))
+        } else if (planner != null && executor != null) {
+            add(AgentWorkflowEdge(planner, executor))
+        }
         if (executor != null && verifier != null) add(AgentWorkflowEdge(executor, verifier))
     }
 }
