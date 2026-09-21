@@ -994,6 +994,7 @@ class LocalTools(
             tools.add(io.github.nastechresearch.nastech.workflow.tools.workflowDeleteTool(workflowRepository))
             tools.add(io.github.nastechresearch.nastech.workflow.tools.workflowSetEnabledTool(workflowRepository))
             tools.add(io.github.nastechresearch.nastech.workflow.tools.workflowRunTool(workflowEngine, workflowRepository))
+            tools.add(io.github.nastechresearch.nastech.workflow.tools.learnedWorkflowActionTool(context, invocationContext))
         }
         if (options.contains(LocalToolOption.Browser)) {
             // Per-tool registration. The user can grant only the tools they trust — read

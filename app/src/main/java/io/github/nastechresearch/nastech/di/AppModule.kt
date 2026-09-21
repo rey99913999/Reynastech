@@ -144,6 +144,17 @@ val appModule = module {
     single { io.github.nastechresearch.nastech.skills.js.JsSkillRunner(get()) }
     single { io.github.nastechresearch.nastech.skills.js.SkillSecretsStore(get()) }
 
+    // Update 07 — learned workflow recording pipeline
+    single { io.github.nastechresearch.nastech.workflow.recording.WorkflowRecordingStore(get()) }
+    single {
+        io.github.nastechresearch.nastech.workflow.recording.WorkflowRecordingConverter(
+            settingsStore = get(),
+            providerManager = get(),
+            repository = get(),
+            store = get(),
+        )
+    }
+
     // Phase 12: Workflows
     single {
         io.github.nastechresearch.nastech.workflow.repository.WorkflowRepository(

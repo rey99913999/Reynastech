@@ -144,6 +144,19 @@ class WorkflowEngine(
             return persistAndReturn(workflowId, firedAtMs, started, WorkflowRunStatus.SKIPPED_DISABLED, null, "", ledgerId)
         }
 
+        // Learned workflows are explicit user-reviewed drafts until approved.
+        if (def.sourceRecordingId != null && def.approvedAtMs == null) {
+            return persistAndReturn(
+                workflowId,
+                firedAtMs,
+                started,
+                WorkflowRunStatus.FAILED,
+                "learned_workflow_not_approved",
+                "",
+                ledgerId,
+            )
+        }
+
         // Trigger runtime pre-flight — surface "this trigger needs setup" as an explicit
         // FAILED row in history so the user sees WHY the workflow doesn't fire instead of
         // just "Never run". The audit found these were silently dying:

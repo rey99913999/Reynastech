@@ -189,6 +189,9 @@ object WorkflowJson {
             updatedAtMs = now,
             authoringAssistantId = obj["authoring_assistant_id"]?.jsonPrimitive?.contentOrNull
                 ?.takeIf { it.isNotBlank() },
+            sourceRecordingId = obj["source_recording_id"]?.jsonPrimitive?.contentOrNull
+                ?.takeIf { it.isNotBlank() },
+            approvedAtMs = obj["approved_at_ms"]?.jsonPrimitive?.contentOrNull?.toLongOrNull(),
         ))
     }
 
@@ -220,6 +223,12 @@ object WorkflowJson {
             put("updated_at_ms", JsonPrimitive(definition.updatedAtMs.toString()))
             if (definition.authoringAssistantId != null) {
                 put("authoring_assistant_id", JsonPrimitive(definition.authoringAssistantId))
+            }
+            if (definition.sourceRecordingId != null) {
+                put("source_recording_id", JsonPrimitive(definition.sourceRecordingId))
+            }
+            if (definition.approvedAtMs != null) {
+                put("approved_at_ms", JsonPrimitive(definition.approvedAtMs.toString()))
             }
         }
         return obj.toString()
@@ -273,6 +282,9 @@ object WorkflowJson {
             updatedAtMs = obj["updated_at_ms"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: now,
             authoringAssistantId = obj["authoring_assistant_id"]?.jsonPrimitive?.contentOrNull
                 ?.takeIf { it.isNotBlank() },
+            sourceRecordingId = obj["source_recording_id"]?.jsonPrimitive?.contentOrNull
+                ?.takeIf { it.isNotBlank() },
+            approvedAtMs = obj["approved_at_ms"]?.jsonPrimitive?.contentOrNull?.toLongOrNull(),
         )
     }
 

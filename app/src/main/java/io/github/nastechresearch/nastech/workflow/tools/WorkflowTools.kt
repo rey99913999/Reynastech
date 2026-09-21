@@ -120,6 +120,8 @@ fun workflowCreateTool(
                 val def = parsed.definition.copy(
                     authoringAssistantId = parsed.definition.authoringAssistantId
                         ?: callerContext.callerAssistantId,
+                    enabled = if (parsed.definition.sourceRecordingId != null) false else parsed.definition.enabled,
+                    approvedAtMs = if (parsed.definition.sourceRecordingId != null) null else parsed.definition.approvedAtMs,
                 )
                 runCatching { repository.upsert(def) }.fold(
                     onSuccess = {
@@ -263,10 +265,14 @@ fun workflowUpdateTool(
                 // Preserve the existing authoring assistant — workflow_update is for body
                 // edits, not for transferring ownership. If the LLM tries to change it,
                 // we ignore that and keep the original.
+                val isLearned = existing.definition.sourceRecordingId != null
                 val def = parsed.definition.copy(
                     authoringAssistantId = existing.definition.authoringAssistantId
                         ?: parsed.definition.authoringAssistantId
                         ?: callerContext.callerAssistantId,
+                    sourceRecordingId = existing.definition.sourceRecordingId ?: parsed.definition.sourceRecordingId,
+                    enabled = if (isLearned) false else parsed.definition.enabled,
+                    approvedAtMs = if (isLearned) null else parsed.definition.approvedAtMs,
                 )
                 runCatching { repository.upsert(def) }.fold(
                     onSuccess = {
@@ -342,8 +348,10 @@ fun workflowSetEnabledTool(repository: WorkflowRepository): Tool = Tool(
             ?: return@Tool errorResponse("missing_enabled", "enabled is required")
         val enabled = enabledStr.toBooleanStrictOrNull()
             ?: return@Tool errorResponse("invalid_enabled", "enabled must be true or false")
-        if (repository.getById(id) == null) {
-            return@Tool errorResponse("not_found", "no workflow with id=$id")
+        val existing = repository.getById(id)
+            ?: return@Tool errorResponse("not_found", "no workflow with id=$id")
+        if (enabled && existing.definition.sourceRecordingId != null && existing.definition.approvedAtMs == null) {
+            return@Tool errorResponse("learned_workflow_not_approved", "Review and approve the learned workflow before enabling it.")
         }
         repository.setEnabled(id, enabled)
         listOf(UIMessagePart.Text(buildJsonObject {

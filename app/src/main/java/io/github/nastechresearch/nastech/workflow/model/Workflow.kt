@@ -68,6 +68,10 @@ data class WorkflowDefinition(
      * always have this set via the ToolInvocationContext propagation in workflow_create.
      */
     val authoringAssistantId: String? = null,
+    /** Non-null for workflows learned from a user recording. */
+    val sourceRecordingId: String? = null,
+    /** User approval timestamp for a learned workflow. Null means draft/unapproved. */
+    val approvedAtMs: Long? = null,
 )
 
 /**

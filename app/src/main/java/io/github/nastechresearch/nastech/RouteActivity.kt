@@ -599,6 +599,10 @@ class RouteActivity : ComponentActivity() {
                                 io.github.nastechresearch.nastech.workflow.ui.WorkflowDetailScreen(workflowId = key.id)
                             }
 
+                            entry<Screen.WorkflowLearningDraft> { key ->
+                                io.github.nastechresearch.nastech.workflow.ui.WorkflowLearningDraftScreen(recordingId = key.recordingId)
+                            }
+
                             entry<Screen.SettingScheduledJobs> {
                                 io.github.nastechresearch.nastech.ui.pages.setting.scheduledjobs.ScheduledJobsScreen()
                             }
@@ -916,6 +920,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data class WorkflowDetail(val id: String) : Screen
+
+    @Serializable
+    data class WorkflowLearningDraft(val recordingId: String) : Screen
 
     @Serializable
     data object SettingScheduledJobs : Screen

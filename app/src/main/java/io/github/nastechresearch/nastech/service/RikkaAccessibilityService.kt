@@ -77,6 +77,7 @@ class RikkaAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        event?.let { io.github.nastechresearch.nastech.workflow.recording.WorkflowRecordingController.onAccessibilityEvent(this, it) }
         // Phase 12 — feed foreground-app transitions to the workflow trigger dispatcher.
         // We only care about TYPE_WINDOW_STATE_CHANGED and only when the package name is
         // present. The dispatcher itself de-dupes (skips no-op transitions) and dispatches
