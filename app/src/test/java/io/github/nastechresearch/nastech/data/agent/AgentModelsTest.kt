@@ -11,15 +11,19 @@ class AgentModelsTest {
     fun `default workspace contains planner executor verifier in order`() {
         val agents = defaultAgentDefinitions()
         assertEquals(
-            listOf(AgentRole.PLANNER, AgentRole.EXECUTOR, AgentRole.VERIFIER),
+            listOf(AgentRole.PLANNER, AgentRole.VISION, AgentRole.EXECUTOR, AgentRole.VERIFIER),
             agents.map { it.role },
         )
         val workflow = defaultWorkflow(agents)
-        assertEquals(2, workflow.size)
+        assertEquals(3, workflow.size)
         assertEquals(agents[0].id, workflow[0].fromAgentId)
         assertEquals(agents[1].id, workflow[0].toAgentId)
         assertEquals(agents[1].id, workflow[1].fromAgentId)
         assertEquals(agents[2].id, workflow[1].toAgentId)
+        assertEquals(agents[2].id, workflow[2].fromAgentId)
+        assertEquals(agents[3].id, workflow[2].toAgentId)
+        assertEquals(AgentActivationCondition.HAS_VISUAL_SIGNAL, agents[1].activationCondition)
+        assertEquals(AgentOutputType.STRUCTURED, agents[1].outputType)
     }
 
     @Test
