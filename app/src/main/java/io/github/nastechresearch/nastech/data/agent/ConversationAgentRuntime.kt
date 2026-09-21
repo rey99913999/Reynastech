@@ -240,24 +240,24 @@ class ConversationAgentRuntime(
                             failure = "empty_agent_output",
                         )
                     }
-                    if (agent.outputType == AgentOutputType.STRUCTURED) {
-                        runCatching { Json.parseToJsonElement(output) }.onFailure {
-                            taskManager.recordStepFailure(
-                                taskId = taskId,
-                                stepId = step.id,
-                                error = "Structured Agent output was not valid JSON.",
-                                category = TaskFailureCategory.INVALID_RESULT,
-                                recovery = TaskRecoveryAction.REPLAN,
-                                outputSummary = output.take(600),
-                            )
-                            return AgentRuntimeResult(
-                                status = "FAILED",
-                                taskId = taskId,
-                                summary = agent.name + " returned invalid structured output.",
-                                completedAgents = completedAgents,
-                                failure = "invalid_structured_output",
-                            )
-                        }
+                    if (agent.outputType == AgentOutputType.STRUCTURED &&
+                        runCatching { Json.parseToJsonElement(output) }.isFailure
+                    ) {
+                        taskManager.recordStepFailure(
+                            taskId = taskId,
+                            stepId = step.id,
+                            error = "Structured Agent output was not valid JSON.",
+                            category = TaskFailureCategory.INVALID_RESULT,
+                            recovery = TaskRecoveryAction.REPLAN,
+                            outputSummary = output.take(600),
+                        )
+                        return AgentRuntimeResult(
+                            status = "FAILED",
+                            taskId = taskId,
+                            summary = agent.name + " returned invalid structured output.",
+                            completedAgents = completedAgents,
+                            failure = "invalid_structured_output",
+                        )
                     }
                     taskManager.completeStep(
                         taskId = taskId,
