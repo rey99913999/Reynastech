@@ -271,6 +271,33 @@ class PluginManager(
     suspend fun setConfig(pluginId: String, config: JsonObject): Result<Unit> =
         mutateRecord(pluginId) { it.copy(config = config, updatedAtMs = System.currentTimeMillis()) }
 
+    suspend fun authorize(pluginId: String, context: Context): Result<Unit> {
+        val record = find(pluginId) ?: return Result.failure(IllegalArgumentException("Plugin not found."))
+        if (!record.enabled) {
+            return Result.failure(IllegalStateException("Enable the plugin before authorizing it."))
+        }
+        val authServer = record.manifest.mcpServers.firstOrNull {
+            it.auth.type.equals("mcp_oauth", ignoreCase = true)
+        } ?: return Result.failure(IllegalStateException("Plugin does not declare MCP OAuth authentication."))
+
+        val serverId = record.mcpServerIds[authServer.key]?.let { runCatching { Uuid.parse(it) }.getOrNull() }
+            ?: return Result.failure(IllegalStateException("Plugin OAuth server is not installed."))
+
+        val config = settingsStore.settingsFlow.value.mcpServers.firstOrNull { it.id == serverId }
+            ?: return Result.failure(IllegalStateException("Plugin OAuth server configuration is missing."))
+        mcpManager.startAuthorization(config, context)
+        return Result.success(Unit)
+    }
+
+    fun cancelAuthorization(pluginId: String): Result<Unit> {
+        val record = find(pluginId) ?: return Result.failure(IllegalArgumentException("Plugin not found."))
+        val serverId = record.mcpServerIds.values.firstNotNullOfOrNull { value ->
+            runCatching { Uuid.parse(value) }.getOrNull()
+        } ?: return Result.failure(IllegalStateException("Plugin OAuth server is not installed."))
+        settingsStore.settingsFlow.value.mcpServers.firstOrNull { it.id == serverId }?.let { mcpManager.cancelAuthorization(it) }
+        return Result.success(Unit)
+    }
+
     suspend fun uninstall(pluginId: String): Result<Unit> = withContext(Dispatchers.IO) {
         val record = find(pluginId)
             ?: return@withContext Result.failure(IllegalArgumentException("Plugin not found."))
@@ -583,10 +610,21 @@ class PluginManager(
         }) {
             "Every plugin tool must reference a declared MCP server."
         }
-        val dangerousHeaders = setOf("authorization", "proxy-authorization", "x-api-key", "api-key")
+        val dangerousHeaders = setOf(
+            "authorization",
+            "proxy-authorization",
+            "x-api-key",
+            "api-key",
+            "cookie",
+            "set-cookie",
+        )
         require(
             manifest.mcpServers.flatMap { it.headers }
-                .none { it.name.lowercase() in dangerousHeaders }
+                .none {
+                    val name = it.name.lowercase()
+                    name in dangerousHeaders ||
+                        listOf("token", "secret", "credential", "password").any(name::contains)
+                }
         ) {
             "Plugin packages may not embed credential headers."
         }

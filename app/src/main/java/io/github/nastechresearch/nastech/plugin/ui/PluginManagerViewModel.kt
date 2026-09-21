@@ -89,6 +89,16 @@ class PluginManagerViewModel(
         }
     }
 
+    fun authorize(id: String, context: android.content.Context, onError: (String) -> Unit = {}) {
+        viewModelScope.launch {
+            pluginManager.authorize(id, context).onFailure { onError(it.message ?: "Authorization failed") }
+        }
+    }
+
+    fun cancelAuthorization(id: String, onError: (String) -> Unit = {}) {
+        pluginManager.cancelAuthorization(id).onFailure { onError(it.message ?: "Authorization failed") }
+    }
+
     fun saveConfig(id: String, rawJson: String, onResult: (String) -> Unit) {
         viewModelScope.launch {
             val parsed = runCatching {

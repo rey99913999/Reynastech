@@ -1,6 +1,5 @@
 package io.github.nastechresearch.nastech.plugin.ui
 
-import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +28,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -38,7 +38,6 @@ import io.github.nastechresearch.nastech.ui.theme.CustomColors
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Package
 import me.rerere.hugeicons.stroke.Upload04
-import me.rerere.hugeicons.stroke.Delete02
 import me.rerere.hugeicons.stroke.Settings03
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,6 +49,7 @@ fun PluginManagerScreen(vm: PluginManagerViewModel = koinViewModel()) {
     val plugins by vm.plugins.collectAsStateWithLifecycle()
     val conversations by vm.conversations.collectAsStateWithLifecycle()
     val nav = LocalNavController.current
+    val context = LocalContext.current
     var url by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
     var bindingPluginId by remember { mutableStateOf<String?>(null) }
@@ -145,6 +145,29 @@ fun PluginManagerScreen(vm: PluginManagerViewModel = koinViewModel()) {
                         Text("Source: " + record.sourceLabel)
                         Text("Trust: " + record.manifest.trust.name)
                         Text("Status: " + record.status.name)
+                        record.manifest.mcpServers
+                            .filter { it.auth.type.equals("mcp_oauth", ignoreCase = true) }
+                            .forEach { server ->
+                                Text(
+                                    "Authentication: " +
+                                        server.auth.provider.ifBlank { "MCP OAuth" } +
+                                        if (server.auth.account.isBlank()) "" else " • " + server.auth.account,
+                                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    TextButton(
+                                        onClick = {
+                                            vm.authorize(record.manifest.normalizedId(), context) { message = it }
+                                        },
+                                        enabled = record.enabled,
+                                    ) { Text("Authorize") }
+                                    TextButton(
+                                        onClick = {
+                                            vm.cancelAuthorization(record.manifest.normalizedId()) { message = it }
+                                        },
+                                    ) { Text("Cancel") }
+                                }
+                            }
                         if (record.manifest.description.isNotBlank()) {
                             Text(record.manifest.description)
                         }
