@@ -70,6 +70,8 @@ import io.github.nastechresearch.nastech.workflow.db.WorkflowDao
 import io.github.nastechresearch.nastech.workflow.db.WorkflowEntity
 import io.github.nastechresearch.nastech.workflow.db.WorkflowRunDao
 import io.github.nastechresearch.nastech.workflow.db.WorkflowRunEntity
+import io.github.nastechresearch.nastech.workflow.db.WorkflowRevisionDao
+import io.github.nastechresearch.nastech.workflow.db.WorkflowRevisionEntity
 
 @Database(
     entities = [
@@ -90,6 +92,7 @@ import io.github.nastechresearch.nastech.workflow.db.WorkflowRunEntity
         TelegramChatEntity::class,
         WorkflowEntity::class,
         WorkflowRunEntity::class,
+        WorkflowRevisionEntity::class,
         AgentRun::class,
         WorkspaceEntity::class,
         FolderEntity::class,
@@ -102,7 +105,7 @@ import io.github.nastechresearch.nastech.workflow.db.WorkflowRunEntity
         ConversationAgentConfigEntity::class,
         AgentTemplateEntity::class,
     ],
-    version = 34,
+    version = 35,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -127,6 +130,7 @@ import io.github.nastechresearch.nastech.workflow.db.WorkflowRunEntity
         AutoMigration(from = 27, to = 28),
         AutoMigration(from = 28, to = 29),
         AutoMigration(from = 29, to = 30),
+        AutoMigration(from = 34, to = 35),
         // v31 is handled by explicit Migration_30_31 in DataSourceModule to avoid requiring
         // a generated v31 schema during KSP processing.
     ]
@@ -166,6 +170,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun workflowDao(): WorkflowDao
 
     abstract fun workflowRunDao(): WorkflowRunDao
+
+    abstract fun workflowRevisionDao(): WorkflowRevisionDao
 
     abstract fun agentRunDao(): AgentRunDao
 

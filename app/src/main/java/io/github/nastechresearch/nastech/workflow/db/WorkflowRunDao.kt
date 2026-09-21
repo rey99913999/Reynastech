@@ -24,6 +24,30 @@ interface WorkflowRunDao {
      * fire to keep history bounded. Implementation: delete every rowId older than the
      * top-[keep] cutoff. Reuses the same idiom as ScheduledJobRunDao.trim().
      */
+    @Query("SELECT * FROM workflow_runs WHERE rowId = :rowId LIMIT 1")
+    suspend fun getById(rowId: Long): WorkflowRunEntity?
+
+    @Query("UPDATE workflow_runs SET traceJson = :traceJson WHERE rowId = :rowId")
+    suspend fun updateTrace(rowId: Long, traceJson: String): Int
+
+    @Query("""
+        UPDATE workflow_runs
+        SET status = :status,
+            durationMs = :durationMs,
+            errorMessage = :errorMessage,
+            traceJson = :traceJson,
+            endedAtMs = :endedAtMs
+        WHERE rowId = :rowId
+    """)
+    suspend fun markTerminal(
+        rowId: Long,
+        status: String,
+        durationMs: Long,
+        errorMessage: String?,
+        traceJson: String,
+        endedAtMs: Long,
+    ): Int
+
     @Query("""
         DELETE FROM workflow_runs
         WHERE workflowId = :workflowId

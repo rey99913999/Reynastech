@@ -35,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import io.github.nastechresearch.nastech.ui.components.execution.WorkflowRunInspectorDialog
 import io.github.nastechresearch.nastech.R
 import io.github.nastechresearch.nastech.Screen
 import io.github.nastechresearch.nastech.ui.components.nav.BackButton
@@ -62,6 +63,8 @@ fun WorkflowDetailScreen(
     var loaded by remember { mutableStateOf<Loaded?>(null) }
     var history by remember { mutableStateOf<List<WorkflowRun>>(emptyList()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var selectedRun by remember { mutableStateOf<WorkflowRun?>(null) }
+    var diagnosis by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(workflowId) {
         loaded = vm.get(workflowId)
@@ -69,6 +72,8 @@ fun WorkflowDetailScreen(
     }
 
     val currentLoaded = loaded
+    val revisions by vm.revisions(currentLoaded?.entity?.id ?: "")
+        .collectAsStateWithLifecycle(initialValue = emptyList())
     if (currentLoaded == null) {
         Scaffold(
             topBar = {
@@ -117,6 +122,59 @@ fun WorkflowDetailScreen(
         )
     }
 
+    selectedRun?.let { run ->
+        WorkflowRunInspectorDialog(
+            run = run,
+            revisions = revisions,
+            diagnosis = diagnosis,
+            onDismiss = { selectedRun = null },
+            onRetry = {
+                scope.launch {
+                    vm.retry(run.rowId)
+                    history = vm.history(currentLoaded.entity.id)
+                    selectedRun = vm.getRun(run.rowId)
+                }
+            },
+            onPause = {
+                scope.launch {
+                    vm.pause(run.rowId)
+                    history = vm.history(currentLoaded.entity.id)
+                    selectedRun = vm.getRun(run.rowId)
+                }
+            },
+            onStop = {
+                scope.launch {
+                    vm.stop(run.rowId)
+                    history = vm.history(currentLoaded.entity.id)
+                    selectedRun = vm.getRun(run.rowId)
+                }
+            },
+            onSkip = {
+                scope.launch {
+                    vm.skipFailedStep(run.rowId)
+                    history = vm.history(currentLoaded.entity.id)
+                    selectedRun = vm.getRun(run.rowId)
+                }
+            },
+            onCreateDraft = { kind ->
+                scope.launch {
+                    vm.createRepairDraft(run.rowId, kind)
+                }
+            },
+            onDiagnose = {
+                scope.launch {
+                    diagnosis = vm.diagnose(run.rowId)
+                }
+            },
+            onApplyRevision = { revisionId ->
+                scope.launch {
+                    vm.applyRevision(revisionId)
+                    loaded = vm.get(currentLoaded.entity.id)
+                    history = vm.history(currentLoaded.entity.id)
+                }
+            },
+        )
+    }
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
@@ -229,9 +287,16 @@ fun WorkflowDetailScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         for (r in history) {
                             val ago = formatRelativeAgo(r.firedAtMs, nowMs, rel)
-                            val line = "$ago — ${r.status.name}" +
-                                (r.errorMessage?.let { " — ${it.take(60)}" } ?: "")
-                            Text(line, style = MaterialTheme.typography.bodySmall)
+                            val line = ago + " — " + r.status.name +
+                                (r.errorMessage?.let { " — " + it.take(60) } ?: "")
+                            TextButton(
+                                onClick = {
+                                    selectedRun = r
+                                    diagnosis = null
+                                },
+                            ) {
+                                Text(line, style = MaterialTheme.typography.bodySmall)
+                            }
                         }
                     }
                 }

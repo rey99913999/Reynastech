@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -35,6 +36,7 @@ import io.github.nastechresearch.nastech.data.task.TaskPolicy
 import io.github.nastechresearch.nastech.data.task.TaskStatus
 import io.github.nastechresearch.nastech.data.task.TaskStepEntity
 import io.github.nastechresearch.nastech.data.task.TaskStepStatus
+import io.github.nastechresearch.nastech.ui.components.execution.TaskStepInspectorDialog
 import io.github.nastechresearch.nastech.ui.components.nav.BackButton
 import io.github.nastechresearch.nastech.ui.context.LocalNavController
 import io.github.nastechresearch.nastech.ui.theme.CustomColors
@@ -55,6 +57,7 @@ fun TaskDetailPage(
     val audit by taskManager.observeAudit(taskId).collectAsStateWithLifecycle(initialValue = emptyList())
     val executionUsage by taskManager.observeExecutionUsage(taskId).collectAsStateWithLifecycle(initialValue = null)
     var policy by remember(task?.conversationId) { mutableStateOf<TaskPolicy?>(null) }
+    var selectedStep by remember { mutableStateOf<TaskStepEntity?>(null) }
 
     LaunchedEffect(task?.conversationId) {
         val conversationId = task?.conversationId ?: return@LaunchedEffect
@@ -179,6 +182,7 @@ fun TaskDetailPage(
                 items(steps, key = { it.id }) { step ->
                     StepRow(
                         step = step,
+                        onInspect = { selectedStep = step },
                         onVerifyExisting = if (step.status == TaskStepStatus.FAILED.name) {
                             {
                                 scope.launch {
@@ -249,11 +253,39 @@ fun TaskDetailPage(
             }
         }
     }
+
+    selectedStep?.let { step ->
+        TaskStepInspectorDialog(
+            step = step,
+            audit = audit,
+            checkpoints = checkpoints,
+            onDismiss = { selectedStep = null },
+            onVerifyExisting = {
+                scope.launch {
+                    taskManager.prepareRetry(taskId, step.id, existingResultIsValid = true)
+                    selectedStep = null
+                }
+            },
+            onRetry = {
+                scope.launch {
+                    taskManager.prepareRetry(taskId, step.id, existingResultIsValid = false)
+                    selectedStep = null
+                }
+            },
+            onPause = {
+                scope.launch {
+                    taskManager.pauseTask(taskId, "Paused from Execution Inspector")
+                    selectedStep = null
+                }
+            },
+        )
+    }
 }
 
 @Composable
 private fun StepRow(
     step: TaskStepEntity,
+    onInspect: () -> Unit,
     onVerifyExisting: (() -> Unit)? = null,
     onRetry: (() -> Unit)? = null,
 ) {
@@ -262,6 +294,7 @@ private fun StepRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onInspect)
             .padding(vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {

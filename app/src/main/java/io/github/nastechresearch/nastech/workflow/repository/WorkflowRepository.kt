@@ -2,6 +2,10 @@ package io.github.nastechresearch.nastech.workflow.repository
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.Flow
+import kotlin.uuid.Uuid
+import io.github.nastechresearch.nastech.data.execution.debug.ExecutionTrace
+import io.github.nastechresearch.nastech.data.execution.debug.ExecutionTraceCodec
 import io.github.nastechresearch.nastech.workflow.db.WorkflowDao
 import io.github.nastechresearch.nastech.workflow.db.WorkflowEntity
 import io.github.nastechresearch.nastech.workflow.db.WorkflowRunDao
@@ -30,6 +34,7 @@ import java.time.ZoneId
 class WorkflowRepository(
     private val workflowDao: WorkflowDao,
     private val workflowRunDao: WorkflowRunDao,
+    private val workflowRevisionDao: WorkflowRevisionDao,
 ) {
 
     data class Loaded(val entity: WorkflowEntity, val definition: WorkflowDefinition)
@@ -125,30 +130,66 @@ class WorkflowRepository(
      * last-run columns + daily counter on the workflow, and trim history to
      * [WorkflowConstants.MAX_RUNS_HISTORY] rows.
      */
-    suspend fun recordFire(
+    suspend fun beginRun(
+        workflowId: String,
+        firedAtMs: Long,
+        trace: ExecutionTrace,
+        parentRunId: Long? = null,
+    ): Long {
+        return workflowRunDao.insert(
+            WorkflowRunEntity(
+                workflowId = workflowId,
+                firedAtMs = firedAtMs,
+                status = WorkflowRunStatus.RUNNING.name,
+                durationMs = 0L,
+                errorMessage = null,
+                traceJson = ExecutionTraceCodec.encode(trace),
+                parentRunId = parentRunId,
+                endedAtMs = null,
+            )
+        )
+    }
+
+    suspend fun updateRunTrace(runId: Long, trace: ExecutionTrace) {
+        workflowRunDao.updateTrace(runId, ExecutionTraceCodec.encode(trace))
+    }
+
+    suspend fun finishRun(
+        runId: Long,
         workflowId: String,
         firedAtMs: Long,
         status: WorkflowRunStatus,
         durationMs: Long,
         errorMessage: String?,
+        trace: ExecutionTrace,
         zoneId: ZoneId = ZoneId.systemDefault(),
     ) {
         val truncatedErr = errorMessage?.take(WorkflowConstants.MAX_ERROR_LENGTH)
-        workflowRunDao.insert(WorkflowRunEntity(
-            workflowId = workflowId,
-            firedAtMs = firedAtMs,
+        val endedAtMs = System.currentTimeMillis()
+        workflowRunDao.markTerminal(
+            rowId = runId,
             status = status.name,
             durationMs = durationMs,
             errorMessage = truncatedErr,
-        ))
-        // Daily-cap counter: only counted if the fire was real (SUCCESS or FAILED). Skip
-        // statuses don't count, per spec.
+            traceJson = ExecutionTraceCodec.encode(trace.copy(
+                status = when (status) {
+                    WorkflowRunStatus.SUCCESS -> io.github.nastechresearch.nastech.data.execution.debug.ExecutionTraceStatus.SUCCESS
+                    WorkflowRunStatus.FAILED -> io.github.nastechresearch.nastech.data.execution.debug.ExecutionTraceStatus.FAILED
+                    WorkflowRunStatus.RUNNING -> io.github.nastechresearch.nastech.data.execution.debug.ExecutionTraceStatus.RUNNING
+                    WorkflowRunStatus.PAUSED -> io.github.nastechresearch.nastech.data.execution.debug.ExecutionTraceStatus.WAITING
+                    WorkflowRunStatus.CANCELLED -> io.github.nastechresearch.nastech.data.execution.debug.ExecutionTraceStatus.CANCELLED
+                    else -> io.github.nastechresearch.nastech.data.execution.debug.ExecutionTraceStatus.SKIPPED
+                },
+                endedAtMs = endedAtMs,
+            )),
+            endedAtMs = endedAtMs,
+        )
         val countsTowardCap = status == WorkflowRunStatus.SUCCESS || status == WorkflowRunStatus.FAILED
-        val today = LocalDate.now(zoneId).toString()  // "yyyy-MM-dd"
+        val today = LocalDate.now(zoneId).toString()
         val current = workflowDao.getById(workflowId)
         val newCount = when {
             current == null -> if (countsTowardCap) 1 else 0
-            current.runsTodayDate != today -> if (countsTowardCap) 1 else 0  // rolled over
+            current.runsTodayDate != today -> if (countsTowardCap) 1 else 0
             else -> current.runsTodayCount + (if (countsTowardCap) 1 else 0)
         }
         workflowDao.recordFire(
@@ -162,6 +203,26 @@ class WorkflowRepository(
         workflowRunDao.trim(workflowId, WorkflowConstants.MAX_RUNS_HISTORY)
     }
 
+    suspend fun recordFire(
+        workflowId: String,
+        firedAtMs: Long,
+        status: WorkflowRunStatus,
+        durationMs: Long,
+        errorMessage: String?,
+        zoneId: ZoneId = ZoneId.systemDefault(),
+        trace: ExecutionTrace? = null,
+        parentRunId: Long? = null,
+    ) {
+        val traceValue = trace ?: ExecutionTrace(
+            runId = "unpersisted",
+            workflowId = workflowId,
+            startedAtMs = firedAtMs,
+            status = io.github.nastechresearch.nastech.data.execution.debug.ExecutionTraceStatus.PENDING,
+        )
+        val runId = beginRun(workflowId, firedAtMs, traceValue, parentRunId)
+        finishRun(runId, workflowId, firedAtMs, status, durationMs, errorMessage, traceValue, zoneId)
+    }
+
     /**
      * Most-recent SUCCESS/FAILED fire — used by the cooldown gate. The projected
      * `lastRunAtMs` column is bumped on every attempt (including skips) so it can't be
@@ -169,6 +230,64 @@ class WorkflowRepository(
      */
     suspend fun lastActualFireAtMs(workflowId: String): Long? =
         workflowRunDao.lastActualFireAtMs(workflowId)
+
+    suspend fun getRun(runId: Long): WorkflowRun? =
+        workflowRunDao.getById(runId)?.let { row ->
+            WorkflowRun(
+                rowId = row.rowId,
+                workflowId = row.workflowId,
+                firedAtMs = row.firedAtMs,
+                status = runCatching { WorkflowRunStatus.valueOf(row.status) }
+                    .getOrDefault(WorkflowRunStatus.FAILED),
+                durationMs = row.durationMs,
+                errorMessage = row.errorMessage,
+                trace = ExecutionTraceCodec.decode(row.traceJson),
+                parentRunId = row.parentRunId,
+            )
+        }
+
+    fun observeRevisions(workflowId: String): kotlinx.coroutines.flow.Flow<List<WorkflowRevisionEntity>> =
+        workflowRevisionDao.observeForWorkflow(workflowId)
+
+    suspend fun createRevision(
+        workflowId: String,
+        sourceRunId: Long?,
+        reason: String,
+        definition: WorkflowDefinition,
+        status: String = "DRAFT",
+    ): String {
+        val id = Uuid.random().toString()
+        workflowRevisionDao.insert(
+            WorkflowRevisionEntity(
+                revisionId = id,
+                workflowId = workflowId,
+                sourceRunId = sourceRunId,
+                createdAtMs = System.currentTimeMillis(),
+                reason = reason.take(1_000),
+                definitionJson = WorkflowJson.encode(definition),
+                status = status,
+            )
+        )
+        return id
+    }
+
+    suspend fun applyRevision(revisionId: String): Boolean {
+        val revision = workflowRevisionDao.getById(revisionId) ?: return false
+        val current = getById(revision.workflowId) ?: return false
+        val candidate = WorkflowJson.parseStored(revision.definitionJson) ?: return false
+        createRevision(
+            workflowId = revision.workflowId,
+            sourceRunId = revision.sourceRunId,
+            reason = "Automatic rollback snapshot before applying revision ${revision.revisionId}",
+            definition = current.definition,
+            status = "ROLLBACK_SNAPSHOT",
+        )
+        upsert(candidate.copy(updatedAtMs = System.currentTimeMillis(), enabled = current.entity.enabled))
+        workflowRevisionDao.setStatus(revision.revisionId, "APPLIED")
+        return true
+    }
+
+    suspend fun rollbackToRevision(revisionId: String): Boolean = applyRevision(revisionId)
 
     suspend fun lastRuns(workflowId: String, limit: Int = 20): List<WorkflowRun> =
         workflowRunDao.lastN(workflowId, limit).map { row ->
@@ -180,6 +299,8 @@ class WorkflowRepository(
                     .getOrDefault(WorkflowRunStatus.FAILED),
                 durationMs = row.durationMs,
                 errorMessage = row.errorMessage,
+                trace = ExecutionTraceCodec.decode(row.traceJson),
+                parentRunId = row.parentRunId,
             )
         }
 }

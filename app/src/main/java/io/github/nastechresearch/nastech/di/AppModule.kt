@@ -149,10 +149,12 @@ val appModule = module {
         io.github.nastechresearch.nastech.workflow.repository.WorkflowRepository(
             workflowDao = get<io.github.nastechresearch.nastech.data.db.AppDatabase>().workflowDao(),
             workflowRunDao = get<io.github.nastechresearch.nastech.data.db.AppDatabase>().workflowRunDao(),
+            workflowRevisionDao = get<io.github.nastechresearch.nastech.data.db.AppDatabase>().workflowRevisionDao(),
         )
     }
     single { io.github.nastechresearch.nastech.workflow.condition.ContextProvider(get()) }
     single { io.github.nastechresearch.nastech.workflow.execution.WorkflowActionRunner() }
+    single { io.github.nastechresearch.nastech.workflow.execution.WorkflowAiDiagnosisHook(settingsStore = get(), providerManager = get()) }
     single {
         io.github.nastechresearch.nastech.workflow.execution.WorkflowEngine(
             repository = get(),

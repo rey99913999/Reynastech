@@ -51,4 +51,9 @@ data class WorkflowRunEntity(
     val status: String,                       // SUCCESS / FAILED / SKIPPED_*
     val durationMs: Long,
     val errorMessage: String? = null,
+    /** Structured execution trace kept with the existing workflow run history. */
+    @androidx.room.ColumnInfo(defaultValue = "'{}'")
+    val traceJson: String = "{}",
+    val parentRunId: Long? = null,
+    val endedAtMs: Long? = null,
 )

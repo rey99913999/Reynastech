@@ -9,6 +9,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import io.github.nastechresearch.nastech.data.execution.debug.ExecutionTrace
+import io.github.nastechresearch.nastech.data.execution.debug.ExecutionTraceStatus
+import io.github.nastechresearch.nastech.data.execution.debug.ExecutionTraceStep
+import io.github.nastechresearch.nastech.data.execution.debug.safeJsonSummary
 import me.rerere.ai.core.Tool
 import io.github.nastechresearch.nastech.data.ai.tools.HardlineCommandGuard
 import io.github.nastechresearch.nastech.data.ai.tools.LocalTools
@@ -219,10 +223,282 @@ class WorkflowEngine(
             ),
         )
 
-        // Execute the action sequence. ActionRunner enforces per-action timeout + HARDLINE.
-        val result = actionRunner.run(def.actions, tools)
+        // Persist a live execution trace in the existing workflow_runs history.
+        var trace = ExecutionTrace(
+            runId = "pending",
+            workflowId = workflowId,
+            startedAtMs = firedAtMs,
+            status = ExecutionTraceStatus.RUNNING,
+            steps = emptyList(),
+        )
+        val runId = repository.beginRun(
+            workflowId = workflowId,
+            firedAtMs = firedAtMs,
+            trace = trace,
+        )
+        trace = trace.copy(runId = runId.toString())
+        repository.updateRunTrace(runId, trace)
+        val result = actionRunner.run(
+            actions = def.actions,
+            availableTools = tools,
+            onProgress = { steps, currentStep, status, checkpointStep ->
+                trace = trace.copy(
+                    currentStep = currentStep,
+                    status = status,
+                    steps = steps,
+                    checkpointStep = checkpointStep,
+                )
+                repository.updateRunTrace(runId, trace)
+            },
+        )
+        trace = trace.copy(
+            currentStep = result.currentStep,
+            status = if (result.success) ExecutionTraceStatus.SUCCESS else ExecutionTraceStatus.FAILED,
+            steps = result.traceSteps,
+            checkpointStep = result.checkpointStep,
+        )
         val status = if (result.success) WorkflowRunStatus.SUCCESS else WorkflowRunStatus.FAILED
-        return persistAndReturn(workflowId, firedAtMs, started, status, result.error, result.summary, ledgerId)
+        return persistAndReturn(
+            workflowId = workflowId,
+            firedAtMs = firedAtMs,
+            startedNanos = started,
+            status = status,
+            error = result.error,
+            summary = result.summary,
+            ledgerId = ledgerId,
+            runId = runId,
+            trace = trace,
+        )
+    }
+
+    suspend fun retryRun(runId: Long, skipFailedStep: Boolean = false): FireOutcome? =
+        withContext(Dispatchers.IO) {
+            val source = repository.getRun(runId) ?: return@withContext null
+            val loaded = repository.getById(source.workflowId)
+                ?: return@withContext FireOutcome(WorkflowRunStatus.FAILED, "workflow_not_found", "")
+            val trace = source.trace ?: return@withContext FireOutcome(
+                WorkflowRunStatus.FAILED,
+                "execution_trace_unavailable",
+                "",
+            )
+            val failedIndex = trace.currentStep ?: trace.steps.indexOfLast {
+                it.status == ExecutionTraceStatus.FAILED || it.status == ExecutionTraceStatus.RETRIED
+            }
+            if (failedIndex < 0 || failedIndex >= loaded.definition.actions.size) {
+                return@withContext FireOutcome(
+                    WorkflowRunStatus.FAILED,
+                    "no_failed_step_to_retry",
+                    "",
+                )
+            }
+
+            val startIndex = if (skipFailedStep) failedIndex + 1 else failedIndex
+            val steps = trace.steps.toMutableList()
+            if (skipFailedStep) {
+                steps[failedIndex] = steps[failedIndex].copy(
+                    status = ExecutionTraceStatus.SKIPPED,
+                    endedAtMs = System.currentTimeMillis(),
+                    checkpoint = false,
+                    resultSummary = "Skipped during recovery.",
+                )
+            }
+
+            val settings = settingsStore.settingsFlow.first()
+            val authoringAssistant = settings.assistants.firstOrNull { assistant ->
+                loaded.definition.authoringAssistantId?.let { it == assistant.id.toString() } == true
+            } ?: settings.assistants.firstOrNull { assistant ->
+                assistant.localTools.any {
+                    it is io.github.nastechresearch.nastech.data.ai.tools.LocalToolOption.Workflows
+                }
+            }
+            if (authoringAssistant == null) {
+                return@withContext FireOutcome(
+                    WorkflowRunStatus.FAILED,
+                    "no_workflows_assistant",
+                    "",
+                )
+            }
+
+            val tools = localTools.getTools(
+                authoringAssistant.localTools,
+                io.github.nastechresearch.nastech.data.ai.tools.ToolInvocationContext(
+                    callerAssistantId = authoringAssistant.id.toString(),
+                    callerConversationId = null,
+                    isHeadless = true,
+                ),
+            )
+
+            val startedAtMs = System.currentTimeMillis()
+            val newTraceBase = trace.copy(
+                runId = "pending",
+                startedAtMs = startedAtMs,
+                endedAtMs = null,
+                currentStep = if (startIndex < loaded.definition.actions.size) startIndex else null,
+                status = ExecutionTraceStatus.RUNNING,
+                steps = steps,
+                parentRunId = source.rowId.toString(),
+                retryCount = trace.retryCount + if (skipFailedStep) 0 else 1,
+                diagnosis = null,
+            )
+            val ledgerId = agentRunRepo.open(
+                kind = io.github.nastechresearch.nastech.data.agentrun.AgentRunKind.Workflow,
+                domainId = loaded.entity.id,
+                metadata = buildJsonObject {
+                    put("name", loaded.entity.name)
+                    put("recovery_of_run", source.rowId)
+                    put("skip_failed_step", skipFailedStep)
+                },
+            )
+            val newRunId = repository.beginRun(
+                workflowId = loaded.entity.id,
+                firedAtMs = startedAtMs,
+                trace = newTraceBase,
+                parentRunId = source.rowId,
+            )
+            var liveTrace = newTraceBase.copy(runId = newRunId.toString())
+            repository.updateRunTrace(newRunId, liveTrace)
+
+            if (startIndex >= loaded.definition.actions.size) {
+                liveTrace = liveTrace.copy(
+                    currentStep = null,
+                    status = ExecutionTraceStatus.SUCCESS,
+                    endedAtMs = System.currentTimeMillis(),
+                )
+                repository.finishRun(
+                    runId = newRunId,
+                    workflowId = loaded.entity.id,
+                    firedAtMs = startedAtMs,
+                    status = WorkflowRunStatus.SUCCESS,
+                    durationMs = System.currentTimeMillis() - startedAtMs,
+                    errorMessage = null,
+                    trace = liveTrace,
+                )
+                agentRunRepo.markTerminal(
+                    id = ledgerId,
+                    status = io.github.nastechresearch.nastech.data.agentrun.AgentRunStatus.succeeded,
+                    lastError = null,
+                )
+                return@withContext FireOutcome(WorkflowRunStatus.SUCCESS, null, "Recovery skipped the failed step.")
+            }
+
+            val result = actionRunner.run(
+                actions = loaded.definition.actions,
+                availableTools = tools,
+                startIndex = startIndex,
+                existingSteps = steps,
+                onProgress = { nextSteps, currentStep, status, checkpointStep ->
+                    liveTrace = liveTrace.copy(
+                        currentStep = currentStep,
+                        status = status,
+                        steps = nextSteps,
+                        checkpointStep = checkpointStep,
+                    )
+                    repository.updateRunTrace(newRunId, liveTrace)
+                },
+            )
+            liveTrace = liveTrace.copy(
+                currentStep = result.currentStep,
+                status = if (result.success) ExecutionTraceStatus.SUCCESS else ExecutionTraceStatus.FAILED,
+                steps = result.traceSteps,
+                checkpointStep = result.checkpointStep,
+                endedAtMs = System.currentTimeMillis(),
+            )
+            val terminalStatus = if (result.success) WorkflowRunStatus.SUCCESS else WorkflowRunStatus.FAILED
+            repository.finishRun(
+                runId = newRunId,
+                workflowId = loaded.entity.id,
+                firedAtMs = startedAtMs,
+                status = terminalStatus,
+                durationMs = System.currentTimeMillis() - startedAtMs,
+                errorMessage = result.error,
+                trace = liveTrace,
+            )
+            agentRunRepo.markTerminal(
+                id = ledgerId,
+                status = if (result.success) {
+                    io.github.nastechresearch.nastech.data.agentrun.AgentRunStatus.succeeded
+                } else {
+                    io.github.nastechresearch.nastech.data.agentrun.AgentRunStatus.failed
+                },
+                lastError = result.error,
+            )
+            FireOutcome(terminalStatus, result.error, result.summary)
+        }
+
+    suspend fun pauseRun(runId: Long): Boolean {
+        val source = repository.getRun(runId) ?: return false
+        val trace = source.trace ?: return false
+        repository.finishRun(
+            runId = runId,
+            workflowId = source.workflowId,
+            firedAtMs = source.firedAtMs,
+            status = WorkflowRunStatus.PAUSED,
+            durationMs = source.durationMs,
+            errorMessage = "Paused by user.",
+            trace = trace.copy(
+                status = ExecutionTraceStatus.WAITING,
+                endedAtMs = System.currentTimeMillis(),
+                diagnostics = trace.diagnostics + "Paused by user.",
+            ),
+        )
+        return true
+    }
+
+    suspend fun cancelRun(runId: Long): Boolean {
+        val source = repository.getRun(runId) ?: return false
+        val trace = source.trace ?: return false
+        repository.finishRun(
+            runId = runId,
+            workflowId = source.workflowId,
+            firedAtMs = source.firedAtMs,
+            status = WorkflowRunStatus.CANCELLED,
+            durationMs = source.durationMs,
+            errorMessage = "Stopped by user.",
+            trace = trace.copy(
+                status = ExecutionTraceStatus.CANCELLED,
+                endedAtMs = System.currentTimeMillis(),
+                diagnostics = trace.diagnostics + "Stopped by user.",
+            ),
+        )
+        return true
+    }
+
+    private fun workflowRetryDraft(
+        loaded: WorkflowRepository.Loaded,
+        trace: ExecutionTrace,
+    ): WorkflowDefinition {
+        val failedIndex = trace.currentStep ?: trace.steps.indexOfLast {
+            it.status == ExecutionTraceStatus.FAILED
+        }
+        if (failedIndex !in loaded.definition.actions.indices) return loaded.definition
+        val failed = loaded.definition.actions[failedIndex]
+        val shouldExtendTimeout = trace.steps.getOrNull(failedIndex)?.error
+            ?.lowercase()
+            ?.contains("exceeded") == true
+        if (!shouldExtendTimeout) return loaded.definition
+        val updated = failed.copy(timeoutSeconds = (failed.timeoutSeconds + 30).coerceAtMost(600))
+        val actions = loaded.definition.actions.toMutableList()
+        actions[failedIndex] = updated
+        return loaded.definition.copy(
+            actions = actions,
+            updatedAtMs = System.currentTimeMillis(),
+        )
+    }
+
+    suspend fun createRepairDraft(runId: Long, kind: String): String? {
+        val run = repository.getRun(runId) ?: return null
+        val loaded = repository.getById(run.workflowId) ?: return null
+        val trace = run.trace ?: return null
+        val proposal = workflowRetryDraft(loaded, trace)
+        val reason = kind + " repair draft for run " + runId +
+            ". AI suggestions never modify the live workflow automatically."
+        return repository.createRevision(
+            workflowId = run.workflowId,
+            sourceRunId = runId,
+            reason = reason,
+            definition = proposal,
+            status = "DRAFT",
+        )
     }
 
     /**
@@ -288,24 +564,35 @@ class WorkflowEngine(
         error: String?,
         summary: String,
         ledgerId: String,
+        runId: Long? = null,
+        trace: ExecutionTrace? = null,
     ): FireOutcome {
         val durationMs = (System.nanoTime() - startedNanos) / 1_000_000L
         runCatching {
-            repository.recordFire(
-                workflowId = workflowId,
-                firedAtMs = firedAtMs,
-                status = status,
-                durationMs = durationMs,
-                errorMessage = error,
-            )
-        }.onFailure { Log.w(TAG, "recordFire failed for $workflowId", it) }
-        // Phase 24 — mirror the terminal outcome into the cross-pillar ledger. Every
-        // WorkflowRunStatus is terminal from the ledger's point of view: SUCCESS →
-        // succeeded; FAILED → failed; every SKIPPED_* variant → cancelled (the fire was
-        // accepted but a gate stopped it — not a failure, not a success).
+            if (runId != null && trace != null) {
+                repository.finishRun(
+                    runId = runId,
+                    workflowId = workflowId,
+                    firedAtMs = firedAtMs,
+                    status = status,
+                    durationMs = durationMs,
+                    errorMessage = error,
+                    trace = trace,
+                )
+            } else {
+                repository.recordFire(
+                    workflowId = workflowId,
+                    firedAtMs = firedAtMs,
+                    status = status,
+                    durationMs = durationMs,
+                    errorMessage = error,
+                )
+            }
+        }.onFailure { Log.w(TAG, "recordFire failed for " + workflowId, it) }
         val ledgerStatus = when (status) {
             WorkflowRunStatus.SUCCESS -> io.github.nastechresearch.nastech.data.agentrun.AgentRunStatus.succeeded
             WorkflowRunStatus.FAILED -> io.github.nastechresearch.nastech.data.agentrun.AgentRunStatus.failed
+            WorkflowRunStatus.RUNNING -> io.github.nastechresearch.nastech.data.agentrun.AgentRunStatus.running
             else -> io.github.nastechresearch.nastech.data.agentrun.AgentRunStatus.cancelled
         }
         agentRunRepo.markTerminal(
@@ -348,54 +635,187 @@ internal object CooldownGate {
  */
 class WorkflowActionRunner {
 
-    data class RunResult(val success: Boolean, val error: String?, val summary: String)
+    data class RunResult(
+        val success: Boolean,
+        val error: String?,
+        val summary: String,
+        val traceSteps: List<ExecutionTraceStep> = emptyList(),
+        val currentStep: Int? = null,
+        val checkpointStep: Int? = null,
+    )
 
-    suspend fun run(actions: List<WorkflowAction>, availableTools: List<Tool>): RunResult {
+    suspend fun run(
+        actions: List<WorkflowAction>,
+        availableTools: List<Tool>,
+        startIndex: Int = 0,
+        existingSteps: List<ExecutionTraceStep> = emptyList(),
+        onProgress: suspend (
+            steps: List<ExecutionTraceStep>,
+            currentStep: Int?,
+            status: ExecutionTraceStatus,
+            checkpointStep: Int?,
+        ) -> Unit = { _, _, _, _ -> },
+    ): RunResult {
+        val steps = actions.mapIndexed { index, action ->
+            existingSteps.getOrNull(index) ?: ExecutionTraceStep(
+                index = index,
+                action = action.tool,
+                method = "Local tool execution",
+                tool = action.tool,
+                inputsSummary = safeJsonSummary(action.args),
+                expectedState = "Tool reports success",
+            )
+        }.toMutableList()
         val outputs = mutableListOf<String>()
-        for ((idx, action) in actions.withIndex()) {
+        var lastCheckpoint: Int? = existingSteps.indexOfLast { it.checkpoint }.takeIf { it >= 0 }
+
+        if (startIndex >= actions.size) {
+            return RunResult(true, null, "No pending workflow actions.", steps, null, lastCheckpoint)
+        }
+
+        for (idx in startIndex until actions.size) {
+            val action = actions[idx]
+            val previous = steps[idx]
+            val retryCount = previous.retries +
+                if (previous.status == ExecutionTraceStatus.FAILED || previous.status == ExecutionTraceStatus.RETRIED) 1 else 0
+            val startedAt = System.currentTimeMillis()
+            val running = previous.copy(
+                index = idx,
+                action = action.tool,
+                method = "Local tool execution",
+                status = ExecutionTraceStatus.RUNNING,
+                tool = action.tool,
+                inputsSummary = safeJsonSummary(action.args),
+                resultSummary = null,
+                error = null,
+                startedAtMs = startedAt,
+                endedAtMs = null,
+                retries = retryCount,
+                checkpoint = false,
+            )
+            steps[idx] = running
+            onProgress(steps.toList(), idx, ExecutionTraceStatus.RUNNING, lastCheckpoint)
+
             val argsJson = action.args.toString()
             val hardlineReason = HardlineCommandGuard.checkTool(action.tool, argsJson)
             if (hardlineReason != null) {
-                logSafe("workflow hardline-blocked action $idx tool=${action.tool}: $hardlineReason")
-                return RunResult(success = false,
-                    error = "action $idx: hardline:$hardlineReason",
-                    summary = outputs.joinToString("\n"))
+                val finished = running.copy(
+                    status = ExecutionTraceStatus.FAILED,
+                    endedAtMs = System.currentTimeMillis(),
+                    error = "hardline:" + hardlineReason,
+                    resultSummary = "Blocked by execution policy.",
+                )
+                steps[idx] = finished
+                onProgress(steps.toList(), idx, ExecutionTraceStatus.FAILED, lastCheckpoint)
+                return RunResult(
+                    false,
+                    "action " + idx + ": hardline:" + hardlineReason,
+                    outputs.joinToString("\\n"),
+                    steps,
+                    idx,
+                    lastCheckpoint,
+                )
             }
+
             val tool = availableTools.find { it.name == action.tool }
-                ?: return RunResult(false, "action $idx: unknown_tool:${action.tool}", outputs.joinToString("\n"))
+            if (tool == null) {
+                val finished = running.copy(
+                    status = ExecutionTraceStatus.FAILED,
+                    endedAtMs = System.currentTimeMillis(),
+                    error = "unknown_tool:" + action.tool,
+                    resultSummary = "Required tool is not available.",
+                )
+                steps[idx] = finished
+                onProgress(steps.toList(), idx, ExecutionTraceStatus.FAILED, lastCheckpoint)
+                return RunResult(
+                    false,
+                    "action " + idx + ": unknown_tool:" + action.tool,
+                    outputs.joinToString("\\n"),
+                    steps,
+                    idx,
+                    lastCheckpoint,
+                )
+            }
+
             val out = try {
                 withTimeoutOrNull(action.timeoutSeconds * 1000L) { tool.execute(action.args) }
             } catch (c: kotlinx.coroutines.CancellationException) {
-                // Don't swallow cancellation — re-throw so structured concurrency can
-                // unwind the fire (e.g. the engine scope is cancelled on shutdown). The
-                // generic catch below would otherwise turn it into a spurious FAILED row.
                 throw c
             } catch (t: Throwable) {
-                logSafe("workflow action $idx tool=${action.tool} threw: ${t.message}")
-                return RunResult(false,
-                    "action $idx: ${t::class.simpleName}: ${t.message.orEmpty()}".take(500),
-                    outputs.joinToString("\n"))
+                val error = (t::class.simpleName.orEmpty() + ": " + t.message.orEmpty()).take(500)
+                val finished = running.copy(
+                    status = ExecutionTraceStatus.FAILED,
+                    endedAtMs = System.currentTimeMillis(),
+                    error = error,
+                    resultSummary = "Tool threw an exception.",
+                )
+                steps[idx] = finished
+                onProgress(steps.toList(), idx, ExecutionTraceStatus.FAILED, lastCheckpoint)
+                return RunResult(
+                    false,
+                    "action " + idx + ": " + error,
+                    outputs.joinToString("\\n"),
+                    steps,
+                    idx,
+                    lastCheckpoint,
+                )
             }
-            if (out == null) {
-                return RunResult(false,
-                    "action $idx: ${action.tool} exceeded ${action.timeoutSeconds}s",
-                    outputs.joinToString("\n"))
-            }
-            // Surface the first ~200 chars of the tool's text output for the run history.
-            val text = out.filterIsInstance<me.rerere.ai.ui.UIMessagePart.Text>()
-                .joinToString("\n") { it.text }
-            outputs += "[$idx] ${action.tool}: ${text.take(200)}"
-        }
-        return RunResult(true, null, outputs.joinToString("\n").take(2000))
-    }
 
-    /**
-     * Wrap [Log.w] in a guard so JVM unit tests (where android.util.Log is unmocked)
-     * don't crash before the runner can return its actual result.
-     */
-    private fun logSafe(msg: String) {
-        runCatching { Log.w(TAG, msg) }
+            if (out == null) {
+                val error = action.tool + " exceeded " + action.timeoutSeconds + "s"
+                val finished = running.copy(
+                    status = ExecutionTraceStatus.FAILED,
+                    endedAtMs = System.currentTimeMillis(),
+                    error = error,
+                    resultSummary = "Tool execution timed out.",
+                )
+                steps[idx] = finished
+                onProgress(steps.toList(), idx, ExecutionTraceStatus.FAILED, lastCheckpoint)
+                return RunResult(
+                    false,
+                    "action " + idx + ": " + error,
+                    outputs.joinToString("\\n"),
+                    steps,
+                    idx,
+                    lastCheckpoint,
+                )
+            }
+
+            val text = out.filterIsInstance<me.rerere.ai.ui.UIMessagePart.Text>()
+                .joinToString("\\n") { it.text }
+                .take(400)
+            val lower = text.lowercase()
+            val success = !lower.contains("\"success\":false") &&
+                !lower.contains("\"error\"") &&
+                !lower.startsWith("[error")
+            val finished = running.copy(
+                status = if (success) ExecutionTraceStatus.SUCCESS else ExecutionTraceStatus.FAILED,
+                endedAtMs = System.currentTimeMillis(),
+                resultSummary = text.ifBlank { "Tool returned " + out.size + " message part(s)." },
+                error = if (success) null else text.take(500),
+                checkpoint = success,
+                actualState = if (success) "Tool reported success" else text.take(500),
+            )
+            steps[idx] = finished
+            if (success) {
+                lastCheckpoint = idx
+                outputs += "[" + idx + "] " + action.tool + ": " + text.take(200)
+                onProgress(steps.toList(), idx, ExecutionTraceStatus.SUCCESS, lastCheckpoint)
+            } else {
+                onProgress(steps.toList(), idx, ExecutionTraceStatus.FAILED, lastCheckpoint)
+                return RunResult(
+                    false,
+                    "action " + idx + ": " + action.tool + " returned an error",
+                    outputs.joinToString("\\n"),
+                    steps,
+                    idx,
+                    lastCheckpoint,
+                )
+            }
+        }
+        return RunResult(true, null, outputs.joinToString("\\n").take(2_000), steps, null, lastCheckpoint)
     }
 
     companion object { private const val TAG = "WorkflowActionRunner" }
 }
+
