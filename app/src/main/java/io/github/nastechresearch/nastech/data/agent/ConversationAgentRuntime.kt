@@ -300,24 +300,30 @@ class ConversationAgentRuntime(
         }
     }
 
-    private fun resolveTools(agent: AgentDefinition, availableTools: List<String>): List<String> {
-        if (agent.autonomyLevel == AgentAutonomyLevel.PLAN_ONLY) return emptyList()
+    private fun resolveTools(agent: AgentDefinition, availableTools: List<String>): List<String> =
+        resolveAgentTools(agent, availableTools)
 
-        val allowed = agent.allowedTools.map(String::trim).filter(String::isNotBlank)
-        val denied = agent.deniedTools.map(String::trim).filter(String::isNotBlank)
+internal fun resolveAgentTools(
+    agent: AgentDefinition,
+    availableTools: List<String>,
+): List<String> {
+    if (agent.autonomyLevel == AgentAutonomyLevel.PLAN_ONLY) return emptyList()
 
-        val candidate = if (allowed.any { it == "*" }) {
-            availableTools
-        } else {
-            availableTools.filter { tool -> allowed.any { it.equals(tool, ignoreCase = true) } }
-        }
+    val allowed = agent.allowedTools.map(String::trim).filter(String::isNotBlank)
+    val denied = agent.deniedTools.map(String::trim).filter(String::isNotBlank)
 
-        return candidate.filterNot { tool ->
-            denied.any { deniedName ->
-                deniedName == "*" || deniedName.equals(tool, ignoreCase = true)
-            }
+    val candidate = if (allowed.any { it == "*" }) {
+        availableTools
+    } else {
+        availableTools.filter { tool -> allowed.any { it.equals(tool, ignoreCase = true) } }
+    }
+
+    return candidate.filterNot { tool ->
+        denied.any { deniedName ->
+            deniedName == "*" || deniedName.equals(tool, ignoreCase = true)
         }
     }
+}
 
     private fun encodeAgentInstruction(agent: AgentDefinition): String =
         "AGENT_ID=" + agent.id + "\nAGENT_ROLE=" + agent.role.name + "\nAGENT_NAME=" + agent.name
