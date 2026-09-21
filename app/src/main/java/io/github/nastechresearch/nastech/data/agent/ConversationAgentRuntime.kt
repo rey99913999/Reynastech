@@ -11,6 +11,7 @@ import io.github.nastechresearch.nastech.subagent.SubAgentEngine
 import io.github.nastechresearch.nastech.subagent.SubAgentRequest
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.serialization.json.Json
 
 class ConversationAgentRuntime(
     private val configRepository: AgentConfigRepository,
@@ -185,6 +186,9 @@ class ConversationAgentRuntime(
                 append("Your role: ")
                 append(agent.role.name)
                 append("\nComplete only this role's responsibility and return a concise result for the next Agent.")
+                if (agent.outputType == AgentOutputType.STRUCTURED) {
+                    append("\nReturn valid JSON only. Do not wrap the JSON in markdown fences. Use fields appropriate to your role and keep the object machine-readable.")
+                }
             }
 
             val request = SubAgentRequest(
@@ -236,6 +240,25 @@ class ConversationAgentRuntime(
                             failure = "empty_agent_output",
                         )
                     }
+                    if (agent.outputType == AgentOutputType.STRUCTURED) {
+                        runCatching { Json.parseToJsonElement(output) }.onFailure {
+                            taskManager.recordStepFailure(
+                                taskId = taskId,
+                                stepId = step.id,
+                                error = "Structured Agent output was not valid JSON.",
+                                category = TaskFailureCategory.INVALID_RESULT,
+                                recovery = TaskRecoveryAction.REPLAN,
+                                outputSummary = output.take(600),
+                            )
+                            return AgentRuntimeResult(
+                                status = "FAILED",
+                                taskId = taskId,
+                                summary = agent.name + " returned invalid structured output.",
+                                completedAgents = completedAgents,
+                                failure = "invalid_structured_output",
+                            )
+                        }
+                    }
                     taskManager.completeStep(
                         taskId = taskId,
                         stepId = step.id,
@@ -279,8 +302,13 @@ class ConversationAgentRuntime(
         ) {
             val agent = queue.removeFirst()
             if (!visited.add(agent.id)) continue
-            if (!shouldActivate(agent, goal, enabled.size)) continue
-            ordered += agent
+            val activated = shouldActivate(agent, goal, enabled.size)
+            if (activated) {
+                ordered += agent
+            }
+            // A conditionally inactive Agent must not sever the workflow path.
+            // This lets Planner -> Vision -> Executor behave as Planner -> Executor
+            // when Vision is not needed.
             nextById[agent.id].orEmpty().forEach { edge ->
                 enabled.firstOrNull { it.id == edge.toAgentId }?.let(queue::add)
             }
