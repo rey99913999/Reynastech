@@ -5,6 +5,8 @@ import io.github.nastechresearch.nastech.data.files.FileFolders
 import io.github.nastechresearch.nastech.data.files.FilesManager
 import io.github.nastechresearch.nastech.data.files.SkillManager
 import io.github.nastechresearch.nastech.data.memory.ConversationMemoryEngine
+import io.github.nastechresearch.nastech.data.agent.AgentConfigRepository
+import io.github.nastechresearch.nastech.data.agent.ConversationAgentRuntime
 import io.github.nastechresearch.nastech.data.task.TaskManager
 import io.github.nastechresearch.nastech.data.execution.ExecutionTelemetry
 import io.github.nastechresearch.nastech.data.execution.LocalExecutionEngine
@@ -46,6 +48,10 @@ val repositoryModule = module {
     single { ExecutionTelemetry(get()) }
 
     single { LocalExecutionEngine(taskManager = get(), telemetry = get()) }
+
+    single { AgentConfigRepository(get()) }
+
+    single { ConversationAgentRuntime(get(), get(), get()) }
 
     single {
         GenMediaRepository(get())
