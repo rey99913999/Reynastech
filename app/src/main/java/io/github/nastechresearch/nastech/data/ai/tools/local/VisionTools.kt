@@ -177,7 +177,7 @@ fun visionAnalyzeTool(
         )
     },
     execute = { input ->
-        val modelId = visionModelId(runtime, invocationContext)
+        val modelId = visionModelId(invocationContext)
             ?: return@Tool listOf(
                 UIMessagePart.Text(
                     "{\"error\":\"vision_model_not_configured\",\"detail\":\"Configure an enabled Vision Agent with a vision-capable model first.\"}",
