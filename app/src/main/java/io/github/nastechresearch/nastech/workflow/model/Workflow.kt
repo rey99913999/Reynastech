@@ -2,6 +2,7 @@ package io.github.nastechresearch.nastech.workflow.model
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
+import io.github.nastechresearch.nastech.data.execution.debug.ExecutionTrace
 
 /**
  * Single action in a workflow. Identical wire shape to scheduled-jobs direct-mode actions —
@@ -26,8 +27,11 @@ data class WorkflowAction(
  *  - SKIPPED_DISABLED — workflow toggle was off when trigger arrived (race-cleanup)
  */
 enum class WorkflowRunStatus {
+    RUNNING,
     SUCCESS,
     FAILED,
+    PAUSED,
+    CANCELLED,
     SKIPPED_CONDITIONS,
     SKIPPED_COOLDOWN,
     SKIPPED_DAILY_CAP,
@@ -75,6 +79,8 @@ data class WorkflowRun(
     val status: WorkflowRunStatus,
     val durationMs: Long,
     val errorMessage: String?,
+    val trace: ExecutionTrace? = null,
+    val parentRunId: Long? = null,
 )
 
 object WorkflowConstants {
