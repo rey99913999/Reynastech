@@ -130,7 +130,8 @@ class PluginManager(
                     throw IllegalStateException("Plugin skill '" + skill.name + "' is missing SKILL.md.")
                 }
                 val existing = skillManager.getSkillDir(skill.name)
-                if (existing == null) {
+                val previouslyOwned = old?.ownedSkillNames?.contains(skill.name) == true
+                if (existing == null || previouslyOwned) {
                     val files = mutableMapOf<String, String>()
                     collectSkillFiles(skillDir, skillDir, files)
                     if (!skillManager.saveSkillFilesAtomically(skill.name, files)) {
@@ -306,7 +307,12 @@ class PluginManager(
             settings.copy(mcpServers = settings.mcpServers.filterNot { it.id in serverIds })
         }
         for (skillName in record.ownedSkillNames) {
-            runCatching { skillManager.deleteSkill(skillName) }
+            val stillOwned = _plugins.value.any {
+                !same(it, record) && skillName in it.ownedSkillNames
+            }
+            if (!stillOwned) {
+                runCatching { skillManager.deleteSkill(skillName) }
+            }
         }
         File(root, record.manifest.normalizedId()).deleteRecursively()
         persist(_plugins.value.filterNot { same(it, record) })
@@ -403,7 +409,11 @@ class PluginManager(
     fun getPluginTools(invocationContext: ToolInvocationContext): List<Tool> {
         val conversationId = invocationContext.callerConversationId ?: return emptyList()
         return _plugins.value
-            .filter { it.enabled && conversationId in it.conversationIds }
+            .filter {
+                it.enabled &&
+                    conversationId in it.conversationIds &&
+                    PluginPermissions.MCP_CONNECT in it.grantedPermissions
+            }
             .flatMap { record ->
                 record.manifest.tools
                     .filter { spec ->
@@ -425,7 +435,11 @@ class PluginManager(
             .toSet()
 
         val allowedPluginIds = _plugins.value
-            .filter { it.enabled && conversationId in it.conversationIds }
+            .filter {
+                it.enabled &&
+                    conversationId in it.conversationIds &&
+                    PluginPermissions.MCP_CONNECT in it.grantedPermissions
+            }
             .filter { record ->
                 val key = conversationId + "/" + agentId
                 record.agentPluginBindings[key].orEmpty().contains(record.manifest.id)
