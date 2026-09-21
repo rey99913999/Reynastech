@@ -272,6 +272,8 @@ private fun AgentDefinitionEditor(
 ) {
     var roleOpen by rememberSaveable(agent.id) { mutableStateOf(false) }
     var activationOpen by rememberSaveable(agent.id) { mutableStateOf(false) }
+    var autonomyOpen by rememberSaveable(agent.id) { mutableStateOf(false) }
+    var outputOpen by rememberSaveable(agent.id) { mutableStateOf(false) }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -306,6 +308,30 @@ private fun AgentDefinitionEditor(
             TextButton(onClick = { activationOpen = true }) {
                 Text("Activation: " + agent.activationCondition.name)
             }
+            TextButton(onClick = { autonomyOpen = true }) {
+                Text("Agent autonomy: " + agent.autonomyLevel.name)
+            }
+            DropdownMenu(expanded = autonomyOpen, onDismissRequest = { autonomyOpen = false }) {
+                AgentAutonomyLevel.entries.forEach { level ->
+                    TextButton(onClick = {
+                        autonomyOpen = false
+                        onChange(agent.copy(autonomyLevel = level))
+                    }) { Text(level.name) }
+                }
+            }
+
+            TextButton(onClick = { outputOpen = true }) {
+                Text("Output: " + agent.outputType.name)
+            }
+            DropdownMenu(expanded = outputOpen, onDismissRequest = { outputOpen = false }) {
+                io.github.nastechresearch.nastech.data.agent.AgentOutputType.entries.forEach { type ->
+                    TextButton(onClick = {
+                        outputOpen = false
+                        onChange(agent.copy(outputType = type))
+                    }) { Text(type.name) }
+                }
+            }
+
             DropdownMenu(expanded = activationOpen, onDismissRequest = { activationOpen = false }) {
                 AgentActivationCondition.entries.forEach { condition ->
                     TextButton(onClick = {
