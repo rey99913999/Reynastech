@@ -42,6 +42,7 @@ private const val MAX_FILES = 256
 private const val MANIFEST_NAME = "plugin.json"
 private const val PLUGINS_DIR = "plugins"
 private const val STATE_NAME = "state.json"
+// Update 08 — release verification marker.
 
 class PluginManager(
     private val context: Context,
