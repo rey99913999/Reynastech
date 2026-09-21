@@ -1,5 +1,7 @@
 package io.github.nastechresearch.nastech.plugin.ui
 
+import io.github.nastechresearch.nastech.plugin.normalizedId
+
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -214,7 +216,7 @@ fun PluginManagerScreen(vm: PluginManagerViewModel = koinViewModel()) {
                                 onClick = {
                                     vm.uninstall(record.manifest.normalizedId()) { message = it }
                                 },
-                            ) { Icon(HugeIcons.Delete02, null); Text("Uninstall") }
+                            ) { Text("Uninstall") }
                         }
                     }
                 }

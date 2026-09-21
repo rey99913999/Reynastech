@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.nastechresearch.nastech.data.agent.AgentConfigRepository
 import io.github.nastechresearch.nastech.data.repository.ConversationRepository
 import io.github.nastechresearch.nastech.plugin.PluginManager
+import io.github.nastechresearch.nastech.plugin.normalizedId
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch

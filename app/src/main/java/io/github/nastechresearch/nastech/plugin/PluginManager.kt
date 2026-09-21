@@ -12,6 +12,7 @@ import io.github.nastechresearch.nastech.data.datastore.SettingsStore
 import io.github.nastechresearch.nastech.data.files.SkillManager
 import io.github.nastechresearch.nastech.data.ai.tools.ToolInvocationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -483,7 +484,8 @@ class PluginManager(
             },
             execute = { args ->
                 try {
-                    mcpManager.callTool(serverId, spec.remoteToolName, args)
+                    val objectArgs = args as? JsonObject ?: JsonObject(emptyMap())
+                    mcpManager.callTool(serverId, spec.remoteToolName, objectArgs)
                 } catch (t: Throwable) {
                     listOf(
                         UIMessagePart.Text(
