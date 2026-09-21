@@ -130,7 +130,6 @@ import io.github.nastechresearch.nastech.workflow.db.WorkflowRevisionEntity
         AutoMigration(from = 27, to = 28),
         AutoMigration(from = 28, to = 29),
         AutoMigration(from = 29, to = 30),
-        AutoMigration(from = 34, to = 35),
         // v31 is handled by explicit Migration_30_31 in DataSourceModule to avoid requiring
         // a generated v31 schema during KSP processing.
     ]
