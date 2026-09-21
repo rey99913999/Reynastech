@@ -96,6 +96,11 @@ import io.github.nastechresearch.nastech.data.ai.tools.local.sshExecSavedTool
 import io.github.nastechresearch.nastech.data.ai.tools.local.sshExecTool
 import io.github.nastechresearch.nastech.data.ai.tools.local.sshUploadTool
 import io.github.nastechresearch.nastech.data.ai.tools.local.writeTextFileTool
+import io.github.nastechresearch.nastech.data.ai.tools.local.visionAnalyzeTool
+import io.github.nastechresearch.nastech.data.ai.tools.local.visionCaptureTool
+import io.github.nastechresearch.nastech.data.ai.tools.local.visionVerifyStateTool
+import io.github.nastechresearch.nastech.data.ai.tools.local.ocrExtractTool
+import io.github.nastechresearch.nastech.data.ai.tools.local.uiFindVisualTargetTool
 import io.github.nastechresearch.nastech.data.ai.tools.local.showImageTool
 import io.github.nastechresearch.nastech.data.ai.tools.local.openFileTool
 import io.github.nastechresearch.nastech.data.ai.tools.local.listFilesTool
@@ -862,7 +867,12 @@ class LocalTools(
             tools.add(io.github.nastechresearch.nastech.data.ai.tools.local.setTextTool(invocationContext, interactiveToolStreamer))
             tools.add(scrollTool(invocationContext, interactiveToolStreamer))
             tools.add(globalActionTool(invocationContext, interactiveToolStreamer))
-            tools.add(takeScreenshotTool(context))  // take_screenshot IS the screenshot; skip auto-stream
+            tools.add(takeScreenshotTool(context))  // legacy screenshot surface
+            tools.add(visionCaptureTool(context))
+            tools.add(ocrExtractTool(context))
+            tools.add(uiFindVisualTargetTool(context, invocationContext))
+            tools.add(visionAnalyzeTool(context, invocationContext))
+            tools.add(visionVerifyStateTool(context))
             tools.add(io.github.nastechresearch.nastech.data.ai.tools.local.wakeScreenTool(context))
         }
         if (options.contains(LocalToolOption.AppLauncher)) {
