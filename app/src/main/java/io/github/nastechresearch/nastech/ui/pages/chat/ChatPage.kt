@@ -315,6 +315,7 @@ private fun ChatPageContent(
     val asrState by asr.state.collectAsState()
     val isLiveCall = asr.isLiveConversation && asrState.isRecording
     var showFilesSheet by remember { mutableStateOf(false) }
+    var showAgentCustomization by rememberSaveable { mutableStateOf(false) }
 
     val completionProviders = remember(assistant.workspaceId, conversation.workspaceCwd, workspaceRepository) {
         assistant.workspaceId?.let { workspaceId ->
@@ -349,6 +350,9 @@ private fun ChatPageContent(
                     },
                     onClickMenu = {
                         previewMode = !previewMode
+                    },
+                    onCustomizeAgent = {
+                        showAgentCustomization = true
                     },
                 )
             },
@@ -553,6 +557,13 @@ private fun ChatPageContent(
                     onEndCall = asr::stop,
                 )
             }
+        }
+
+        if (showAgentCustomization) {
+            ConversationAgentCustomizationSheet(
+                conversationId = conversation.id,
+                onDismiss = { showAgentCustomization = false },
+            )
         }
 
         if (showFilesSheet) {
@@ -914,6 +925,7 @@ private fun TopBar(
     previewMode: Boolean,
     onClickMenu: () -> Unit,
     onNewChat: () -> Unit,
+    onCustomizeAgent: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val startedAt = remember(conversation.id, conversation.createAt) {
@@ -939,6 +951,12 @@ private fun TopBar(
             )
         },
         actions = {
+            IconButton(onClick = onCustomizeAgent) {
+                Icon(
+                    HugeIcons.Tools,
+                    "Conversation Agent customization",
+                )
+            }
             IconButton(onClick = onClickMenu) {
                 Icon(
                     if (previewMode) HugeIcons.Cancel01 else HugeIcons.LeftToRightListBullet,
