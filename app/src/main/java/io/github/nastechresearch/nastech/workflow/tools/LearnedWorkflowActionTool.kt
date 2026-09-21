@@ -255,13 +255,13 @@ fun learnedWorkflowActionTool(
             val service = RikkaAccessibilityService.instance
                 ?: return false to """{"error":"accessibility_service_unavailable"}"""
 
-            val before = VisionPipeline(context, agentConfig)
+            val before = VisionPipeline(context, providerManager)
                 .captureObservation(includeOcr = true, saveScreenshot = false).first
 
             val target = spec["target"]?.jsonPrimitive?.contentOrNull
             val packageName = spec["package_name"]?.jsonPrimitive?.contentOrNull
             val match = if (!target.isNullOrBlank()) {
-                resolveTarget(context, target, packageName, agentConfig)
+                resolveTarget(context, target, packageName, providerManager)
             } else null
 
             if (!target.isNullOrBlank() && match == null) {
@@ -320,7 +320,7 @@ fun learnedWorkflowActionTool(
             }
 
             delay(250L)
-            val after = VisionPipeline(context, agentConfig)
+            val after = VisionPipeline(context, providerManager)
                 .captureObservation(includeOcr = true, saveScreenshot = false).first
 
             val expectedText = spec["verify_text"]?.jsonPrimitive?.contentOrNull
