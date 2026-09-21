@@ -15,6 +15,7 @@ import io.github.nastechresearch.nastech.data.notifications.NotificationListener
 import io.github.nastechresearch.nastech.data.telegram.TelegramBotClient
 import io.github.nastechresearch.nastech.data.telegram.TelegramBotPreferences
 import io.github.nastechresearch.nastech.service.ChatService
+import io.github.nastechresearch.nastech.plugin.PluginManager
 import io.github.nastechresearch.nastech.service.CronJobScheduler
 import io.github.nastechresearch.nastech.utils.EmojiData
 import io.github.nastechresearch.nastech.utils.EmojiUtils
@@ -143,6 +144,7 @@ val appModule = module {
     // Phase 18: JS skills (run_js + secrets store)
     single { io.github.nastechresearch.nastech.skills.js.JsSkillRunner(get()) }
     single { io.github.nastechresearch.nastech.skills.js.SkillSecretsStore(get()) }
+    single { PluginManager(get(), get(), get(), get(), get()) }
 
     // Update 07 — learned workflow recording pipeline
     single { io.github.nastechresearch.nastech.workflow.recording.WorkflowRecordingStore(get()) }
@@ -215,6 +217,7 @@ val appModule = module {
             skillManager = get(),
             jsSkillRunner = get(),
             skillSecretsStore = get(),
+            pluginManager = get(),
             browserPreferences = get(),
             termuxPreferences = get(),
             interactiveToolStreamer = get(),
@@ -265,6 +268,7 @@ val appModule = module {
             mcpManager = get(),
             filesManager = get(),
             skillManager = get(),
+            pluginManager = get(),
             toolApprovalPreferences = get(),
             workspaceRepository = get(),
             folderRepository = get(),

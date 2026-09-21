@@ -124,6 +124,7 @@ import io.github.nastechresearch.nastech.ui.pages.imggen.ImageGenPage
 import io.github.nastechresearch.nastech.ui.pages.log.LogPage
 import io.github.nastechresearch.nastech.ui.pages.search.SearchPage
 import io.github.nastechresearch.nastech.ui.pages.setting.SettingAboutPage
+import io.github.nastechresearch.nastech.plugin.ui.PluginManagerScreen
 import io.github.nastechresearch.nastech.ui.pages.setting.SettingAccessibilityPage
 import io.github.nastechresearch.nastech.ui.pages.setting.SettingNotificationsPage
 import io.github.nastechresearch.nastech.ui.pages.setting.SettingPermissionsPage
@@ -571,6 +572,10 @@ class RouteActivity : ComponentActivity() {
                                 SettingMcpPage()
                             }
 
+                            entry<Screen.PluginManager> {
+                                PluginManagerScreen()
+                            }
+
                             entry<Screen.SettingSubAgents> {
                                 SettingSubAgentsPage()
                             }
@@ -899,6 +904,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingMcp : Screen
+
+    @Serializable
+    data object PluginManager : Screen
 
     @Serializable
     data object SettingSubAgents : Screen

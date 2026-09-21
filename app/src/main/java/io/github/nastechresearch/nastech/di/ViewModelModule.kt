@@ -26,6 +26,7 @@ import io.github.nastechresearch.nastech.ui.pages.translator.TranslatorVM
 import io.github.nastechresearch.nastech.ui.pages.setting.doctor.DoctorViewModel
 import io.github.nastechresearch.nastech.ui.pages.setting.scheduledjobs.ScheduledJobsViewModel
 import io.github.nastechresearch.nastech.workflow.ui.WorkflowsViewModel
+import io.github.nastechresearch.nastech.plugin.ui.PluginManagerViewModel
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
@@ -98,6 +99,7 @@ val viewModelModule = module {
     viewModelOf(::WorkflowsViewModel)
     viewModelOf(::ScheduledJobsViewModel)
     viewModelOf(::DoctorViewModel)
+    viewModelOf(::PluginManagerViewModel)
     viewModelOf(::SettingBrowserViewModel)
     viewModelOf(::SettingTermuxViewModel)
 }

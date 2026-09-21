@@ -257,6 +257,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         headlineContent = { Text(stringResource(R.string.setting_page_mcp)) },
                     )
                     item(
+                        onClick = { navController.navigate(Screen.PluginManager) },
+                        leadingContent = { Icon(HugeIcons.Package, null) },
+                        supportingContent = { Text("Install, configure, bind, enable, disable, and remove capabilities packages") },
+                        headlineContent = { Text("Plugins") },
+                    )
+                    item(
                         onClick = { navController.navigate(Screen.SettingSubAgents) },
                         leadingContent = { Icon(HugeIcons.Robot01, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_sub_agents_desc)) },

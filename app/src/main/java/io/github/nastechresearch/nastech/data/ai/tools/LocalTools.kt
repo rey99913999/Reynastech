@@ -354,6 +354,7 @@ class LocalTools(
     private val skillManager: io.github.nastechresearch.nastech.data.files.SkillManager,
     private val jsSkillRunner: io.github.nastechresearch.nastech.skills.js.JsSkillRunner,
     private val skillSecretsStore: io.github.nastechresearch.nastech.skills.js.SkillSecretsStore,
+    private val pluginManager: io.github.nastechresearch.nastech.plugin.PluginManager,
     // Browser per-tool toggle store. Pass 2 reads a [snapshotBlocking] of the map so each
     // tool factory gates its own registration on whether the user has flipped it on. Master
     // toggle ([LocalToolOption.Browser]) acts as the group on/off; per-tool toggles act as
@@ -1065,10 +1066,14 @@ class LocalTools(
             tools.add(keyboardSetCursorTool(keyboardApiClient))
             tools.add(keyboardSelectRangeTool(keyboardApiClient))
         }
+        if (invocationContext.callerConversationId != null) {
+            // Add plugin capabilities into the same tool list. Existing/native tools keep name precedence.
+            tools.addAll(pluginManager.getPluginTools(invocationContext))
+        }
         // Centralised opt-in to needsApproval. Tool factories themselves don't have to know
         // whether their op is destructive — ToolApprovalDefaults is the single source of
         // truth, and the GenerationHandler / Telegram/in-app prompt path keys off needsApproval.
-        return tools.map { t ->
+        return tools.distinctBy { it.name }.map { t ->
             val withApproval = if (ToolApprovalDefaults.requiresApproval(t.name)) {
                 t.copy(needsApproval = { true })
             } else {

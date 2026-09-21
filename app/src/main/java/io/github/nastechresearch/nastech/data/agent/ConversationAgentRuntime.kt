@@ -9,6 +9,7 @@ import io.github.nastechresearch.nastech.data.task.TaskStepSpec
 import io.github.nastechresearch.nastech.data.task.TaskStepStatus
 import io.github.nastechresearch.nastech.subagent.SubAgentEngine
 import io.github.nastechresearch.nastech.subagent.SubAgentRequest
+import io.github.nastechresearch.nastech.plugin.PluginManager
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.json.Json
@@ -17,6 +18,7 @@ class ConversationAgentRuntime(
     private val configRepository: AgentConfigRepository,
     private val taskManager: TaskManager,
     private val subAgentEngine: SubAgentEngine,
+    private val pluginManager: PluginManager,
 ) {
     suspend fun getConfig(conversationId: String): ConversationAgentConfig =
         configRepository.get(conversationId)
@@ -149,7 +151,7 @@ class ConversationAgentRuntime(
                     )
                 }
 
-            val permittedTools = resolveTools(agent, availableTools)
+            val permittedTools = resolveTools(agent, availableTools, conversationId)
             if (permittedTools.any(::isSensitiveTool)) {
                 taskManager.recordStepFailure(
                     taskId = taskId,
@@ -328,12 +330,19 @@ class ConversationAgentRuntime(
         }
     }
 
-    private fun resolveTools(agent: AgentDefinition, availableTools: List<String>): List<String> =
-        resolveAgentTools(agent, availableTools)
+    private fun resolveTools(agent: AgentDefinition, availableTools: List<String>, conversationId: String): List<String> =
+        resolveAgentTools(agent, availableTools, pluginManager, conversationId)
 
 internal fun resolveAgentTools(
     agent: AgentDefinition,
     availableTools: List<String>,
+): List<String> = resolveAgentTools(agent, availableTools, null, null)
+
+internal fun resolveAgentTools(
+    agent: AgentDefinition,
+    availableTools: List<String>,
+    pluginManager: PluginManager?,
+    conversationId: String?,
 ): List<String> {
     if (agent.autonomyLevel == AgentAutonomyLevel.PLAN_ONLY) return emptyList()
 
@@ -346,7 +355,11 @@ internal fun resolveAgentTools(
         availableTools.filter { tool -> allowed.any { it.equals(tool, ignoreCase = true) } }
     }
 
-    return candidate.filterNot { tool ->
+    val pluginFiltered = if (pluginManager != null && conversationId != null) {
+        pluginManager.filterAllowedToolNames(candidate, conversationId, agent.id)
+    } else candidate
+
+    return pluginFiltered.filterNot { tool ->
         denied.any { deniedName ->
             deniedName == "*" || deniedName.equals(tool, ignoreCase = true)
         }

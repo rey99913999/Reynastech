@@ -56,6 +56,11 @@ class ConversationRepository(
         }
     }
 
+    fun getAllConversationOptions(): Flow<List<ConversationOption>> =
+        conversationDAO.getAll().map { rows ->
+            rows.map { row -> ConversationOption(id = row.id, title = row.title) }
+        }
+
     fun getConversationsOfAssistant(assistantId: Uuid): Flow<List<Conversation>> {
         return conversationDAO
             .getConversationsOfAssistant(assistantId.toString())
@@ -627,4 +632,10 @@ data class LightConversationEntity(
 data class ConversationPageResult(
     val items: List<Conversation>,
     val nextOffset: Int?,
+)
+
+
+data class ConversationOption(
+    val id: String,
+    val title: String,
 )

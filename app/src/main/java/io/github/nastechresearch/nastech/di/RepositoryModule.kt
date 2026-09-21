@@ -51,7 +51,7 @@ val repositoryModule = module {
 
     single { AgentConfigRepository(get()) }
 
-    single { ConversationAgentRuntime(get(), get(), get()) }
+    single { ConversationAgentRuntime(get(), get(), get(), get()) }
 
     single {
         GenMediaRepository(get())

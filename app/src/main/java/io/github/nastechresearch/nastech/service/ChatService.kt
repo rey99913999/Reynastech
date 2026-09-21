@@ -78,6 +78,7 @@ import io.github.nastechresearch.nastech.data.ai.tools.createSearchTools
 import io.github.nastechresearch.nastech.data.ai.tools.createSkillTools
 import io.github.nastechresearch.nastech.data.ai.tools.createWorkspaceTools
 import io.github.nastechresearch.nastech.data.files.SkillManager
+import io.github.nastechresearch.nastech.plugin.PluginManager
 import io.github.nastechresearch.nastech.data.ai.transformers.Base64ImageToLocalFileTransformer
 import io.github.nastechresearch.nastech.data.ai.transformers.DocumentAsPromptTransformer
 import io.github.nastechresearch.nastech.data.ai.transformers.OcrTransformer
@@ -228,6 +229,7 @@ class ChatService(
     val mcpManager: McpManager,
     private val filesManager: FilesManager,
     private val skillManager: SkillManager,
+    private val pluginManager: PluginManager,
     private val toolApprovalPreferences: io.github.nastechresearch.nastech.data.preferences.ToolApprovalPreferences,
     private val workspaceRepository: WorkspaceRepository,
     private val folderRepository: FolderRepository,
@@ -1156,10 +1158,12 @@ class ChatService(
                     )
                     addAll(localTools.getTools(assistant.localTools, invocationCtx))
                     addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), conversation.workspaceCwd))
-                    if (assistant.enabledSkills.isNotEmpty()) {
+                    val activeSkillNames = assistant.enabledSkills +
+                        pluginManager.getActiveSkillNames(conversationId.toString())
+                    if (activeSkillNames.isNotEmpty()) {
                         addAll(
                             createSkillTools(
-                                enabledSkills = assistant.enabledSkills,
+                                enabledSkills = activeSkillNames,
                                 allSkills = skillManager.listSkills(),
                                 skillManager = skillManager,
                             )
