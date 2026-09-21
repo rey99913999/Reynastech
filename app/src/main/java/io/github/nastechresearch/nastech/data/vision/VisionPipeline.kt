@@ -241,7 +241,8 @@ class VisionPipeline(
         val settings = org.koin.core.context.GlobalContext.get()
             .get<io.github.nastechresearch.nastech.data.datastore.SettingsStore>()
             .settingsFlow.value
-        val model = settings.findModelById(modelId) ?: return null
+        val modelUuid = runCatching { kotlin.uuid.Uuid.parse(modelId) }.getOrNull() ?: return null
+        val model = settings.findModelById(modelUuid) ?: return null
         if (!model.inputModalities.contains(Modality.IMAGE)) return null
         val providerSetting = model.findProvider(settings.providers) ?: return null
         val provider = providerManager.getProviderByType(providerSetting)
