@@ -13,6 +13,7 @@ class TaskManager(
     fun observeTasks(): Flow<List<TaskEntity>> = db.taskDao().observeAll()
     fun observeTask(taskId: String): Flow<TaskEntity?> = db.taskDao().observeById(taskId)
     fun observeSteps(taskId: String): Flow<List<TaskStepEntity>> = db.taskStepDao().observeForTask(taskId)
+    suspend fun snapshotSteps(taskId: String): List<TaskStepEntity> = db.taskStepDao().listForTask(taskId)
     fun observeCheckpoints(taskId: String): Flow<List<TaskCheckpointEntity>> =
         db.taskCheckpointDao().observeForTask(taskId)
     fun observeAudit(taskId: String): Flow<List<TaskAuditLogEntity>> =
