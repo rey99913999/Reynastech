@@ -1165,17 +1165,6 @@ class ChatService(
                             )
                         )
                     }
-                    if (conversationAgentRuntime.isEnabled(conversationId.toString())) {
-                        val agentToolSet = this.map { it.name }
-                        add(
-                            buildAutonomousTaskTool(
-                                runtime = conversationAgentRuntime,
-                                conversationId = conversationId,
-                                parentAssistantId = assistant.id,
-                                availableTools = agentToolSet,
-                            )
-                        )
-                    }
                     mcpManager.getAllAvailableTools().also { allTools ->
                         // Upstream name validation: a server name that isn't pure
                         // English+digits would produce an invalid `mcp__<name>__tool`
@@ -1231,6 +1220,17 @@ class ChatService(
                                 execute = {
                                     mcpManager.callTool(serverId, tool.name, it.jsonObject)
                                 },
+                            )
+                        )
+                    }
+                    if (conversationAgentRuntime.isEnabled(conversationId.toString())) {
+                        val agentToolSet = this.map { it.name }
+                        add(
+                            buildAutonomousTaskTool(
+                                runtime = conversationAgentRuntime,
+                                conversationId = conversationId,
+                                parentAssistantId = assistant.id,
+                                availableTools = agentToolSet,
                             )
                         )
                     }
