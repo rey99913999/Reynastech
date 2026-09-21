@@ -5,7 +5,7 @@ import android.graphics.Path
 import android.graphics.Rect
 import android.os.Bundle
 import android.view.accessibility.AccessibilityNodeInfo
-import io.github.nastechresearch.nastech.data.agent.AgentConfigRepository
+import me.rerere.ai.provider.ProviderManager
 import io.github.nastechresearch.nastech.data.vision.VisionPipeline
 import io.github.nastechresearch.nastech.data.ai.tools.ToolInvocationContext
 import io.github.nastechresearch.nastech.service.RikkaAccessibilityService
@@ -90,7 +90,7 @@ private suspend fun resolveTarget(
     context: android.content.Context,
     target: String,
     packageName: String?,
-    agentConfig: AgentConfigRepository,
+    providerManager: ProviderManager,
 ): TargetMatch? {
     val service = RikkaAccessibilityService.instance ?: return null
     val root = service.rootInActiveWindow ?: return null
@@ -100,7 +100,7 @@ private suspend fun resolveTarget(
         return TargetMatch(node, bounds, 0.98f, "ui_tree")
     }
 
-    val decision = VisionPipeline(context, agentConfig).findTarget(
+    val decision = VisionPipeline(context, providerManager).findTarget(
         target = target,
         displayId = 0,
         highConfidence = 0.90f,
@@ -249,7 +249,7 @@ fun learnedWorkflowActionTool(
     },
     needsApproval = { true },
     execute = { input ->
-        val agentConfig = LearnedActionKoin.get<AgentConfigRepository>()
+        val providerManager = LearnedActionKoin.get<ProviderManager>()
 
         suspend fun attempt(spec: JsonObject): Pair<Boolean, String> {
             val service = RikkaAccessibilityService.instance
