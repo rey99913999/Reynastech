@@ -149,7 +149,7 @@ class ConversationAgentRuntime(
                 }
 
             val permittedTools = resolveTools(agent, availableTools)
-            if (agent.role == AgentRole.EXECUTOR && permittedTools.any(::isSensitiveTool)) {
+            if (permittedTools.any(::isSensitiveTool)) {
                 taskManager.recordStepFailure(
                     taskId = taskId,
                     stepId = step.id,
@@ -301,6 +301,8 @@ class ConversationAgentRuntime(
     }
 
     private fun resolveTools(agent: AgentDefinition, availableTools: List<String>): List<String> {
+        if (agent.autonomyLevel == AgentAutonomyLevel.PLAN_ONLY) return emptyList()
+
         val allowed = agent.allowedTools.map(String::trim).filter(String::isNotBlank)
         val denied = agent.deniedTools.map(String::trim).filter(String::isNotBlank)
 
