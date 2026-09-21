@@ -1,8 +1,8 @@
 package io.github.nastechresearch.nastech.data.ai.tools.local
 
 import android.content.Context
+import io.github.nastechresearch.nastech.data.agent.AgentConfigRepository
 import io.github.nastechresearch.nastech.data.agent.AgentRole
-import io.github.nastechresearch.nastech.data.agent.ConversationAgentRuntime
 import io.github.nastechresearch.nastech.data.ai.tools.ToolInvocationContext
 import io.github.nastechresearch.nastech.data.vision.VisionPipeline
 import io.github.nastechresearch.nastech.data.vision.VisionSnapshotStore
@@ -20,13 +20,10 @@ import org.koin.core.component.get
 
 private object VisionToolKoin : KoinComponent
 
-private fun visionModelId(
-    runtime: ConversationAgentRuntime,
-    invocationContext: ToolInvocationContext,
-): String? {
+private fun visionModelId(invocationContext: ToolInvocationContext): String? {
     val conversationId = invocationContext.callerConversationId ?: return null
     return kotlinx.coroutines.runBlocking {
-        runtime.getConfig(conversationId).agents
+        VisionToolKoin.get<AgentConfigRepository>().get(conversationId).agents
             .firstOrNull { it.enabled && it.role == AgentRole.VISION }
             ?.modelId
     }
@@ -118,7 +115,6 @@ fun ocrExtractTool(
 
 fun uiFindVisualTargetTool(
     context: Context,
-    runtime: ConversationAgentRuntime,
     invocationContext: ToolInvocationContext,
 ): Tool = Tool(
     name = "ui_find_visual_target",
@@ -152,7 +148,7 @@ fun uiFindVisualTargetTool(
         val displayId = input.jsonObject["display_id"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
         val high = input.jsonObject["high_confidence"]?.jsonPrimitive?.contentOrNull?.toFloatOrNull() ?: 0.90f
         val medium = input.jsonObject["medium_confidence"]?.jsonPrimitive?.contentOrNull?.toFloatOrNull() ?: 0.70f
-        val modelId = visionModelId(runtime, invocationContext)
+        val modelId = visionModelId(invocationContext)
         val result = VisionPipeline(context, VisionToolKoin.get()).findTarget(
             target = target,
             displayId = displayId,
@@ -166,7 +162,6 @@ fun uiFindVisualTargetTool(
 
 fun visionAnalyzeTool(
     context: Context,
-    runtime: ConversationAgentRuntime,
     invocationContext: ToolInvocationContext,
 ): Tool = Tool(
     name = "vision_analyze",
