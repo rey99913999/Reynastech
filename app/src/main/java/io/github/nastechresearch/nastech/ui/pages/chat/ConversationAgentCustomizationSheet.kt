@@ -321,7 +321,8 @@ private fun AgentDefinitionEditor(
                 type = me.rerere.ai.provider.ModelType.CHAT,
                 allowClear = true,
                 onSelect = { model ->
-                    onChange(agent.copy(modelId = model.id.toString()))
+                    val selected = model.modelId.takeIf { it.isNotBlank() }?.let { model.id.toString() }
+                    onChange(agent.copy(modelId = selected))
                 },
             )
 
