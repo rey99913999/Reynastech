@@ -71,7 +71,7 @@ class AgentConfigRepository(
         db.withTransaction {
             val existing = db.agentTemplateDao().getAll().map { it.name.lowercase() }.toSet()
             val now = System.currentTimeMillis()
-            fun add(name: String, description: String, config: ConversationAgentConfig) {
+            suspend fun add(name: String, description: String, config: ConversationAgentConfig) {
                 if (name.lowercase() in existing) return
                 db.agentTemplateDao().upsert(
                     AgentTemplateEntity(
