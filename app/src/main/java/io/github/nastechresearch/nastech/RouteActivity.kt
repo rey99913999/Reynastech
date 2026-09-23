@@ -103,6 +103,9 @@ import io.github.nastechresearch.nastech.ui.pages.assistant.detail.AssistantMcpP
 import io.github.nastechresearch.nastech.ui.pages.assistant.detail.AssistantMemoryPage
 import io.github.nastechresearch.nastech.ui.pages.assistant.detail.AssistantPromptPage
 import io.github.nastechresearch.nastech.ui.pages.assistant.detail.AssistantRequestPage
+import io.github.nastechresearch.nastech.ui.pages.assistant.tools.AssistantToolsPage
+import io.github.nastechresearch.nastech.ui.pages.assistant.tools.AssistantEnabledToolsPage
+import io.github.nastechresearch.nastech.ui.pages.assistant.tools.AssistantToolPermissionsPage
 import io.github.nastechresearch.nastech.ui.pages.backup.BackupPage
 import io.github.nastechresearch.nastech.ui.pages.chat.ChatPage
 import io.github.nastechresearch.nastech.ui.pages.chat.MeshGradientBackground
@@ -489,6 +492,18 @@ class RouteActivity : ComponentActivity() {
                                 AssistantExtensionsPage(key.id)
                             }
 
+                            entry<Screen.AssistantTools> { key ->
+                                AssistantToolsPage(key.id)
+                            }
+
+                            entry<Screen.AssistantEnabledTools> { key ->
+                                AssistantEnabledToolsPage(key.id)
+                            }
+
+                            entry<Screen.AssistantToolPermissions> { key ->
+                                AssistantToolPermissionsPage(key.id)
+                            }
+
                             entry<Screen.Translator> {
                                 TranslatorPage()
                             }
@@ -847,6 +862,15 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data class AssistantInjections(val id: String) : Screen
+
+    @Serializable
+    data class AssistantTools(val id: String) : Screen
+
+    @Serializable
+    data class AssistantEnabledTools(val id: String) : Screen
+
+    @Serializable
+    data class AssistantToolPermissions(val id: String) : Screen
 
     @Serializable
     data object Translator : Screen
