@@ -28,7 +28,6 @@ import kotlin.uuid.Uuid
  */
 class AssistantToolRegistryCatalog(
     private val localTools: LocalTools,
-    private val settings: Settings,
     private val mcpManager: McpManager,
     private val skillManager: SkillManager,
     private val pluginManager: PluginManager,
