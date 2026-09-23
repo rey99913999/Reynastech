@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import kotlin.math.roundToInt
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.nastechresearch.nastech.R
 import io.github.nastechresearch.nastech.Screen
 import io.github.nastechresearch.nastech.data.datastore.BlackSilenceColorFamily
 import io.github.nastechresearch.nastech.data.datastore.GlassAppearance
