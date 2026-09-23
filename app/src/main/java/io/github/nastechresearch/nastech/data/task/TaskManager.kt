@@ -24,6 +24,9 @@ class TaskManager(
 
     suspend fun getTask(taskId: String): TaskEntity? = db.taskDao().getById(taskId)
 
+    suspend fun latestActiveTaskForConversation(conversationId: String): TaskEntity? =
+        db.taskDao().latestActiveForConversation(conversationId)
+
     suspend fun getPolicy(conversationId: String): TaskPolicy =
         db.taskSettingsDao().get(conversationId)?.toPolicy() ?: TaskPolicy()
 
