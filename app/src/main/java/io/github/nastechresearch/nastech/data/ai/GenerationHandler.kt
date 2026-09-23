@@ -499,6 +499,7 @@ class GenerationHandler(
         if (toolRegistry != null && memoryTools.isNotEmpty()) {
             registry.registerAll(memoryTools)
         }
+        registry.setModel(model)
         if (registry.hasRegisteredTools()) {
             val structuredPlanTool = buildStructuredPlanTool(
                 json = json,
@@ -512,9 +513,12 @@ class GenerationHandler(
             // Re-load any tool calls already present in the current message so pending/resumed
             // execution never bypasses the registry just because the process re-entered here.
             registry.loadTools(
-                messages.flatMap { message ->
-                    message.parts.filterIsInstance<UIMessagePart.Tool>().map { it.toolName }
-                }.distinct()
+                messages.lastOrNull()?.parts
+                    ?.filterIsInstance<UIMessagePart.Tool>()
+                    ?.filter { it.canResumeExecution || it.isPending }
+                    ?.map { it.toolName }
+                    .orEmpty()
+                    .distinct()
             )
         }
         val registrySystemAddendum = listOfNotNull(
