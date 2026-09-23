@@ -2,6 +2,7 @@ package io.github.nastechresearch.nastech.di
 
 import io.github.nastechresearch.nastech.ui.pages.assistant.AssistantVM
 import io.github.nastechresearch.nastech.ui.pages.assistant.detail.AssistantDetailVM
+import io.github.nastechresearch.nastech.ui.pages.assistant.tools.AssistantToolPermissionsVM
 import io.github.nastechresearch.nastech.ui.pages.backup.BackupVM
 import io.github.nastechresearch.nastech.ui.pages.chat.ChatDrawerVM
 import io.github.nastechresearch.nastech.ui.pages.chat.ChatVM
@@ -58,6 +59,15 @@ val viewModelModule = module {
             filesManager = get(),
             skillManager = get(),
             workspaceRepository = get(),
+        )
+    }
+    viewModel<AssistantToolPermissionsVM> {
+        AssistantToolPermissionsVM(
+            id = it.get(),
+            settingsStore = get(),
+            repository = get(),
+            catalog = get(),
+            legacyPreferences = get(),
         )
     }
     viewModelOf(::TranslatorVM)
