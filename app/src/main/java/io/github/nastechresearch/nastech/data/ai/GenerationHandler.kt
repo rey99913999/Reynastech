@@ -713,7 +713,7 @@ class GenerationHandler(
                         // creates the normal user approval card; ALLOW proceeds without a prompt.
                         toolPermissionResolver != null &&
                             tool.approvalState is ToolApprovalState.Auto -> {
-                            when (
+                            run {
                                 val decision = toolPermissionResolver.decide(
                                     assistant = assistant,
                                     registry = registry,
@@ -722,8 +722,7 @@ class GenerationHandler(
                                         ?: kotlinx.serialization.json.JsonObject(emptyMap()),
                                     taskId = taskId,
                                 )
-                            ) {
-                                is ToolPermissionDecision -> when (decision.action) {
+                                when (decision.action) {
                                     ToolPermissionDecision.Action.ALLOW -> tool
                                     ToolPermissionDecision.Action.ASK -> {
                                         hasPendingApproval = true
