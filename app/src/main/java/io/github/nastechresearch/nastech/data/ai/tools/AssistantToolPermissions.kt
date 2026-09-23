@@ -218,7 +218,7 @@ class AssistantToolPermissionResolver {
         val identity = registry.identityFor(toolName)
         val toolId = identity?.stableId ?: toolName
 
-        val hardlineReason = HardlineCommandGuard.checkTool(toolName, args.toString())
+        val hardlineReason = HardlineCommandGuard.checkToolParsed(toolName, args)
         if (hardlineReason != null) {
             return ToolPermissionDecision(
                 ToolPermissionDecision.Action.DENY,
