@@ -63,6 +63,8 @@ import io.github.nastechresearch.nastech.data.execution.ExecutionToolRegistry
 import io.github.nastechresearch.nastech.data.execution.LocalExecutionEngine
 import io.github.nastechresearch.nastech.data.execution.ToolOutputPreprocessor
 import io.github.nastechresearch.nastech.data.execution.buildStructuredPlanTool
+import io.github.nastechresearch.nastech.data.task.TaskToolUsage
+import io.github.nastechresearch.nastech.data.task.TaskToolUsageTracker
 import io.github.nastechresearch.nastech.data.ai.tools.buildMemoryTools
 import io.github.nastechresearch.nastech.data.ai.tools.AssistantToolPermissionResolver
 import io.github.nastechresearch.nastech.data.ai.tools.ToolPermissionDecision
@@ -725,8 +727,28 @@ class GenerationHandler(
                                     taskId = taskId,
                                 )
                                 when (decision.action) {
-                                    ToolPermissionDecision.Action.ALLOW -> tool
+                                    ToolPermissionDecision.Action.ALLOW -> {
+                                        if (decision.reason == "allowed for this task") {
+                                            TaskToolUsageTracker.record(
+                                                taskId,
+                                                TaskToolUsage(
+                                                    toolName = tool.toolName,
+                                                    status = TaskToolUsage.Status.ALLOWED_FOR_TASK,
+                                                    decision = "Allow for this task",
+                                                ),
+                                            )
+                                        }
+                                        tool
+                                    }
                                     ToolPermissionDecision.Action.ASK -> {
+                                        TaskToolUsageTracker.record(
+                                            taskId,
+                                            TaskToolUsage(
+                                                toolName = tool.toolName,
+                                                status = TaskToolUsage.Status.PENDING_APPROVAL,
+                                                decision = "Ask",
+                                            ),
+                                        )
                                         hasPendingApproval = true
                                         tool.copy(
                                             approvalState = ToolApprovalState.Pending,
@@ -748,6 +770,14 @@ class GenerationHandler(
                                         )
                                     }
                                     ToolPermissionDecision.Action.DENY -> {
+                                        TaskToolUsageTracker.record(
+                                            taskId,
+                                            TaskToolUsage(
+                                                toolName = tool.toolName,
+                                                status = TaskToolUsage.Status.DENIED,
+                                                decision = "Deny",
+                                            ),
+                                        )
                                         tool.copy(
                                             approvalState = ToolApprovalState.Denied(
                                                 decision.reason ?: "denied by Assistant tool policy"
@@ -1069,6 +1099,13 @@ class GenerationHandler(
                                 output = maybeTruncateToolOutput(tool.toolCallId, result, hasShellAccess)
                             )
                             registry.markExecuted(toolDef.name)
+                            TaskToolUsageTracker.record(
+                                taskId,
+                                TaskToolUsage(
+                                    toolName = toolDef.name,
+                                    status = TaskToolUsage.Status.COMPLETED,
+                                ),
+                            )
                         }.onFailure {
                             // Stack trace stays in logcat for debugging; the JSON envelope
                             // sent BACK to the LLM gets just the exception's message and a
@@ -1078,6 +1115,13 @@ class GenerationHandler(
                             // user-visible "java.lang.IllegalStateException at ..." walls
                             // for what was usually a one-line "name is required" problem.
                             Log.w(TAG, "tool ${tool.toolName} threw", it)
+                            TaskToolUsageTracker.record(
+                                taskId,
+                                TaskToolUsage(
+                                    toolName = tool.toolName,
+                                    status = TaskToolUsage.Status.FAILED,
+                                ),
+                            )
                             executedTools += tool.copy(
                                 output = listOf(
                                     UIMessagePart.Text(
