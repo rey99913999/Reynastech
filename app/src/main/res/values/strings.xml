@@ -2108,4 +2108,24 @@
     <string name="settings_category_data_desc">Chat storage, files, and backup &amp; restore.</string>
     <string name="settings_category_system_desc">Permissions, diagnostics, logs, developer tools, and about.</string>
     <string name="settings_theme_options">Theme options</string>
+    <string name="open">Open</string>
+    <string name="restore">Restore</string>
+    <string name="setting_chat_storage_clear_cache_title">Clear temporary cache?</string>
+    <string name="setting_chat_storage_clear_cache">Clear cache</string>
+    <string name="setting_chat_storage_manage_attachments">Manage all %1$d attachments</string>
+    <string name="setting_chat_storage_nastech_storage">Nastech storage</string>
+    <string name="setting_chat_storage_refresh_scan">Refresh scan</string>
+    <string name="setting_chat_storage_filter_attachments">Filter attachments</string>
+    <string name="setting_chat_storage_control_title">Your data stays under your control</string>
+    <string name="setting_glass_adjust_desc">Adjust Nastech materials globally or surface by surface</string>
+    <string name="setting_glass_restore_title">Restore readable Nastech colors</string>
+    <string name="setting_glass_live_preview">Live preview</string>
+    <string name="setting_glass_live_preview_desc">Nastech surfaces update as you move the controls.</string>
+    <string name="setting_glass_typography_colors">Typography and colors</string>
+    <string name="setting_glass_black_silence_colors">Black Silence color family</string>
+    <string name="setting_glass_chat_sidebar">Chat sidebar</string>
+    <string name="setting_glass_reset_to_global">Reset %1$s to global</string>
+    <string name="setting_glass_use_theme">Use theme</string>
+    <string name="setting_glass_custom_color">Custom color</string>
+    <string name="setting_glass_custom_color_desc">Enter any #RRGGBB color</string>
 </resources>
