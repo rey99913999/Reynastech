@@ -68,8 +68,15 @@ class AssistantToolPermissionsVM(
         riskState,
         sourceState,
         policyState,
-    ) { registry, query, category, risk, source, policy ->
-        PermissionFilterState(registry, query, category, risk, source, policy)
+    ) { values ->
+        PermissionFilterState(
+            registry = values[0] as ExecutionToolRegistry?,
+            query = values[1] as String,
+            category = values[2] as ToolCategory?,
+            risk = values[3] as ToolRiskLevel?,
+            source = values[4] as ToolSourceKind?,
+            policy = values[5] as AssistantToolPermissionPolicy?,
+        )
     }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
