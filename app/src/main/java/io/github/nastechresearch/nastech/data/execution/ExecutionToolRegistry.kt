@@ -180,6 +180,15 @@ class ExecutionToolRegistry(
 
     fun names(): Set<String> = identityByModelName.keys
 
+    /**
+     * Complete metadata catalogue for registered tools. Schemas remain hidden unless a tool
+     * is explicitly loaded; the permissions UI needs metadata only.
+     */
+    fun allMetadata(): List<ToolMetadata> =
+        toolsByIdentity.values.map { it.metadata }
+
+    fun approvalMetadata(name: String): ToolMetadata? = findRegistered(name)?.metadata
+
     fun find(name: String): Tool? = findRegistered(name)?.tool
 
     fun findLoaded(name: String): Tool? =
@@ -533,7 +542,8 @@ class ExecutionToolRegistry(
     private fun defaultRequiresApproval(tool: Tool): Boolean =
         runCatching { tool.needsApproval(JsonObject(emptyMap())) }.getOrDefault(false)
 
-    private fun defaultRisk(tool: Tool): ToolRiskLevel = ToolRiskLevel.MEDIUM
+    private fun defaultRisk(tool: Tool): ToolRiskLevel =
+        if (defaultRequiresApproval(tool)) ToolRiskLevel.MEDIUM else ToolRiskLevel.LOW
 
     private fun buildAlias(source: ToolSourceKind, sourceId: String, originalName: String): String {
         val prefix = source.name.lowercase()
