@@ -31,6 +31,7 @@ import io.github.nastechresearch.nastech.ui.pages.setting.SettingVM
 import io.github.nastechresearch.nastech.ui.theme.CustomColors
 import io.github.nastechresearch.nastech.utils.joinQQGroup
 import io.github.nastechresearch.nastech.utils.openUrl
+import io.github.nastechresearch.nastech.utils.plus
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.AiMagic
