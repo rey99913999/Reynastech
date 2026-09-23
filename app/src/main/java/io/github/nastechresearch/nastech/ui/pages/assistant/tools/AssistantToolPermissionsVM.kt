@@ -52,17 +52,37 @@ class AssistantToolPermissionsVM(
     val legacyResetCount = legacyPreferences.legacyResetCountFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
-    val filteredMetadata: StateFlow<List<ToolMetadata>> = combine(
+    private data class PermissionFilterState(
+        val registry: ExecutionToolRegistry?,
+        val query: String,
+        val category: ToolCategory?,
+        val risk: ToolRiskLevel?,
+        val source: ToolSourceKind?,
+        val policy: AssistantToolPermissionPolicy?,
+    )
+
+    private val permissionFilterState: StateFlow<PermissionFilterState> = combine(
         registryState,
         queryState,
         categoryState,
         riskState,
         sourceState,
         policyState,
+    ) { registry, query, category, risk, source, policy ->
+        PermissionFilterState(registry, query, category, risk, source, policy)
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        PermissionFilterState(null, "", null, null, null, null),
+    )
+
+    val filteredMetadata: StateFlow<List<ToolMetadata>> = combine(
+        permissionFilterState,
         assistant,
-    ) { registry, query, category, risk, source, policy, currentAssistant ->
-        val tools = registry?.allMetadata().orEmpty()
+    ) { filters, currentAssistant ->
+        val tools = filters.registry?.allMetadata().orEmpty()
         if (currentAssistant == null) return@combine emptyList()
+
         tools.filter { meta ->
             val searchable = buildString {
                 append(meta.modelName)
@@ -75,14 +95,22 @@ class AssistantToolPermissionsVM(
                 append(" ")
                 append(meta.capabilities.joinToString(" "))
             }.lowercase()
-            val qMatch = query.isBlank() || searchable.contains(query.trim().lowercase())
-            val categoryMatch = category == null || meta.category == category
-            val riskMatch = risk == null || meta.risk == risk
-            val sourceMatch = source == null || meta.identity.source == source
-            val policyMatch = policy == null || effectivePolicy(currentAssistant, meta) == policy
+
+            val qMatch = filters.query.isBlank() ||
+                searchable.contains(filters.query.trim().lowercase())
+            val categoryMatch = filters.category == null || meta.category == filters.category
+            val riskMatch = filters.risk == null || meta.risk == filters.risk
+            val sourceMatch = filters.source == null || meta.identity.source == filters.source
+            val policyMatch = filters.policy == null ||
+                effectivePolicy(currentAssistant, meta) == filters.policy
+
             qMatch && categoryMatch && riskMatch && sourceMatch && policyMatch
         }.sortedWith(compareBy<ToolMetadata>({ it.category.displayName }, { it.modelName.lowercase() }))
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList(),
+    )
 
     init {
         viewModelScope.launch {
