@@ -9,7 +9,6 @@ import me.rerere.hugeicons.stroke.Message02
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.hugeicons.stroke.Wrench01
-import me.rerere.hugeicons.stroke.Tools
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
@@ -145,7 +144,7 @@ fun AssistantDetailPage(id: String) {
                     )
                     item(
                         onClick = { navController.navigate(Screen.AssistantTools(id)) },
-                        leadingContent = { Icon(HugeIcons.Tools, null) },
+                        leadingContent = { Icon(HugeIcons.Wrench01, null) },
                         supportingContent = { Text("Enabled Tools and per-tool permissions for this Assistant.") },
                         headlineContent = { Text("Tools") },
                         trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
