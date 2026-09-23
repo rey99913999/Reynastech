@@ -77,10 +77,10 @@ class LocalExecutionEngine(
                 .plus(step.alternativeToolNames.asSequence())
                 .mapNotNull { candidate -> registry.findLoaded(candidate)?.let { candidate to it } }
                 .firstOrNull()
-                ?: run {
-                    results += failure(plan, step, "Tool " + toolName + " is not loaded or unavailable")
-                    break
-                }
+            if (resolvedName == null) {
+                results += failure(plan, step, "Tool " + toolName + " is not loaded or unavailable")
+                break
+            }
             val resolvedToolName = resolvedName.first
             val tool = resolvedName.second
 
