@@ -66,6 +66,13 @@ class NastechApp : Application() {
         }
         this.createNotificationChannel()
 
+        // Update 04 — retire legacy global tool grants without copying them across Assistants.
+        // The new per-Assistant permission center owns all authoritative policy state.
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching { get<io.github.nastechresearch.nastech.data.preferences.ToolApprovalPreferences>().migrateLegacyGlobalState() }
+                .onFailure { Log.w(TAG, "Legacy tool permission migration failed", it) }
+        }
+
         // Restore any headless conversation IDs that survived a process kill; must run
         // before any cron worker fires so mark/unmark are consistent.
         HeadlessConversations.init(this)
