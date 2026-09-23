@@ -408,7 +408,13 @@ class PluginManager(
             .flatMap { it.manifest.skills.map { skill -> skill.name } }
             .toSet()
 
-    fun getPluginTools(invocationContext: ToolInvocationContext): List<Tool> {
+    data class PluginToolRegistration(
+        val pluginId: String,
+        val tool: Tool,
+        val requiredPermissions: Set<String>,
+    )
+
+    fun getPluginToolRegistrations(invocationContext: ToolInvocationContext): List<PluginToolRegistration> {
         val conversationId = invocationContext.callerConversationId ?: return emptyList()
         return _plugins.value
             .filter {
@@ -422,10 +428,20 @@ class PluginManager(
                         spec.requiredPermissions.all { it in record.grantedPermissions } &&
                             record.manifest.permissions.containsAll(spec.requiredPermissions)
                     }
-                    .mapNotNull { spec -> createTool(record, spec) }
+                    .mapNotNull { spec ->
+                        createTool(record, spec)?.let {
+                            PluginToolRegistration(
+                                pluginId = record.manifest.id,
+                                tool = it,
+                                requiredPermissions = spec.requiredPermissions,
+                            )
+                        }
+                    }
             }
-            .distinctBy { it.name }
     }
+
+    fun getPluginTools(invocationContext: ToolInvocationContext): List<Tool> =
+        getPluginToolRegistrations(invocationContext).map { it.tool }
 
     fun filterAllowedToolNames(
         toolNames: List<String>,

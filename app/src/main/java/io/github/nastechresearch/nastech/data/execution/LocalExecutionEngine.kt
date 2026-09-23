@@ -14,12 +14,25 @@ class LocalExecutionEngine(
         plan: StructuredExecutionPlan,
         tools: List<Tool>,
         isToolAutoApproved: suspend (String) -> Boolean = { false },
+    ): ExecutionPlanResult =
+        execute(
+            plan = plan,
+            registry = ExecutionToolRegistry(tools).also { registry ->
+                registry.loadTools(tools.map { it.name })
+            },
+            isToolAutoApproved = isToolAutoApproved,
+        )
+
+    suspend fun execute(
+        plan: StructuredExecutionPlan,
+        registry: ExecutionToolRegistry,
+        isToolAutoApproved: suspend (String) -> Boolean = { false },
     ): ExecutionPlanResult {
         require(plan.goal.isNotBlank()) { "Execution plan goal cannot be blank" }
         require(plan.steps.isNotEmpty()) { "Execution plan requires at least one step" }
         require(plan.steps.size <= 32) { "Execution plan is limited to 32 steps per local run" }
 
-        val registry = ExecutionToolRegistry(tools)
+
         val results = mutableListOf<ExecutionStepResult>()
         val policy = plan.taskId?.let { taskManager.getTask(it) }
             ?.let { taskManager.getPolicy(it.conversationId) }
@@ -60,21 +73,24 @@ class LocalExecutionEngine(
                 break
             }
 
-            val tool = registry.find(toolName)
-                ?: step.alternativeToolNames.firstNotNullOfOrNull { registry.find(it) }
-
-            if (tool == null) {
-                results += failure(plan, step, "Tool " + toolName + " is not available")
+            val resolvedName = sequenceOf(toolName)
+                .plus(step.alternativeToolNames.asSequence())
+                .mapNotNull { candidate -> registry.findLoaded(candidate)?.let { candidate to it } }
+                .firstOrNull()
+            if (resolvedName == null) {
+                results += failure(plan, step, "Tool " + toolName + " is not loaded or unavailable")
                 break
             }
+            val resolvedToolName = resolvedName.first
+            val tool = resolvedName.second
 
-            if (step.approvalRequired && !isReadOnlyTool(toolName) && !isToolAutoApproved(toolName)) {
+            if (registry.requiresApproval(resolvedToolName, step.args) && !isToolAutoApproved(registry.approvalKey(resolvedToolName))) {
                 results += ExecutionStepResult(
                     stepId = step.id,
                     taskStepId = step.taskStepId,
                     toolName = toolName,
                     status = ExecutionStepStatus.APPROVAL_REQUIRED,
-                    error = "Approval is required for " + toolName + " before local execution.",
+                    error = "Approval is required for " + resolvedToolName + " before local execution.",
                 )
                 break
             }
@@ -128,7 +144,7 @@ class LocalExecutionEngine(
                     successResult = ExecutionStepResult(
                         stepId = step.id,
                         taskStepId = step.taskStepId,
-                        toolName = toolName,
+                        toolName = resolvedToolName,
                         status = ExecutionStepStatus.SUCCESS,
                         attempts = attempt,
                         output = processed.take(4_000),
@@ -221,19 +237,6 @@ class LocalExecutionEngine(
             status = ExecutionStepStatus.REPLAN_REQUIRED,
             error = reason,
         )
-    }
-
-    private fun isReadOnlyTool(name: String): Boolean {
-        val normalized = name.lowercase()
-        return normalized == "wait" ||
-            normalized.startsWith("get_") ||
-            normalized.startsWith("list_") ||
-            normalized.startsWith("read_") ||
-            normalized.startsWith("find_") ||
-            normalized.startsWith("inspect_") ||
-            normalized.startsWith("query_") ||
-            normalized.startsWith("check_") ||
-            normalized.startsWith("search_")
     }
 
     private fun List<UIMessagePart>.extractText(): String =

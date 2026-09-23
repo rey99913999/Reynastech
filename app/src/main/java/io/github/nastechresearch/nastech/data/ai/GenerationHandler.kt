@@ -59,6 +59,7 @@ import io.github.nastechresearch.nastech.data.ai.transformers.onGenerationFinish
 import io.github.nastechresearch.nastech.data.ai.transformers.transforms
 import io.github.nastechresearch.nastech.data.ai.transformers.visualTransforms
 import io.github.nastechresearch.nastech.data.ai.limits.ToolRuntimeLimits
+import io.github.nastechresearch.nastech.data.execution.ExecutionToolRegistry
 import io.github.nastechresearch.nastech.data.execution.LocalExecutionEngine
 import io.github.nastechresearch.nastech.data.execution.ToolOutputPreprocessor
 import io.github.nastechresearch.nastech.data.execution.buildStructuredPlanTool
@@ -426,6 +427,7 @@ class GenerationHandler(
         assistant: Assistant,
         memories: List<AssistantMemory>? = null,
         tools: List<Tool> = emptyList(),
+        toolRegistry: ExecutionToolRegistry? = null,
         // Read live from the runtime holder, not captured once: the default expression is
         // evaluated per call, so a settings change takes effect on the next turn.
         maxSteps: Int = ToolRuntimeLimits.maxToolSteps,
@@ -478,6 +480,53 @@ class GenerationHandler(
             if (newParts == msg.parts) msg else msg.copy(parts = newParts)
         }
 
+        val memoryTools = if (assistant.enableMemory) {
+            val memoryAssistantId = if (assistant.useGlobalMemory) {
+                MemoryRepository.GLOBAL_MEMORY_ID
+            } else {
+                assistant.id.toString()
+            }
+            buildMemoryTools(
+                json = json,
+                onCreation = { content -> memoryRepo.addMemory(memoryAssistantId, content) },
+                onUpdate = { id, content -> memoryRepo.updateContent(id, content) },
+                onDelete = { id -> memoryRepo.deleteMemory(id) },
+            )
+        } else {
+            emptyList()
+        }
+
+        val registry = toolRegistry ?: ExecutionToolRegistry(memoryTools + tools)
+        if (toolRegistry != null && memoryTools.isNotEmpty()) {
+            registry.registerAll(memoryTools)
+        }
+        registry.setModel(model)
+        if (registry.hasRegisteredTools()) {
+            val structuredPlanTool = buildStructuredPlanTool(
+                json = json,
+                registry = registry,
+                engine = localExecutionEngine,
+                isToolAutoApproved = isToolAutoApproved,
+            )
+            registry.registerAlwaysVisible(structuredPlanTool)
+            registry.resetVisibility()
+            // A tool approval continuation can start a fresh GenerationHandler invocation.
+            // Re-load any tool calls already present in the current message so pending/resumed
+            // execution never bypasses the registry just because the process re-entered here.
+            registry.loadTools(
+                messages.lastOrNull()?.parts
+                    ?.filterIsInstance<UIMessagePart.Tool>()
+                    ?.filter { it.canResumeExecution || it.isPending }
+                    ?.map { it.toolName }
+                    .orEmpty()
+                    .distinct()
+            )
+        }
+        val registrySystemAddendum = listOfNotNull(
+            systemAddendum,
+            registry.discoverySummary(model).takeIf { registry.hasRegisteredTools() },
+        ).joinToString("\n\n")
+
         val turnStartMs = android.os.SystemClock.elapsedRealtime()
         var loopGuardTripCount = 0
 
@@ -503,40 +552,7 @@ class GenerationHandler(
 
             Log.i(TAG, "streamText: start step #$stepIndex (${model.id})")
 
-            val baseTools = buildList {
-                Log.i(TAG, "generateInternal: build tools($assistant)")
-                if (assistant.enableMemory) {
-                    val memoryAssistantId = if (assistant.useGlobalMemory) {
-                        MemoryRepository.GLOBAL_MEMORY_ID
-                    } else {
-                        assistant.id.toString()
-                    }
-                    buildMemoryTools(
-                        json = json,
-                        onCreation = { content ->
-                            memoryRepo.addMemory(memoryAssistantId, content)
-                        },
-                        onUpdate = { id, content ->
-                            memoryRepo.updateContent(id, content)
-                        },
-                        onDelete = { id ->
-                            memoryRepo.deleteMemory(id)
-                        }
-                    ).let(this::addAll)
-                }
-                addAll(tools)
-            }
-
-            val toolsInternal = if (baseTools.isEmpty()) {
-                baseTools
-            } else {
-                baseTools + buildStructuredPlanTool(
-                    json = json,
-                    availableTools = baseTools,
-                    engine = localExecutionEngine,
-                    isToolAutoApproved = isToolAutoApproved,
-                )
-            }
+            val toolsInternal = registry.providerTools(model)
 
             // Check if we have tool calls ready to continue after user interaction.
             val pendingTools = messages.lastOrNull()?.getTools()?.filter {
@@ -567,7 +583,7 @@ class GenerationHandler(
                     generateInternal(
                         assistant = assistant,
                         settings = settings,
-                        systemAddendum = systemAddendum,
+                        systemAddendum = registrySystemAddendum,
                         messages = messages,
                         onUpdateMessages = {
                             messages = it.transforms(
@@ -665,7 +681,7 @@ class GenerationHandler(
                 var hasPendingApproval = false
                 val updatedTools = ArrayList<UIMessagePart.Tool>(tools.size)
                 for (tool in tools) {
-                    val toolDef = toolsInternal.find { it.name == tool.toolName }
+                    val toolDef = toolsInternal.firstOrNull { it.name == tool.toolName } ?: registry.findLoaded(tool.toolName)
                     // HARDLINE check: certain command patterns (rm -rf /, mkfs, shutdown,
                     // fork bomb, …) are blocked unconditionally — even "Always Allow"
                     // can't override. We check BEFORE the auto-approval lookup so a
@@ -912,8 +928,23 @@ class GenerationHandler(
                             return@forEach
                         }
                         runCatching {
-                            val toolDef = toolsInternal.find { toolDef -> toolDef.name == tool.toolName }
-                                ?: error("Tool ${tool.toolName} not found")
+                            val toolDef = toolsInternal.firstOrNull { toolDef -> toolDef.name == tool.toolName }
+                                ?: registry.findLoaded(tool.toolName)
+                            if (toolDef == null) {
+                                executedTools += tool.copy(
+                                    output = listOf(
+                                        UIMessagePart.Text(
+                                            json.encodeToString(buildJsonObject {
+                                                put("error", JsonPrimitive("tool_not_available"))
+                                                put("detail", JsonPrimitive("Tool is not currently loaded by the runtime registry."))
+                                                put("tool_name", JsonPrimitive(tool.toolName))
+                                                put("recovery", JsonPrimitive("Use discover_tools, then load_tools, before retrying."))
+                                            })
+                                        )
+                                    )
+                                )
+                                return@forEach
+                            }
                             val args = parsedArgs.getOrThrow()
                             if (BuildConfig.DEBUG) {
                                 Log.i(TAG, "generateText: executing tool ${toolDef.name} with args: ${redactSecrets(args)}")
@@ -972,6 +1003,7 @@ class GenerationHandler(
                             executedTools += markedTool.copy(
                                 output = maybeTruncateToolOutput(tool.toolCallId, result, hasShellAccess)
                             )
+                            registry.markExecuted(toolDef.name)
                         }.onFailure {
                             // Stack trace stays in logcat for debugging; the JSON envelope
                             // sent BACK to the LLM gets just the exception's message and a

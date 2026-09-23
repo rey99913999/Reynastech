@@ -10,13 +10,10 @@ import kotlinx.serialization.json.Json
 
 fun buildStructuredPlanTool(
     json: Json,
-    availableTools: List<Tool>,
+    registry: ExecutionToolRegistry,
     engine: LocalExecutionEngine,
     isToolAutoApproved: suspend (String) -> Boolean,
 ): Tool {
-    val registry = ExecutionToolRegistry(availableTools)
-    val compactIndex = registry.compactIndex()
-
     return Tool(
         name = "execute_structured_plan",
         description = """
@@ -34,7 +31,8 @@ fun buildStructuredPlanTool(
               blind execution;
             - completed steps are not repeated during partial replanning.
             
-            $compactIndex
+            Tool discovery is runtime-managed. Select tools from discover_tools, then load_tools
+            before creating the plan. Full schemas are loaded only for the selected tools.
             
             JSON shape:
             {"goal":"...","taskId":"optional","steps":[
@@ -119,9 +117,17 @@ fun buildStructuredPlanTool(
                     )
                 )
             } else {
+                val plan = planResult.getOrThrow()
+                val selected = plan.steps
+                    .filter { it.kind == ExecutionStepKind.TOOL }
+                    .flatMap { step ->
+                        listOfNotNull(step.toolName) + step.alternativeToolNames
+                    }
+                    .distinct()
+                registry.loadTools(selected)
                 val result = engine.execute(
-                    plan = planResult.getOrThrow(),
-                    tools = availableTools,
+                    plan = plan,
+                    registry = registry,
                     isToolAutoApproved = isToolAutoApproved,
                 )
                 listOf(
