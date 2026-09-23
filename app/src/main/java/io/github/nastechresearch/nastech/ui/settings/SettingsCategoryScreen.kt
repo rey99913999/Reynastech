@@ -33,6 +33,7 @@ import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.Book01
 import me.rerere.hugeicons.stroke.Brain02
 import me.rerere.hugeicons.stroke.Connect
+import me.rerere.hugeicons.stroke.Clock02
 import me.rerere.hugeicons.stroke.Console
 import me.rerere.hugeicons.stroke.Database02
 import me.rerere.hugeicons.stroke.Earth
