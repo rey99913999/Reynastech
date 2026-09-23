@@ -257,6 +257,7 @@ class AssistantToolPermissionResolver {
             )
         }
 
+        val requiresApproval = registry.requiresApproval(toolName, args)
         val override = assistant.toolPermissionOverrides.firstOrNull { it.toolId == toolId }
         when (override?.policy) {
             AssistantToolPermissionPolicy.DENY -> {
@@ -306,17 +307,29 @@ class AssistantToolPermissionResolver {
 
         return when (assistant.toolDefaultPolicy) {
             AssistantToolDefaultPolicy.ASK ->
-                ToolPermissionDecision(
-                    ToolPermissionDecision.Action.ASK,
-                    "Assistant default policy is Ask",
-                    metadata,
-                )
-
-            AssistantToolDefaultPolicy.ALLOW_LOW_RISK -> {
-                if (metadata?.risk == ToolRiskLevel.LOW) {
+                if (!requiresApproval) {
                     ToolPermissionDecision(
                         ToolPermissionDecision.Action.ALLOW,
-                        "low-risk tool allowed by Assistant default",
+                        "tool does not require approval",
+                        metadata,
+                    )
+                } else {
+                    ToolPermissionDecision(
+                        ToolPermissionDecision.Action.ASK,
+                        "Assistant default policy is Ask",
+                        metadata,
+                    )
+                }
+
+            AssistantToolDefaultPolicy.ALLOW_LOW_RISK -> {
+                if (!requiresApproval || metadata?.risk == ToolRiskLevel.LOW) {
+                    ToolPermissionDecision(
+                        ToolPermissionDecision.Action.ALLOW,
+                        if (!requiresApproval) {
+                            "tool does not require approval"
+                        } else {
+                            "low-risk tool allowed by Assistant default"
+                        },
                         metadata,
                     )
                 } else {
@@ -329,11 +342,19 @@ class AssistantToolPermissionResolver {
             }
 
             AssistantToolDefaultPolicy.DENY_NEW ->
-                ToolPermissionDecision(
-                    ToolPermissionDecision.Action.DENY,
-                    "tool has no explicit permission under the Assistant default policy",
-                    metadata,
-                )
+                if (!requiresApproval) {
+                    ToolPermissionDecision(
+                        ToolPermissionDecision.Action.ALLOW,
+                        "tool does not require approval",
+                        metadata,
+                    )
+                } else {
+                    ToolPermissionDecision(
+                        ToolPermissionDecision.Action.DENY,
+                        "tool has no explicit permission under the Assistant default policy",
+                        metadata,
+                    )
+                }
         }
     }
 
