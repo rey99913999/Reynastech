@@ -676,7 +676,7 @@ class GenerationHandler(
                 var hasPendingApproval = false
                 val updatedTools = ArrayList<UIMessagePart.Tool>(tools.size)
                 for (tool in tools) {
-                    val toolDef = toolsInternal.find { it.name == tool.toolName }
+                    val toolDef = toolsInternal.firstOrNull { it.name == tool.toolName } ?: registry.findLoaded(tool.toolName)
                     // HARDLINE check: certain command patterns (rm -rf /, mkfs, shutdown,
                     // fork bomb, …) are blocked unconditionally — even "Always Allow"
                     // can't override. We check BEFORE the auto-approval lookup so a
@@ -923,8 +923,23 @@ class GenerationHandler(
                             return@forEach
                         }
                         runCatching {
-                            val toolDef = toolsInternal.find { toolDef -> toolDef.name == tool.toolName }
-                                ?: error("Tool ${tool.toolName} not found")
+                            val toolDef = toolsInternal.firstOrNull { toolDef -> toolDef.name == tool.toolName }
+                                ?: registry.findLoaded(tool.toolName)
+                            if (toolDef == null) {
+                                executedTools += tool.copy(
+                                    output = listOf(
+                                        UIMessagePart.Text(
+                                            json.encodeToString(buildJsonObject {
+                                                put("error", JsonPrimitive("tool_not_available"))
+                                                put("detail", JsonPrimitive("Tool is not currently loaded by the runtime registry."))
+                                                put("tool_name", JsonPrimitive(tool.toolName))
+                                                put("recovery", JsonPrimitive("Use discover_tools, then load_tools, before retrying."))
+                                            })
+                                        )
+                                    )
+                                )
+                                return@forEach
+                            }
                             val args = parsedArgs.getOrThrow()
                             if (BuildConfig.DEBUG) {
                                 Log.i(TAG, "generateText: executing tool ${toolDef.name} with args: ${redactSecrets(args)}")
@@ -983,6 +998,7 @@ class GenerationHandler(
                             executedTools += markedTool.copy(
                                 output = maybeTruncateToolOutput(tool.toolCallId, result, hasShellAccess)
                             )
+                            registry.markExecuted(toolDef.name)
                         }.onFailure {
                             // Stack trace stays in logcat for debugging; the JSON envelope
                             // sent BACK to the LLM gets just the exception's message and a
