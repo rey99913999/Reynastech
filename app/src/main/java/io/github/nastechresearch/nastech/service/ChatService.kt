@@ -118,6 +118,7 @@ import io.github.nastechresearch.nastech.data.repository.ConversationRepository
 import io.github.nastechresearch.nastech.data.repository.FolderRepository
 import io.github.nastechresearch.nastech.data.repository.MemoryRepository
 import io.github.nastechresearch.nastech.data.repository.WorkspaceRepository
+import io.github.nastechresearch.nastech.data.task.TaskManager
 import io.github.nastechresearch.nastech.web.BadRequestException
 import io.github.nastechresearch.nastech.web.NotFoundException
 import io.github.nastechresearch.nastech.utils.applyPlaceholders
@@ -241,6 +242,7 @@ class ChatService(
     private val workspaceRepository: WorkspaceRepository,
     private val folderRepository: FolderRepository,
     private val conversationAgentRuntime: ConversationAgentRuntime,
+    private val taskManager: TaskManager,
 ) {
     private val assistantToolPermissionResolver = AssistantToolPermissionResolver()
     private val assistantToolPermissionRepository = AssistantToolPermissionRepository(settingsStore)
@@ -1160,6 +1162,10 @@ class ChatService(
                 tools = generationTools,
                 sourceHints = registrySourceHints,
             )
+            val activeTaskId = taskManager
+                .latestActiveTaskForConversation(conversationId.toString())
+                ?.taskId
+
             generationHandler.generateText(
                 settings = settings,
                 model = model,
@@ -1181,6 +1187,7 @@ class ChatService(
                     if (io.github.nastechresearch.nastech.data.ai.tools.HeadlessConversations
                         .isHeadless(conversationId)
                     ) null else assistantToolPermissionResolver,
+                taskId = activeTaskId,
                 onAfterToolExecution = { generatedMessages ->
                     if (messageRange != null || !settings.enableAutoCompaction) {
                         null
