@@ -141,6 +141,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Run AI and app unit tests
+        run: ./gradlew :ai:test :app:testDebugUnitTest --no-daemon --stacktrace
+
       - name: Build release APK
         run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
