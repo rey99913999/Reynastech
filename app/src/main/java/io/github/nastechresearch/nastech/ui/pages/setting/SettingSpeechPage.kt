@@ -416,7 +416,7 @@ private fun VoiceOverviewCard(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Speech output", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(R.string.setting_speech_output), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     Text(
                         selectedTts?.name?.ifBlank { "System voice" } ?: "System voice",
                         style = MaterialTheme.typography.bodyMedium,
@@ -428,7 +428,7 @@ private fun VoiceOverviewCard(
                     )
                 }
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Voice input", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(R.string.setting_voice_input), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     Text(
                         selectedAsr?.name?.ifBlank { "Not selected" } ?: "Not selected",
                         style = MaterialTheme.typography.bodyMedium,
@@ -446,7 +446,7 @@ private fun VoiceOverviewCard(
             ) {
                 Icon(HugeIcons.Mic01, contentDescription = null)
                 Spacer(Modifier.size(8.dp))
-                Text("Start voice conversation")
+                Text(stringResource(R.string.setting_start_voice_conversation))
             }
         }
     }
