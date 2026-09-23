@@ -88,7 +88,7 @@ fun SettingPreferencesThemePage(vm: SettingVM = koinViewModel()) {
                     item(
                         onClick = { navController.navigate(Screen.SettingGlassAppearance) },
                         headlineContent = { Text(stringResource(R.string.settings_glass_material)) },
-                        supportingContent = { Text(stringResource(R.string.setting_glass_material_desc)) },
+                        supportingContent = { Text(stringResource(R.string.settings_glass_material_desc)) },
                         trailingContent = { Icon(HugeIcons.ArrowRight01, contentDescription = null) },
                     )
                     item(
