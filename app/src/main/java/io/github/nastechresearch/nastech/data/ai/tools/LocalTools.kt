@@ -1096,7 +1096,7 @@ class LocalTools(
         // Centralised opt-in to needsApproval. Tool factories themselves don't have to know
         // whether their op is destructive — ToolApprovalDefaults is the single source of
         // truth, and the GenerationHandler / Telegram/in-app prompt path keys off needsApproval.
-        return tools.distinctBy { it.name }.map { t ->
+        return tools.distinctBy { System.identityHashCode(it).toString() + ":" + it.name }.map { t ->
             val withApproval = if (ToolApprovalDefaults.requiresApproval(t.name)) {
                 t.copy(needsApproval = { true })
             } else {
