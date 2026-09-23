@@ -2100,4 +2100,11 @@
     <string name="settings_share_desc">Share Nastech with another app.</string>
     <string name="settings_theme_mode">Theme mode</string>
     <string name="settings_quick_controls">Quick controls</string>
+    <string name="settings_category_ai_desc">Artificial intelligence models, providers, search, speech, MCP, and sub-agents.</string>
+    <string name="settings_category_agent_automation_desc">Assistants, skills, plugins, workflows, scheduled tasks, tasks, and tool permissions.</string>
+    <string name="settings_category_appearance_desc">Theme, materials, colors, and chat presentation.</string>
+    <string name="settings_category_behavior_desc">Chat behavior, notifications, interaction, and accessibility.</string>
+    <string name="settings_category_device_integrations_desc">Browser, web server, Termux, Shizuku, and Telegram.</string>
+    <string name="settings_category_data_desc">Chat storage, files, and backup &amp; restore.</string>
+    <string name="settings_category_system_desc">Permissions, diagnostics, logs, developer tools, and about.</string>
 </resources>
