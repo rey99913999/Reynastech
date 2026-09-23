@@ -59,6 +59,7 @@ import io.github.nastechresearch.nastech.data.ai.transformers.onGenerationFinish
 import io.github.nastechresearch.nastech.data.ai.transformers.transforms
 import io.github.nastechresearch.nastech.data.ai.transformers.visualTransforms
 import io.github.nastechresearch.nastech.data.ai.limits.ToolRuntimeLimits
+import io.github.nastechresearch.nastech.data.execution.ExecutionToolRegistry
 import io.github.nastechresearch.nastech.data.execution.LocalExecutionEngine
 import io.github.nastechresearch.nastech.data.execution.ToolOutputPreprocessor
 import io.github.nastechresearch.nastech.data.execution.buildStructuredPlanTool
