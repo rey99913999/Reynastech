@@ -128,6 +128,7 @@ class ExecutionToolRegistry(
     private val visibility = LinkedHashMap<ToolIdentity, ToolVisibilityStage>()
     private val alwaysVisibleTools = LinkedHashMap<String, Tool>()
     private var allTools: List<Tool> = emptyList()
+    private var activeModel: Model? = null
 
     init {
         rebuild(tools)
@@ -172,6 +173,10 @@ class ExecutionToolRegistry(
     }
 
     fun hasRegisteredTools(): Boolean = toolsByIdentity.isNotEmpty()
+
+    fun setModel(model: Model?) {
+        activeModel = model
+    }
 
     fun names(): Set<String> = identityByModelName.keys
 
@@ -267,31 +272,36 @@ class ExecutionToolRegistry(
         }
     }
 
-    fun discoverCapabilities(model: Model? = null): List<ToolCategorySummary> =
-        toolsByIdentity.values
-            .asSequence()
-            .filter { modelSupports(it.metadata, model) }
+    fun discoverCapabilities(model: Model? = activeModel): List<ToolCategorySummary> {
+        val entries = toolsByIdentity.values.filter { modelSupports(it.metadata, model) }
+        entries.forEach { entry ->
+            if (visibility[entry.identity] == ToolVisibilityStage.HIDDEN) {
+                visibility[entry.identity] = ToolVisibilityStage.CATEGORY_VISIBLE
+            }
+        }
+        return entries
             .groupBy { it.metadata.category }
             .entries
             .sortedBy { it.key.name }
-            .map { (category, entries) ->
+            .map { (category, categoryEntries) ->
                 ToolCategorySummary(
                     category = category,
-                    count = entries.size,
-                    sampleTools = entries.sortedBy { it.metadata.modelName }
+                    count = categoryEntries.size,
+                    sampleTools = categoryEntries.sortedBy { it.metadata.modelName }
                         .take(6)
                         .map { it.metadata.modelName },
                 )
             }
+    }
 
     fun discoverTools(
         query: String? = null,
         category: ToolCategory? = null,
         limit: Int = 12,
-        model: Model? = null,
+        model: Model? = activeModel,
     ): List<ToolMetadata> {
         val normalized = query.orEmpty().trim().lowercase()
-        return toolsByIdentity.values
+        val results = toolsByIdentity.values
             .asSequence()
             .filter { modelSupports(it.metadata, model) }
             .filter { category == null || it.metadata.category == category }
@@ -302,8 +312,16 @@ class ExecutionToolRegistry(
                     .thenBy { it.first.metadata.modelName }
             )
             .take(limit.coerceIn(1, 25))
-            .map { it.first.metadata }
+            .map { it.first }
             .toList()
+
+        results.forEach { entry ->
+            val state = visibility[entry.identity] ?: ToolVisibilityStage.HIDDEN
+            if (state == ToolVisibilityStage.HIDDEN || state == ToolVisibilityStage.CATEGORY_VISIBLE) {
+                visibility[entry.identity] = ToolVisibilityStage.METADATA_VISIBLE
+            }
+        }
+        return results.map { it.metadata }
     }
 
     fun compactIndex(maxChars: Int = 6_000): String =
@@ -331,7 +349,7 @@ class ExecutionToolRegistry(
         execute = {
             val payload = buildJsonObject {
                 put("capabilities", buildJsonArray {
-                    discoverCapabilities().forEach { item ->
+                    discoverCapabilities(activeModel).forEach { item ->
                         add(buildJsonObject {
                             put("category", item.category.displayName)
                             put("count", item.count)
@@ -378,6 +396,7 @@ class ExecutionToolRegistry(
                             query = obj["query"]?.jsonPrimitive?.contentOrNull,
                             category = category,
                             limit = limit,
+                            model = activeModel,
                         ).forEach { add(it.toDiscoveryJson()) }
                     },
                 )
@@ -444,7 +463,7 @@ class ExecutionToolRegistry(
             } else {
                 logicalName
             }
-            val description = tool.description.replace(Regex("\s+"), " ").trim()
+            val description = tool.description.replace(Regex("\\s+"), " ").trim()
             val risk = hint?.risk ?: defaultRisk(tool)
             val category = hint?.category ?: classifyCategory(source, logicalName, description)
             val keywords = (hint?.keywords.orEmpty() + deriveKeywords(logicalName, description)).toSet()
@@ -615,4 +634,3 @@ fun ToolMetadata.toDiscoveryJson(): JsonObject = buildJsonObject {
     put("output_contract", outputContract)
 }
 
-private fun ToolCategory.displayNameLegacy(): String = displayName
