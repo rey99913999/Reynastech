@@ -2128,4 +2128,9 @@
     <string name="setting_glass_use_theme">Use theme</string>
     <string name="setting_glass_custom_color">Custom color</string>
     <string name="setting_glass_custom_color_desc">Enter any #RRGGBB color</string>
+    <string name="setting_mcp_oauth_authorization">OAuth authorization</string>
+    <string name="setting_mcp_cancel_authorization">Cancel authorization</string>
+    <string name="setting_speech_output">Speech output</string>
+    <string name="setting_voice_input">Voice input</string>
+    <string name="setting_start_voice_conversation">Start voice conversation</string>
 </resources>
