@@ -2107,4 +2107,5 @@
     <string name="settings_category_device_integrations_desc">Browser, web server, Termux, Shizuku, and Telegram.</string>
     <string name="settings_category_data_desc">Chat storage, files, and backup &amp; restore.</string>
     <string name="settings_category_system_desc">Permissions, diagnostics, logs, developer tools, and about.</string>
+    <string name="settings_theme_options">Theme options</string>
 </resources>
