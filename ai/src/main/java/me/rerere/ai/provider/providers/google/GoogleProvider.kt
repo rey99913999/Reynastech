@@ -461,7 +461,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         // Contents (user messages)
         put(
             "contents",
-            buildContents(messages)
+            buildContents(messages, params.model.modelId)
         )
 
         // Tools — function tools and model built-in tools both live under the same
@@ -646,7 +646,13 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         }
     }
 
-    private fun buildContents(messages: List<UIMessage>): JsonArray {
+    private fun buildContents(messages: List<UIMessage>): JsonArray =
+        buildContents(messages, null)
+
+    private fun buildContents(messages: List<UIMessage>, modelId: String?): JsonArray {
+        val mediaReferenceAllocator = GoogleMediaReferenceAllocator()
+        val supportsMultimodalFunctionResponses =
+            GoogleFunctionResponseMediaSerializer.supportsMultimodalFunctionResponses(modelId)
         return buildJsonArray {
             messages
                 .filter { it.role != MessageRole.SYSTEM && it.isValidToUpload() }
@@ -717,7 +723,14 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                     add(buildJsonObject {
                         put("role", "user")
                         putJsonArray("parts") {
-                            group.tools.forEach { add(it.toFunctionResponsePart()) }
+                            group.tools.forEach {
+                            add(
+                                it.toFunctionResponsePart(
+                                    mediaReferenceAllocator = mediaReferenceAllocator,
+                                    allowMultimodal = supportsMultimodalFunctionResponses,
+                                )
+                            )
+                        }
                         }
                     })
                 }
@@ -820,71 +833,85 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         }
     }
 
-    private fun UIMessagePart.Tool.toFunctionResponsePart() = buildJsonObject {
-            put("functionResponse", buildJsonObject {
-                if (toolCallId.isNotBlank()) {
-                    put("id", toolCallId)
+    private fun UIMessagePart.Tool.toFunctionResponsePart(
+        mediaReferenceAllocator: GoogleMediaReferenceAllocator,
+        allowMultimodal: Boolean,
+    ) = buildJsonObject {
+        put("functionResponse", buildJsonObject {
+            if (toolCallId.isNotBlank()) {
+                put("id", toolCallId)
+            }
+            put("name", toolName)
+
+            val textParts = output.filterIsInstance<UIMessagePart.Text>()
+            val mediaArtifacts = mediaArtifacts()
+
+            val encodingResults = mediaArtifacts.map { artifact ->
+                val displayName = mediaReferenceAllocator.next()
+                GoogleFunctionResponseMediaSerializer.encode(
+                    artifact = artifact,
+                    displayName = displayName,
+                    allowMultimodal = allowMultimodal,
+                )
+            }
+
+            val successfulMedia = encodingResults.mapNotNull { result ->
+                (result as? GoogleMediaEncodingResult.Encoded)?.media
+            }
+            val mediaFailures = encodingResults.mapNotNull { result ->
+                result as? GoogleMediaEncodingResult.Skipped
+            }
+
+            val response = buildJsonObject {
+                if (textParts.isNotEmpty()) {
+                    put("result", textParts.joinToString("\n") { it.text })
+                } else if (successfulMedia.isEmpty()) {
+                    put(
+                        "result",
+                        if (mediaFailures.isEmpty()) {
+                            " "
+                        } else {
+                            "Media output was not attached inline; see media_errors for details."
+                        }
+                    )
                 }
-                put("name", toolName)
 
-                // 1. 拆分出纯文本部分
-                val textParts = output.filterIsInstance<UIMessagePart.Text>()
-                
-                // 2. 提取所有的多模态(图片/视频/音频)，并直接转为 Google 要求的格式
-                // 过滤出最终包含 inlineData 的数据块
-                val mediaGoogleParts = output
-                    .filter { it !is UIMessagePart.Text }
-                    .mapNotNull { it.toGooglePart() }
-                    .filter { it.containsKey("inlineData") } 
+                successfulMedia.forEach { media ->
+                    put(media.displayName, buildJsonObject {
+                        put("\$ref", media.displayName)
+                    })
+                }
 
-                // 3. 构建给模型看的结构化 response 节点
-                put("response", buildJsonObject {
-                    // 处理文本结果
-                    if (textParts.isNotEmpty()) {
-                        put(
-                            "result", 
-                            textParts.joinToString("\n") { it.text }
-                        )
-                    } else if (mediaGoogleParts.isEmpty()) {
-                        // 如果工具啥都没返回，给个兜底成功状态
-                        put("result", " ")
-                    }
-
-                    // 处理媒体数据（图片、音频、视频），打上 $ref 标签
-                    mediaGoogleParts.forEachIndexed { index, _ ->
-                        val refName = "media_ref_$index"
-                        put(refName, buildJsonObject {
-                            put("\$ref", refName)
-                        })
-                    }
-                })
-
-                // 4. 将真实的 Base64 多媒体数据挂载到 parts 中，并建立指针绑定
-                if (mediaGoogleParts.isNotEmpty()) {
-                    putJsonArray("parts") {
-                        mediaGoogleParts.forEachIndexed { index, googlePart ->
-                            val refName = "media_ref_$index"
-                            val inlineData = googlePart["inlineData"]!!.jsonObject
-
+                if (mediaFailures.isNotEmpty()) {
+                    putJsonArray("media_errors") {
+                        mediaFailures.forEach { failure ->
                             add(buildJsonObject {
-                                // 重新组装 inlineData，并在内部注入 displayName
-                                put("inlineData", buildJsonObject {
-                                    // 复制原有的 mimeType 和 data
-                                    inlineData.forEach { (k, v) -> put(k, v) }
-                                    // 添加能够让 $ref 认出它的唯一名称
-                                    put("displayName", refName)
-                                })
-                                
-                                // 保留可能存在的其他字段
-                                googlePart.forEach { (k, v) ->
-                                    if (k != "inlineData") put(k, v)
-                                }
+                                put("media_id", failure.artifact.id)
+                                put("mime_type", failure.artifact.mimeType)
+                                put("reference", failure.artifact.contentRef)
+                                put("reason", failure.reason)
                             })
                         }
                     }
                 }
-            })
-        }
+            }
+            put("response", response)
+
+            if (successfulMedia.isNotEmpty()) {
+                putJsonArray("parts") {
+                    successfulMedia.forEach { media ->
+                        add(buildJsonObject {
+                            put("inlineData", buildJsonObject {
+                                put("mimeType", media.mimeType)
+                                put("data", media.data)
+                                put("displayName", media.displayName)
+                            })
+                        })
+                    }
+                }
+            }
+        })
+    }
 
     private fun parseUsageMeta(jsonObject: JsonObject?): TokenUsage? {
         if (jsonObject == null) {
