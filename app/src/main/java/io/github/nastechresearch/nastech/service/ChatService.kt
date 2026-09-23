@@ -1254,7 +1254,7 @@ class ChatService(
                 outputTransformers = outputTransformers,
                 tools = generationTools,
                 toolRegistry = progressiveRegistry,
- { completionCause ->
+            ).onCompletion { completionCause ->
                 // 取消 Live Update 通知
                 cancelLiveUpdateNotification(conversationId)
 
