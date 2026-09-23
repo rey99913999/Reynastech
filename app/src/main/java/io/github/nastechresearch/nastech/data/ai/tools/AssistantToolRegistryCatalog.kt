@@ -34,6 +34,7 @@ class AssistantToolRegistryCatalog(
     private val workspaceRepository: WorkspaceRepository,
 ) {
     suspend fun build(
+        settings: Settings,
         assistant: Assistant,
         conversationId: Uuid = assistant.id,
         workspaceCwd: String? = null,
