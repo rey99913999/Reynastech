@@ -2118,4 +2118,9 @@
     <string name="setting_glass_use_theme">استخدام السمة</string>
     <string name="setting_glass_custom_color">لون مخصص</string>
     <string name="setting_glass_custom_color_desc">أدخل أي لون بصيغة #RRGGBB</string>
+    <string name="setting_mcp_oauth_authorization">تفويض OAuth</string>
+    <string name="setting_mcp_cancel_authorization">إلغاء التفويض</string>
+    <string name="setting_speech_output">إخراج صوتي</string>
+    <string name="setting_voice_input">الإدخال الصوتي</string>
+    <string name="setting_start_voice_conversation">بدء محادثة صوتية</string>
 </resources>
