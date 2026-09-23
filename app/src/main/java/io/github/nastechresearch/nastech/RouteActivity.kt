@@ -141,6 +141,8 @@ import io.github.nastechresearch.nastech.ui.pages.setting.SettingFilesPage
 import io.github.nastechresearch.nastech.ui.pages.setting.SettingMcpPage
 import io.github.nastechresearch.nastech.ui.pages.setting.SettingModelPage
 import io.github.nastechresearch.nastech.ui.pages.setting.SettingPage
+import io.github.nastechresearch.nastech.ui.settings.SettingsCategoryId
+import io.github.nastechresearch.nastech.ui.settings.SettingsCategoryScreen
 import io.github.nastechresearch.nastech.ui.pages.setting.SettingProviderDetailPage
 import io.github.nastechresearch.nastech.ui.pages.setting.SettingProviderPage
 import io.github.nastechresearch.nastech.ui.pages.setting.SettingSearchDetailPage
@@ -495,6 +497,10 @@ class RouteActivity : ComponentActivity() {
                                 SettingPage()
                             }
 
+                            entry<Screen.SettingsCategory> { key ->
+                                SettingsCategoryScreen(key.category)
+                            }
+
                             entry<Screen.Backup> {
                                 BackupPage()
                             }
@@ -847,6 +853,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Setting : Screen
+
+    @Serializable
+    data class SettingsCategory(val category: SettingsCategoryId) : Screen
 
     @Serializable
     data object Backup : Screen
