@@ -264,18 +264,60 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                             )
                         }
                     }
-                    // Four-button row: Allow / Always Allow / Allow for this chat / Deny.
-                    // Order matches the Telegram inline-keyboard layout so the user sees the
-                    // same mental model on both surfaces.
-                    // Tools listed in ToolApprovalDefaults.NO_ALWAYS_ALLOW (e.g. mcp_add /
-                    // mcp_update — adding an MCP server is a privilege-escalation surface)
-                    // drop the Always-Allow button so each call requires fresh confirmation.
+                    // Update 04 — surface the Registry metadata directly in the approval
+                    // card so the user sees action, source, risk, side effects and task context.
+                    val approvalDescription = tool.metadata.getStringContent("permission_description")
+                    val approvalSource = tool.metadata.getStringContent("permission_source")
+                    val approvalSourceId = tool.metadata.getStringContent("permission_source_id")
+                    val approvalRisk = tool.metadata.getStringContent("permission_risk")
+                    val approvalEffects = tool.metadata.getStringContent("permission_side_effects")
+                    val approvalReason = tool.metadata.getStringContent("permission_reason")
+                    val approvalTaskId = tool.metadata.getStringContent("permission_task_id")
+                    if (!approvalDescription.isNullOrBlank()) {
+                        Text(
+                            text = "Action: " + approvalDescription,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    if (!approvalReason.isNullOrBlank()) {
+                        Text(
+                            text = "Why: " + approvalReason,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Text(
+                        text = "Risk: " + (approvalRisk ?: "unknown") +
+                            " • Source: " + (approvalSource ?: "unknown") +
+                            if (!approvalSourceId.isNullOrBlank()) " / " + approvalSourceId else "",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (!approvalEffects.isNullOrBlank()) {
+                        Text(
+                            text = "Side effects: " + approvalEffects,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (!approvalTaskId.isNullOrBlank()) {
+                        Text(
+                            text = "Task approval: " + approvalTaskId,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+
+                    // Allow for this task is meaningful only when the approval came from an
+                    // active persisted/recoverable task context. Normal chat calls do not invent
+                    // a fake task id, preventing a task grant from leaking into later turns.
+                    val allowTaskButton = !approvalTaskId.isNullOrBlank()
                     val allowAlwaysButton = io.github.nastechresearch.nastech.data.ai.tools.ToolApprovalDefaults
                         .allowsAlwaysAllow(tool.toolName)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilledTonalIconButton(
+                        FilledTonalButton(
                             onClick = {
-                                if (inFlight) return@FilledTonalIconButton
+                                if (inFlight) return@FilledTonalButton
                                 inFlight = true
                                 onToolApproval(
                                     tool.toolCallId, true, "",
@@ -284,18 +326,29 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                                 )
                             },
                             enabled = !inFlight,
-                            modifier = Modifier.size(28.dp),
                         ) {
-                            Icon(
-                                imageVector = HugeIcons.Tick01,
-                                contentDescription = stringResource(R.string.chat_message_tool_approve),
-                                modifier = Modifier.size(14.dp),
-                            )
+                            Text("Allow once")
+                        }
+                        if (allowTaskButton) {
+                            FilledTonalButton(
+                                onClick = {
+                                    if (inFlight) return@FilledTonalButton
+                                    inFlight = true
+                                    onToolApproval(
+                                        tool.toolCallId, true, "",
+                                        io.github.nastechresearch.nastech.service.ChatService.ApprovalScope.Task,
+                                        tool.toolName,
+                                    )
+                                },
+                                enabled = !inFlight,
+                            ) {
+                                Text("Allow for this task")
+                            }
                         }
                         if (allowAlwaysButton) {
-                            FilledTonalIconButton(
+                            FilledTonalButton(
                                 onClick = {
-                                    if (inFlight) return@FilledTonalIconButton
+                                    if (inFlight) return@FilledTonalButton
                                     inFlight = true
                                     onToolApproval(
                                         tool.toolCallId, true, "",
@@ -304,39 +357,18 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                                     )
                                 },
                                 enabled = !inFlight,
-                                modifier = Modifier.size(28.dp),
                             ) {
-                                Text("∞", style = MaterialTheme.typography.labelMedium)
+                                Text("Always allow")
                             }
                         }
-                        FilledTonalIconButton(
+                        FilledTonalButton(
                             onClick = {
-                                if (inFlight) return@FilledTonalIconButton
-                                inFlight = true
-                                onToolApproval(
-                                    tool.toolCallId, true, "",
-                                    io.github.nastechresearch.nastech.service.ChatService.ApprovalScope.ChatScope,
-                                    tool.toolName,
-                                )
-                            },
-                            enabled = !inFlight,
-                            modifier = Modifier.size(28.dp),
-                        ) {
-                            Text("💬", style = MaterialTheme.typography.labelSmall)
-                        }
-                        FilledTonalIconButton(
-                            onClick = {
-                                if (inFlight) return@FilledTonalIconButton
+                                if (inFlight) return@FilledTonalButton
                                 showDenyDialog = true
                             },
                             enabled = !inFlight,
-                            modifier = Modifier.size(28.dp),
                         ) {
-                            Icon(
-                                imageVector = HugeIcons.Cancel01,
-                                contentDescription = stringResource(R.string.chat_message_tool_deny),
-                                modifier = Modifier.size(14.dp),
-                            )
+                            Text("Deny")
                         }
                     }
                 }
