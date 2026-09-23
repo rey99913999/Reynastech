@@ -101,6 +101,22 @@ class AssistantToolPermissionsTest {
     }
 
     @Test
+    fun nonApprovalToolBypassesAssistantAskDefault() = kotlinx.coroutines.runBlocking {
+        val safeTool = tool("read_file", needsApproval = false)
+        val registry = registry(safeTool, risk = ToolRiskLevel.LOW)
+        val assistant = Assistant(id = Uuid.random()).copy(
+            toolDefaultPolicy = AssistantToolDefaultPolicy.ASK,
+        )
+        val decision = AssistantToolPermissionResolver().decide(
+            assistant = assistant,
+            registry = registry,
+            toolName = safeTool.name,
+            args = buildJsonObject {},
+        )
+        assertEquals(ToolPermissionDecision.Action.ALLOW, decision.action)
+    }
+
+    @Test
     fun disabledToolCannotRunEvenWhenAlwaysAllowed() = kotlinx.coroutines.runBlocking {
         val tool = tool("write_text_file")
         val registry = registry(tool)
