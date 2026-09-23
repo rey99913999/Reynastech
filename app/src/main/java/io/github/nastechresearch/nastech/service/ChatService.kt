@@ -69,6 +69,7 @@ import io.github.nastechresearch.nastech.data.execution.ExecutionToolRegistry
 import io.github.nastechresearch.nastech.data.execution.ToolSourceHint
 import io.github.nastechresearch.nastech.data.ai.tools.AssistantToolPermissionResolver
 import io.github.nastechresearch.nastech.data.ai.tools.AssistantToolPermissionRepository
+import io.github.nastechresearch.nastech.data.ai.tools.AssistantToolPermissionRepository
 import io.github.nastechresearch.nastech.data.ai.tools.AssistantToolPermissionPolicy
 import io.github.nastechresearch.nastech.data.ai.tools.TaskToolApprovalGrants
 import io.github.nastechresearch.nastech.data.agent.ConversationAgentRuntime
@@ -131,6 +132,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.uuid.Uuid
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 private const val TAG = "ChatService"
 private const val COMPACTION_REQUEST_TIMEOUT_MS = 3 * 60_000L
@@ -243,9 +245,9 @@ class ChatService(
     private val folderRepository: FolderRepository,
     private val conversationAgentRuntime: ConversationAgentRuntime,
     private val taskManager: TaskManager,
+    private val assistantToolPermissionRepository: AssistantToolPermissionRepository,
 ) {
     private val assistantToolPermissionResolver = AssistantToolPermissionResolver()
-    private val assistantToolPermissionRepository = AssistantToolPermissionRepository(settingsStore)
 
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
