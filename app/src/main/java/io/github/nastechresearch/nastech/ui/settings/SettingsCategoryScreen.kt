@@ -19,6 +19,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import io.github.nastechresearch.nastech.R
 import io.github.nastechresearch.nastech.Screen
 import io.github.nastechresearch.nastech.ui.components.nav.BackButton
