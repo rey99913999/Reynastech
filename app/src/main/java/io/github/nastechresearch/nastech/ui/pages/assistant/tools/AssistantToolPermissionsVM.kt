@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlin.uuid.Uuid
@@ -171,6 +172,7 @@ class AssistantToolPermissionsVM(
         val settings = settingsStore.settingsFlow.first()
         val currentAssistant = settings.assistants.firstOrNull { it.id == assistantId } ?: return
         registryState.value = catalog.build(
+            settings = settings,
             assistant = currentAssistant,
             conversationId = currentAssistant.id,
         )
