@@ -1,6 +1,6 @@
 package io.github.nastechresearch.nastech.data.ai.tools
 
-import io.github.nastechresearch.nastech.data.ai.createSearchTools
+import io.github.nastechresearch.nastech.data.ai.tools.createSearchTools
 import io.github.nastechresearch.nastech.data.ai.tools.local.*
 import io.github.nastechresearch.nastech.data.datastore.Settings
 import io.github.nastechresearch.nastech.data.datastore.findModelById
@@ -11,8 +11,10 @@ import io.github.nastechresearch.nastech.data.files.SkillManager
 import io.github.nastechresearch.nastech.data.repository.WorkspaceRepository
 import io.github.nastechresearch.nastech.data.ai.mcp.McpManager
 import io.github.nastechresearch.nastech.plugin.PluginManager
+import io.github.nastechresearch.nastech.data.ai.tools.createSkillTools
 import io.github.nastechresearch.nastech.data.model.Assistant
-import io.github.nastechresearch.nastech.utils.createWorkspaceTools
+import me.rerere.workspace.WorkspaceShellStatus
+import io.github.nastechresearch.nastech.data.ai.tools.createWorkspaceTools
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.core.Tool
 import kotlinx.serialization.json.jsonObject
@@ -61,7 +63,7 @@ class AssistantToolRegistryCatalog(
             val workspaceId = assistant.workspaceId?.toString()
             if (!workspaceId.isNullOrBlank()) {
                 val workspace = workspaceRepository.getById(workspaceId)
-                if (workspace?.shellStatus == io.github.nastechresearch.nastech.data.model.WorkspaceShellStatus.READY.name) {
+                if (workspace?.shellStatus == WorkspaceShellStatus.READY.name) {
                     addAll(createWorkspaceTools(workspaceId, workspaceRepository, workspaceCwd))
                 }
             }
