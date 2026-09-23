@@ -45,7 +45,7 @@ enum class ToolCategory {
 
     companion object {
         fun fromLabel(value: String): ToolCategory? {
-            val normalized = value.trim().lowercase().replace('_', ' ').replace('-', ' ')
+            val normalized = value.trim().lowercase().replace('_', ' ').replace('-', ' ').replace('/', ' ')
             return entries.firstOrNull {
                 it.displayName.lowercase() == normalized ||
                     it.name.lowercase() == normalized.replace(' ', '_')
@@ -469,7 +469,7 @@ class ExecutionToolRegistry(
             val keywords = (hint?.keywords.orEmpty() + deriveKeywords(logicalName, description)).toSet()
             val capabilities = (hint?.capabilities.orEmpty() + deriveCapabilities(logicalName, description)).toSet()
             val permissions = (hint?.permissions.orEmpty() + if (defaultRequiresApproval(tool)) setOf("tool_approval") else emptySet()).toSet()
-            val sideEffects = (hint?.sideEffects.orEmpty() + if (risk != ToolRiskLevel.LOW) setOf("runtime_side_effect") else emptySet()).toSet()
+            val sideEffects = hint?.sideEffects.orEmpty().toSet()
             val schema = runCatching { tool.parameters() }.getOrNull()
             val summary = summarizeSchema(schema)
             val metadata = ToolMetadata(
@@ -533,8 +533,7 @@ class ExecutionToolRegistry(
     private fun defaultRequiresApproval(tool: Tool): Boolean =
         runCatching { tool.needsApproval(JsonObject(emptyMap())) }.getOrDefault(false)
 
-    private fun defaultRisk(tool: Tool): ToolRiskLevel =
-        if (defaultRequiresApproval(tool)) ToolRiskLevel.HIGH else ToolRiskLevel.LOW
+    private fun defaultRisk(tool: Tool): ToolRiskLevel = ToolRiskLevel.MEDIUM
 
     private fun buildAlias(source: ToolSourceKind, sourceId: String, originalName: String): String {
         val prefix = source.name.lowercase()
