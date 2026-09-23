@@ -45,7 +45,7 @@ enum class ToolCategory {
 
     companion object {
         fun fromLabel(value: String): ToolCategory? {
-            val normalized = value.trim().lowercase().replace('_', ' ', '-')
+            val normalized = value.trim().lowercase().replace('_', ' ').replace('-', ' ')
             return entries.firstOrNull {
                 it.displayName.lowercase() == normalized ||
                     it.name.lowercase() == normalized.replace(' ', '_')
