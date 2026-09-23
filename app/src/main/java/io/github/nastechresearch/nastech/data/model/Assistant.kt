@@ -69,6 +69,12 @@ data class Assistant(
     val fastPathRouterEnabled: Boolean = false,
     val allowConversationSystemPrompt: Boolean = false, // 允许对话单独重写 system prompt
     val allowConversationPromptInjection: Boolean = false, // 允许对话单独绑定提示词注入
+    // Update 04 — Assistant-scoped tool permissions. The registry owns tool identity/metadata;
+    // this model stores only the Assistant's policy choices and enabled-state overrides.
+    val toolDefaultPolicy: io.github.nastechresearch.nastech.data.ai.tools.AssistantToolDefaultPolicy =
+        io.github.nastechresearch.nastech.data.ai.tools.AssistantToolDefaultPolicy.ALLOW_LOW_RISK,
+    val toolPermissionOverrides: List<io.github.nastechresearch.nastech.data.ai.tools.AssistantToolPermission> = emptyList(),
+    val disabledToolIds: Set<String> = emptySet(),
 )
 
 @Serializable
