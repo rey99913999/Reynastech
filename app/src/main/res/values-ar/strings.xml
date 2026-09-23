@@ -2098,4 +2098,24 @@
     <string name="settings_category_data_desc">تخزين الدردشة والملفات والنسخ الاحتياطي والاستعادة.</string>
     <string name="settings_category_system_desc">الأذونات والتشخيص والسجلات وأدوات المطور وحول التطبيق.</string>
     <string name="settings_theme_options">خيارات السمة</string>
+    <string name="open">فتح</string>
+    <string name="restore">استعادة</string>
+    <string name="setting_chat_storage_clear_cache_title">هل تريد مسح الذاكرة المؤقتة المؤقتة؟</string>
+    <string name="setting_chat_storage_clear_cache">مسح الذاكرة المؤقتة</string>
+    <string name="setting_chat_storage_manage_attachments">إدارة جميع المرفقات (%1$d)</string>
+    <string name="setting_chat_storage_nastech_storage">تخزين Nastech</string>
+    <string name="setting_chat_storage_refresh_scan">تحديث الفحص</string>
+    <string name="setting_chat_storage_filter_attachments">تصفية المرفقات</string>
+    <string name="setting_chat_storage_control_title">تبقى بياناتك تحت سيطرتك</string>
+    <string name="setting_glass_adjust_desc">ضبط مواد Nastech بشكل عام أو لكل سطح على حدة</string>
+    <string name="setting_glass_restore_title">استعادة ألوان Nastech المقروءة</string>
+    <string name="setting_glass_live_preview">معاينة مباشرة</string>
+    <string name="setting_glass_live_preview_desc">تتحدث أسطح Nastech أثناء ضبط عناصر التحكم.</string>
+    <string name="setting_glass_typography_colors">الخطوط والألوان</string>
+    <string name="setting_glass_black_silence_colors">مجموعة ألوان Black Silence</string>
+    <string name="setting_glass_chat_sidebar">الشريط الجانبي للدردشة</string>
+    <string name="setting_glass_reset_to_global">إعادة %1$s إلى الإعداد العام</string>
+    <string name="setting_glass_use_theme">استخدام السمة</string>
+    <string name="setting_glass_custom_color">لون مخصص</string>
+    <string name="setting_glass_custom_color_desc">أدخل أي لون بصيغة #RRGGBB</string>
 </resources>
