@@ -129,6 +129,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.uuid.Uuid
+import kotlinx.serialization.json.contentOrNull
 
 private const val TAG = "ChatService"
 private const val COMPACTION_REQUEST_TIMEOUT_MS = 3 * 60_000L
@@ -807,10 +808,9 @@ class ChatService(
 
     // ---- 处理工具调用审批 ----
 
-    /** Scope of an "approve" decision. Once = this single tool call only. ChatScope =
-     *  every future call of the same tool name in this conversation (until /new). Always =
-     *  every future call of this tool name across the whole app, persisted to disk. */
-    enum class ApprovalScope { Once, ChatScope, Always }
+    /** Runtime decision scope. ChatScope is retained only for decoding old callers and
+     *  is intentionally treated as Once; it is no longer an authoritative permission scope. */
+    enum class ApprovalScope { Once, Task, ChatScope, Always }
 
     fun handleToolApproval(
         conversationId: Uuid,
@@ -820,6 +820,7 @@ class ChatService(
         answer: String? = null,
         scope: ApprovalScope = ApprovalScope.Once,
         toolName: String? = null,
+        taskId: String? = null,
     ) {
         val session = getOrCreateSession(conversationId)
         val convMutex = mutexFor(conversationId)
@@ -833,26 +834,6 @@ class ChatService(
         // generation never resumes. The YOLO toggle masked this because auto-approval
         // skips the Pending → handleToolApproval path entirely.
         val priorGenerationJob = session.getJob()
-
-        // Commit the broader-scope grant on a NonCancellable scope BEFORE the cancellable
-        // mutation block. Previous design ran grantAlways() inside the cancellable
-        // appScope.launch — a rapid second tap would cancel the first job and silently
-        // drop the persisted Always-Allow grant; the user thinks they granted it, the next
-        // prompt reappears. NonCancellable + before-launch-completion guarantees the write.
-        if (approved && toolName != null && scope != ApprovalScope.Once) {
-            appScope.launch(NonCancellable) {
-                runCatching {
-                    // Smart-cast on the surrounding `if` excluded Once already, so only
-                    // ChatScope and Always remain — the when is exhaustive without else.
-                    when (scope) {
-                        ApprovalScope.ChatScope -> io.github.nastechresearch.nastech.data.ai.tools
-                            .ToolApprovalAllowList.grantForChat(conversationId, toolName)
-                        ApprovalScope.Always -> toolApprovalPreferences.grantAlways(toolName)
-                        ApprovalScope.Once -> Unit
-                    }
-                }.onFailure { Log.w(TAG, "approval grant write failed", it) }
-            }
-        }
 
         val releaseForegroundWork = foregroundWorkTracker.acquire()
         val job = appScope.launch {
@@ -884,6 +865,8 @@ class ChatService(
                     // /stop or a concurrent decision could have already flipped it to
                     // Denied(cancelled); we don't want to overwrite that with Approved.
                     var foundActivePending = false
+                    var approvedToolId: String? = null
+                    var approvedTaskId: String? = null
                     val updatedNodes = conversation.messageNodes.map { node ->
                         node.copy(
                             messages = node.messages.map { msg ->
@@ -892,6 +875,11 @@ class ChatService(
                                         if (part is UIMessagePart.Tool && part.toolCallId == toolCallId) {
                                             if (part.isPending) {
                                                 foundActivePending = true
+                                                val metadata = part.metadata
+                                                approvedToolId = metadata?.get("permission_tool_id")?.jsonPrimitive?.contentOrNull
+                                                    ?: toolName
+                                                approvedTaskId = metadata?.get("permission_task_id")?.jsonPrimitive?.contentOrNull
+                                                    ?: taskId
                                                 part.copy(approvalState = newApprovalState)
                                             } else part
                                         } else part
@@ -907,6 +895,34 @@ class ChatService(
                     }
                     val updatedConversation = conversation.copy(messageNodes = updatedNodes)
                     saveConversation(conversationId, updatedConversation)
+
+                    // Update 04 runtime grants are committed only after the pending tool was
+                    // found and persisted, so a stale callback cannot grant another Assistant.
+                    val effectiveTaskId = approvedTaskId
+                    val effectiveToolId = approvedToolId
+                    when {
+                        approved && scope == ApprovalScope.Task &&
+                            !effectiveTaskId.isNullOrBlank() && !effectiveToolId.isNullOrBlank() -> {
+                            TaskToolApprovalGrants.grant(
+                                taskId = effectiveTaskId,
+                                assistantId = conversation.assistantId,
+                                toolId = effectiveToolId,
+                            )
+                        }
+                        approved && scope == ApprovalScope.Always &&
+                            !toolName.isNullOrBlank() &&
+                            assistantToolPermissionResolver.canPersistAlwaysAllow(toolName) &&
+                            !effectiveToolId.isNullOrBlank() -> {
+                            withContext(NonCancellable) {
+                                assistantToolPermissionRepository.setToolPolicy(
+                                    assistantId = conversation.assistantId,
+                                    toolId = effectiveToolId,
+                                    policy = AssistantToolPermissionPolicy.ALWAYS_ALLOW,
+                                )
+                            }
+                        }
+                        // Legacy ChatScope is deliberately not persisted. It behaves as Allow once.
+                    }
 
                     // Check if there are still pending tools across the conversation
                     val hasPendingTools = updatedNodes.any { node ->
