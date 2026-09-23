@@ -421,7 +421,7 @@ private fun McpServerItem(
                             onClick = { mcpManager.startAuthorization(item, context) },
                             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                         ) {
-                            Text("OAuth Authorization")
+                            Text(stringResource(R.string.setting_mcp_oauth_authorization))
                         }
                     }
                     if (status == McpStatus.Authorizing) {
@@ -433,7 +433,7 @@ private fun McpServerItem(
                             onClick = { mcpManager.cancelAuthorization(item) },
                             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                         ) {
-                            Text("Cancel Authorization")
+                            Text(stringResource(R.string.setting_mcp_cancel_authorization))
                         }
                     }
                 }
