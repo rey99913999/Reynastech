@@ -32,6 +32,8 @@ class ToolApprovalPreferences(private val context: Context) {
     private val store = context.toolApprovalDataStore
     private val K_ALWAYS_ALLOW = stringSetPreferencesKey("always_allow_tool_names")
     private val K_GLOBAL_YOLO = booleanPreferencesKey("global_auto_approve_yolo")
+    private val K_LEGACY_MIGRATION_DONE = booleanPreferencesKey("assistant_scoped_migration_done")
+    private val K_LEGACY_RESET_COUNT = androidx.datastore.preferences.core.intPreferencesKey("legacy_global_grants_reset_count")
 
     val alwaysAllowFlow: Flow<Set<String>> = store.data.map {
         it[K_ALWAYS_ALLOW].orEmpty()
@@ -61,5 +63,30 @@ class ToolApprovalPreferences(private val context: Context) {
 
     suspend fun revokeAll() {
         store.edit { it.remove(K_ALWAYS_ALLOW) }
+    }
+
+    val legacyResetCountFlow: Flow<Int> = store.data.map {
+        it[K_LEGACY_RESET_COUNT] ?: 0
+    }
+
+    suspend fun migrateLegacyGlobalState(): Int {
+        val snapshot = store.data.first()
+        if (snapshot[K_LEGACY_MIGRATION_DONE] == true) {
+            return snapshot[K_LEGACY_RESET_COUNT] ?: 0
+        }
+        val legacyCount = snapshot[K_ALWAYS_ALLOW].orEmpty().size
+        store.edit {
+            // Secure fallback required by Update 04: do not broaden a legacy global grant
+            // by copying it to every Assistant. Instead retire it to Ask semantics.
+            it.remove(K_ALWAYS_ALLOW)
+            it.remove(K_GLOBAL_YOLO)
+            it[K_LEGACY_RESET_COUNT] = legacyCount
+            it[K_LEGACY_MIGRATION_DONE] = true
+        }
+        return legacyCount
+    }
+
+    suspend fun dismissLegacyResetNotice() {
+        store.edit { it[K_LEGACY_RESET_COUNT] = 0 }
     }
 }
