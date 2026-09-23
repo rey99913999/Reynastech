@@ -96,6 +96,7 @@ object TaskToolApprovalGrants {
  */
 class AssistantToolPermissionRepository(
     private val settingsStore: SettingsStore,
+    private val registryCatalog: AssistantToolRegistryCatalog,
 ) {
     fun observeAssistant(assistantId: Uuid): Flow<Assistant?> =
         settingsStore.settingsFlow.map { settings ->
@@ -115,6 +116,26 @@ class AssistantToolPermissionRepository(
         policy: AssistantToolPermissionPolicy,
     ) {
         require(toolId.isNotBlank()) { "toolId cannot be blank" }
+
+        // Backend safety: NO_ALWAYS_ALLOW is not a UI-only restriction. Resolve the canonical
+        // registry identity before persisting so callers cannot bypass the hidden button by
+        // directly writing ALWAYS_ALLOW for a forbidden tool.
+        if (policy == AssistantToolPermissionPolicy.ALWAYS_ALLOW) {
+            val settings = settingsStore.settingsFlow.first()
+            val assistant = settings.assistants.firstOrNull { it.id == assistantId }
+                ?: throw IllegalArgumentException("Assistant not found")
+            val registry = registryCatalog.build(
+                settings = settings,
+                assistant = assistant,
+                conversationId = assistant.id,
+            )
+            val metadata = registry.allMetadata().firstOrNull { it.identity.stableId == toolId }
+                ?: throw IllegalArgumentException("Tool is not registered for this Assistant")
+            require(ToolApprovalDefaults.allowsAlwaysAllow(metadata.modelName)) {
+                "Always Allow is forbidden"
+            }
+        }
+
         val now = System.currentTimeMillis()
         updateAssistant(assistantId) { assistant ->
             val existing = assistant.toolPermissionOverrides.firstOrNull { it.toolId == toolId }
