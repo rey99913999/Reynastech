@@ -66,7 +66,7 @@ class LocalExecutionEngine(
                 results += ExecutionStepResult(
                     stepId = step.id,
                     taskStepId = step.taskStepId,
-                    toolName = resolvedToolName,
+                    toolName = toolName,
                     status = ExecutionStepStatus.REPLAN_REQUIRED,
                     error = "Step requires a higher execution level: " + step.level.name,
                 )
