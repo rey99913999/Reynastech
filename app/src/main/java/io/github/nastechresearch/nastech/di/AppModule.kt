@@ -289,6 +289,7 @@ val appModule = module {
             folderRepository = get(),
             conversationAgentRuntime = get(),
             taskManager = get(),
+            assistantToolPermissionRepository = get(),
         )
     }
 
