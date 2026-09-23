@@ -514,6 +514,8 @@ class GenerationHandler(
                 registry = registry,
                 engine = localExecutionEngine,
                 isToolAutoApproved = isToolAutoApproved,
+                toolPermissionResolver = toolPermissionResolver,
+                assistant = assistant,
             )
             registry.registerAlwaysVisible(structuredPlanTool)
             registry.resetVisibility()
