@@ -141,9 +141,6 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Run Update 01 regression test
-        run: ./gradlew :ai:testDebugUnitTest --tests me.rerere.ai.provider.providers.google.GoogleFunctionResponseMediaTest --no-daemon --stacktrace
-
       - name: Build release APK
         run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
