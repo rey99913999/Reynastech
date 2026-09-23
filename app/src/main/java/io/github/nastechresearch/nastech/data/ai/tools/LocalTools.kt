@@ -123,6 +123,10 @@ import io.github.nastechresearch.nastech.data.ai.tools.local.batchMoveTool
 import io.github.nastechresearch.nastech.data.ai.tools.local.batchDeleteTool
 import io.github.nastechresearch.nastech.data.ai.tools.local.webFetchTool
 import io.github.nastechresearch.nastech.data.ai.tools.local.webExtractTool
+import io.github.nastechresearch.nastech.data.execution.ToolCategory
+import io.github.nastechresearch.nastech.data.execution.ToolRiskLevel
+import io.github.nastechresearch.nastech.data.execution.ToolSourceHint
+import io.github.nastechresearch.nastech.data.execution.ToolSourceKind
 import io.github.nastechresearch.nastech.data.event.AppEvent
 import io.github.nastechresearch.nastech.data.event.AppEventBus
 import io.github.nastechresearch.nastech.utils.readClipboardText
@@ -722,6 +726,7 @@ class LocalTools(
     fun getTools(
         options: List<LocalToolOption>,
         invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+        onSourceHint: (ToolSourceHint) -> Unit = {},
     ): List<Tool> {
         val tools = mutableListOf<Tool>()
         if (options.contains(LocalToolOption.JavascriptEngine)) {
@@ -1067,8 +1072,26 @@ class LocalTools(
             tools.add(keyboardSelectRangeTool(keyboardApiClient))
         }
         if (invocationContext.callerConversationId != null) {
-            // Add plugin capabilities into the same tool list. Existing/native tools keep name precedence.
-            tools.addAll(pluginManager.getPluginTools(invocationContext))
+            // Plugin tools stay model-name compatible, while the registry receives their stable
+            // plugin identity and permission metadata so two similarly named sources cannot share
+            // risk/approval identity accidentally.
+            pluginManager.getPluginToolRegistrations(invocationContext).forEach { registration ->
+                tools.add(registration.tool)
+                onSourceHint(
+                    ToolSourceHint(
+                        tool = registration.tool,
+                        source = ToolSourceKind.PLUGIN,
+                        sourceId = registration.pluginId,
+                        category = ToolCategory.MCP_PLUGIN,
+                        risk = if (registration.requiredPermissions.any(::isSensitivePermission)) {
+                            ToolRiskLevel.HIGH
+                        } else {
+                            ToolRiskLevel.MEDIUM
+                        },
+                        permissions = registration.requiredPermissions,
+                    )
+                )
+            }
         }
         // Centralised opt-in to needsApproval. Tool factories themselves don't have to know
         // whether their op is destructive — ToolApprovalDefaults is the single source of
