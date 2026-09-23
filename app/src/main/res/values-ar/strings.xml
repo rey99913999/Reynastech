@@ -2090,4 +2090,11 @@
     <string name="settings_share_desc">مشاركة Nastech مع تطبيق آخر.</string>
     <string name="settings_theme_mode">وضع السمة</string>
     <string name="settings_quick_controls">عناصر التحكم السريعة</string>
+    <string name="settings_category_ai_desc">النماذج ومزودو الخدمة والبحث والصوت وMCP والوكلاء الفرعيون.</string>
+    <string name="settings_category_agent_automation_desc">المساعدون والمهارات والإضافات وسير العمل والمهام المجدولة والمهام وموافقات الأدوات.</string>
+    <string name="settings_category_appearance_desc">السمة والمواد والألوان وطريقة عرض المحادثة.</string>
+    <string name="settings_category_behavior_desc">سلوك الدردشة والإشعارات والتفاعل وإمكانية الوصول.</string>
+    <string name="settings_category_device_integrations_desc">المتصفح وخادم الويب وTermux وShizuku وTelegram.</string>
+    <string name="settings_category_data_desc">تخزين الدردشة والملفات والنسخ الاحتياطي والاستعادة.</string>
+    <string name="settings_category_system_desc">الأذونات والتشخيص والسجلات وأدوات المطور وحول التطبيق.</string>
 </resources>
