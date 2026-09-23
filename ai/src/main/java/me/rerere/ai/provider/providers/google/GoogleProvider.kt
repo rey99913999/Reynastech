@@ -658,7 +658,11 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 .filter { it.role != MessageRole.SYSTEM && it.isValidToUpload() }
                 .forEach { message ->
                     if (message.role == MessageRole.ASSISTANT) {
-                        addModelMessage(message)
+                        addModelMessage(
+                            message = message,
+                            mediaReferenceAllocator = mediaReferenceAllocator,
+                            allowMultimodal = supportsMultimodalFunctionResponses,
+                        )
                     } else {
                         addUserMessage(message)
                     }
@@ -666,7 +670,11 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         }
     }
 
-    private fun JsonArrayBuilder.addModelMessage(message: UIMessage) {
+    private fun JsonArrayBuilder.addModelMessage(
+        message: UIMessage,
+        mediaReferenceAllocator: GoogleMediaReferenceAllocator,
+        allowMultimodal: Boolean,
+    ) {
         val groups = groupPartsByToolBoundary(message.parts)
         val partsBuffer = mutableListOf<JsonObject>()
         // Forward thoughtSignature from any preceding Reasoning part to the next Tool
@@ -719,18 +727,18 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                     }
                     partsBuffer.clear()
 
-                    // 紧跟 functionResponse
+                    // Keep the function response immediately after its function call.
                     add(buildJsonObject {
                         put("role", "user")
                         putJsonArray("parts") {
                             group.tools.forEach {
-                            add(
-                                it.toFunctionResponsePart(
-                                    mediaReferenceAllocator = mediaReferenceAllocator,
-                                    allowMultimodal = supportsMultimodalFunctionResponses,
+                                add(
+                                    it.toFunctionResponsePart(
+                                        mediaReferenceAllocator = mediaReferenceAllocator,
+                                        allowMultimodal = allowMultimodal,
+                                    )
                                 )
-                            )
-                        }
+                            }
                         }
                     })
                 }
