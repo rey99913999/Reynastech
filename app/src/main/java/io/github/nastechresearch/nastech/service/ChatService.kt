@@ -67,6 +67,10 @@ import io.github.nastechresearch.nastech.data.ai.GenerationChunk
 import io.github.nastechresearch.nastech.data.ai.GenerationHandler
 import io.github.nastechresearch.nastech.data.execution.ExecutionToolRegistry
 import io.github.nastechresearch.nastech.data.execution.ToolSourceHint
+import io.github.nastechresearch.nastech.data.ai.tools.AssistantToolPermissionResolver
+import io.github.nastechresearch.nastech.data.ai.tools.AssistantToolPermissionRepository
+import io.github.nastechresearch.nastech.data.ai.tools.AssistantToolPermissionPolicy
+import io.github.nastechresearch.nastech.data.ai.tools.TaskToolApprovalGrants
 import io.github.nastechresearch.nastech.data.agent.ConversationAgentRuntime
 import io.github.nastechresearch.nastech.data.agent.buildAutonomousTaskTool
 import io.github.nastechresearch.nastech.data.ai.ContextBudgetPlanner
@@ -237,6 +241,9 @@ class ChatService(
     private val folderRepository: FolderRepository,
     private val conversationAgentRuntime: ConversationAgentRuntime,
 ) {
+    private val assistantToolPermissionResolver = AssistantToolPermissionResolver()
+    private val assistantToolPermissionRepository = AssistantToolPermissionRepository(settingsStore)
+
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
 
@@ -1147,41 +1154,17 @@ class ChatService(
                 // for in-app conversations that didn't register one.
                 systemAddendum = io.github.nastechresearch.nastech.data.ai.tools
                     .ConversationSystemAddendum.get(conversationId),
-                isToolAutoApproved = { toolName ->
-                    // YOLO mode ("I AM STUPID" toggle in Settings → Tool approvals): every
-                    // tool auto-approves. User opted into this explicitly. HARDLINE still
-                    // blocks rm -rf / et al — that check runs BEFORE auto-approval in
-                    // GenerationHandler, so YOLO can't smuggle one through.
-                    //
-                    // Headless conversations (cron-driven) also auto-approve EVERY tool;
-                    // the user pre-authorised the schedule itself at job-creation time
-                    // and there's no UI surface to prompt at fire time.
-                    //
-                    // Otherwise: "Allow for this chat" (in-memory, per-conversation) OR
-                    // "Always Allow" (DataStore-backed, across the whole app). The
-                    // Once-grant lives in the message itself as
-                    // ToolApprovalState.Approved, so it's already handled by the regular
-                    // Pending → Approved transition.
-                    //
-                    // ask_user is a human-input request, NOT a permission gate. It must pause
-                    // for the user whenever there's a surface to ask on (the in-app question card
-                    // or the Telegram clarify flow), so it ignores YOLO and the allow-lists —
-                    // otherwise it auto-executes its placeholder body and returns
-                    // ask_user_unavailable. In a headless run (cron / sub-agent) there's nobody to
-                    // answer, so it still auto-approves there and falls through to that graceful
-                    // envelope instead of hanging the turn.
-                    if (toolName == "ask_user") {
-                        io.github.nastechresearch.nastech.data.ai.tools.HeadlessConversations
-                            .shouldAutoApprove(conversationId)
-                    } else {
-                        toolApprovalPreferences.currentYolo() ||
-                            io.github.nastechresearch.nastech.data.ai.tools.HeadlessConversations
-                                .shouldAutoApprove(conversationId) ||
-                            io.github.nastechresearch.nastech.data.ai.tools.ToolApprovalAllowList
-                                .isAllowedForChat(conversationId, toolName) ||
-                            toolApprovalPreferences.current().contains(toolName)
-                    }
+                // Headless execution has no approval UI; preserve the existing deliberate
+                // headless authorization path. Foreground/in-app execution always uses the
+                // Assistant-scoped resolver and never reads a global grant list.
+                isToolAutoApproved = { _ ->
+                    io.github.nastechresearch.nastech.data.ai.tools.HeadlessConversations
+                        .shouldAutoApprove(conversationId)
                 },
+                toolPermissionResolver =
+                    if (io.github.nastechresearch.nastech.data.ai.tools.HeadlessConversations
+                        .isHeadless(conversationId)
+                    ) null else assistantToolPermissionResolver,
                 onAfterToolExecution = { generatedMessages ->
                     if (messageRange != null || !settings.enableAutoCompaction) {
                         null
@@ -1241,6 +1224,8 @@ class ChatService(
                 conversationModeInjectionIds = conversation.modeInjectionIds,
                 conversationLorebookIds = conversation.lorebookIds,
                 workspaceCwd = conversation.workspaceCwd,
+                // Update 04: taskId remains optional for normal chats; structured task
+                // executors pass their task id through their own approval resolver.
                 memories = if (assistant.useGlobalMemory) {
                     memoryRepository.getGlobalMemories()
                 } else {
