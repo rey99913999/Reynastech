@@ -127,6 +127,7 @@ import io.github.nastechresearch.nastech.data.execution.ToolCategory
 import io.github.nastechresearch.nastech.data.execution.ToolRiskLevel
 import io.github.nastechresearch.nastech.data.execution.ToolSourceHint
 import io.github.nastechresearch.nastech.data.execution.ToolSourceKind
+import io.github.nastechresearch.nastech.plugin.PluginPermissions
 import io.github.nastechresearch.nastech.data.event.AppEvent
 import io.github.nastechresearch.nastech.data.event.AppEventBus
 import io.github.nastechresearch.nastech.utils.readClipboardText
@@ -1083,7 +1084,7 @@ class LocalTools(
                         source = ToolSourceKind.PLUGIN,
                         sourceId = registration.pluginId,
                         category = ToolCategory.MCP_PLUGIN,
-                        risk = if (registration.requiredPermissions.any(::isSensitivePermission)) {
+                        risk = if (registration.requiredPermissions.any { it in PluginPermissions.sensitive }) {
                             ToolRiskLevel.HIGH
                         } else {
                             ToolRiskLevel.MEDIUM
