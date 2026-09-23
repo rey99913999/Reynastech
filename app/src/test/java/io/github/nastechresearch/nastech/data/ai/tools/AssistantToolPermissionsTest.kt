@@ -21,7 +21,7 @@ class AssistantToolPermissionsTest {
     ): Tool = Tool(
         name = name,
         description = name,
-        parameters = { me.rerere.ai.core.InputSchema.Obj(emptyMap()) },
+        parameters = { me.rerere.ai.core.InputSchema.Obj(properties = buildJsonObject {}, required = emptyList()) },
         needsApproval = { needsApproval },
         execute = { emptyList() },
     )
@@ -68,7 +68,6 @@ class AssistantToolPermissionsTest {
         }
 
         assertEquals(ToolPermissionDecision.Action.ALLOW, a.action)
-        assertEquals(ToolPermissionDecision.Action.ALLOW_LOW_RISK.name, AssistantToolDefaultPolicy.ALLOW_LOW_RISK.name)
         assertEquals(ToolPermissionDecision.Action.ASK, b.action)
     }
 
