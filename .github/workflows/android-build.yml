@@ -141,6 +141,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Run Update 03 progressive registry unit test
+        run: ./gradlew :app:testDebugUnitTest --tests io.github.nastechresearch.nastech.data.execution.ExecutionToolRegistryTest --no-daemon --stacktrace
+
       - name: Build release APK
         run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
