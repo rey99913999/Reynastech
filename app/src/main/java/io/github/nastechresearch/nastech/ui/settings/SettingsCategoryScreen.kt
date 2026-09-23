@@ -11,22 +11,26 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import io.github.nastechresearch.nastech.R
 import io.github.nastechresearch.nastech.Screen
 import io.github.nastechresearch.nastech.ui.components.nav.BackButton
 import io.github.nastechresearch.nastech.ui.components.ui.CardGroup
 import io.github.nastechresearch.nastech.ui.components.ui.CardGroupScope
-import io.github.nastechresearch.nastech.ui.context.Navigator
 import io.github.nastechresearch.nastech.ui.context.LocalNavController
+import io.github.nastechresearch.nastech.ui.hooks.rememberAmoledDarkMode
+import io.github.nastechresearch.nastech.ui.pages.setting.SettingVM
 import io.github.nastechresearch.nastech.ui.theme.CustomColors
 import io.github.nastechresearch.nastech.utils.joinQQGroup
 import io.github.nastechresearch.nastech.utils.openUrl
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.AiMagic
 import me.rerere.hugeicons.stroke.ArrowRight01
@@ -51,6 +55,7 @@ import me.rerere.hugeicons.stroke.SmartPhone01
 import me.rerere.hugeicons.stroke.Sun01
 import me.rerere.hugeicons.stroke.Telegram
 import me.rerere.hugeicons.stroke.Wrench01
+import org.koin.androidx.compose.koinViewModel
 
 private data class SettingsItem(
     val title: Int,
@@ -62,6 +67,9 @@ private data class SettingsItem(
 
 @Composable
 fun SettingsCategoryScreen(category: SettingsCategoryId) {
+    val settingsVm: SettingVM = koinViewModel()
+    val settings by settingsVm.settings.collectAsStateWithLifecycle()
+    var amoledDarkMode by rememberAmoledDarkMode()
     val navController = LocalNavController.current
     val context = LocalContext.current
     val items = categoryItems(category, context)
@@ -81,6 +89,38 @@ fun SettingsCategoryScreen(category: SettingsCategoryId) {
             contentPadding = contentPadding + PaddingValues(8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (category == SettingsCategoryId.APPEARANCE) {
+                item {
+                    CardGroup(
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                        title = { Text(stringResource(R.string.settings_theme_options)) },
+                    ) {
+                        item(
+                            headlineContent = { Text(stringResource(R.string.setting_page_dynamic_color)) },
+                            supportingContent = { Text(stringResource(R.string.setting_page_dynamic_color_desc)) },
+                            trailingContent = {
+                                Switch(
+                                    checked = settings.dynamicColor,
+                                    onCheckedChange = {
+                                        settingsVm.updateSettings(settings.copy(dynamicColor = it))
+                                    },
+                                )
+                            },
+                        )
+                        item(
+                            headlineContent = { Text(stringResource(R.string.setting_display_page_amoled_dark_mode_title)) },
+                            supportingContent = { Text(stringResource(R.string.setting_display_page_amoled_dark_mode_desc)) },
+                            trailingContent = {
+                                Switch(
+                                    checked = amoledDarkMode,
+                                    onCheckedChange = { amoledDarkMode = it },
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+
             item {
                 CardGroup(modifier = Modifier.padding(horizontal = 8.dp)) {
                     items.forEach { entry ->
