@@ -5,6 +5,8 @@ import io.github.nastechresearch.nastech.data.task.TaskRecoveryAction
 import io.github.nastechresearch.nastech.data.ai.tools.AssistantToolPermissionResolver
 import io.github.nastechresearch.nastech.data.ai.tools.ToolPermissionDecision
 import io.github.nastechresearch.nastech.data.model.Assistant
+import io.github.nastechresearch.nastech.data.task.TaskToolUsage
+import io.github.nastechresearch.nastech.data.task.TaskToolUsageTracker
 import kotlinx.coroutines.delay
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
@@ -101,6 +103,14 @@ class LocalExecutionEngine(
                 ) {
                     ToolPermissionDecision.Action.ALLOW -> Unit
                     ToolPermissionDecision.Action.ASK -> {
+                        TaskToolUsageTracker.record(
+                            plan.taskId,
+                            TaskToolUsage(
+                                toolName = resolvedToolName,
+                                status = TaskToolUsage.Status.PENDING_APPROVAL,
+                                decision = "Ask",
+                            ),
+                        )
                         results += ExecutionStepResult(
                             stepId = step.id,
                             taskStepId = step.taskStepId,
@@ -111,6 +121,14 @@ class LocalExecutionEngine(
                         break
                     }
                     ToolPermissionDecision.Action.DENY -> {
+                        TaskToolUsageTracker.record(
+                            plan.taskId,
+                            TaskToolUsage(
+                                toolName = resolvedToolName,
+                                status = TaskToolUsage.Status.DENIED,
+                                decision = "Deny",
+                            ),
+                        )
                         results += ExecutionStepResult(
                             stepId = step.id,
                             taskStepId = step.taskStepId,
@@ -180,6 +198,13 @@ class LocalExecutionEngine(
                         recoveryAttempt = attempt > 1,
                     )
 
+                    TaskToolUsageTracker.record(
+                        plan.taskId,
+                        TaskToolUsage(
+                            toolName = resolvedToolName,
+                            status = TaskToolUsage.Status.COMPLETED,
+                        ),
+                    )
                     successResult = ExecutionStepResult(
                         stepId = step.id,
                         taskStepId = step.taskStepId,
@@ -209,6 +234,13 @@ class LocalExecutionEngine(
                 continue
             }
 
+            TaskToolUsageTracker.record(
+                plan.taskId,
+                TaskToolUsage(
+                    toolName = resolvedToolName,
+                    status = TaskToolUsage.Status.FAILED,
+                ),
+            )
             results += failure(plan, step, lastError)
             break
         }
