@@ -72,7 +72,7 @@ data class Assistant(
     // Update 04 — Assistant-scoped tool permissions. The registry owns tool identity/metadata;
     // this model stores only the Assistant's policy choices and enabled-state overrides.
     val toolDefaultPolicy: io.github.nastechresearch.nastech.data.ai.tools.AssistantToolDefaultPolicy =
-        io.github.nastechresearch.nastech.data.ai.tools.AssistantToolDefaultPolicy.ALLOW_LOW_RISK,
+        io.github.nastechresearch.nastech.data.ai.tools.AssistantToolDefaultPolicy.ASK,
     val toolPermissionOverrides: List<io.github.nastechresearch.nastech.data.ai.tools.AssistantToolPermission> = emptyList(),
     val disabledToolIds: Set<String> = emptySet(),
 )
