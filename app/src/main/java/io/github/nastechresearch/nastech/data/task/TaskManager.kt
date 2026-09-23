@@ -79,6 +79,7 @@ class TaskManager(
         val next = nextIncompleteStep(taskId)
         if (next == null) {
             updateTaskStatus(task.copy(status = TaskStatus.COMPLETED.name, progress = 100))
+            io.github.nastechresearch.nastech.data.ai.tools.TaskToolApprovalGrants.clearTask(taskId)
             return
         }
         val now = System.currentTimeMillis()
@@ -111,6 +112,7 @@ class TaskManager(
         val task = db.taskDao().getById(taskId) ?: return
         val now = System.currentTimeMillis()
         updateTaskStatus(task.copy(status = TaskStatus.CANCELLED.name, updatedAt = now))
+        io.github.nastechresearch.nastech.data.ai.tools.TaskToolApprovalGrants.clearTask(taskId)
         audit(taskId, eventType = "CANCELLED", status = TaskStatus.CANCELLED.name)
     }
 
@@ -123,6 +125,7 @@ class TaskManager(
                 updatedAt = System.currentTimeMillis(),
             )
         )
+        io.github.nastechresearch.nastech.data.ai.tools.TaskToolApprovalGrants.clearTask(taskId)
         audit(taskId, eventType = "FAILED", status = TaskStatus.FAILED.name, error = reason.take(2_000))
     }
 
@@ -172,6 +175,9 @@ class TaskManager(
             val next = nextIncompleteStep(taskId, excluding = stepId)
             val progressValue = progress(taskId, stepId)
             val nextStatus = if (next == null) TaskStatus.COMPLETED.name else TaskStatus.RUNNING.name
+            if (next == null) {
+                io.github.nastechresearch.nastech.data.ai.tools.TaskToolApprovalGrants.clearTask(taskId)
+            }
             db.taskDao().upsert(
                 task.copy(
                     status = nextStatus,
