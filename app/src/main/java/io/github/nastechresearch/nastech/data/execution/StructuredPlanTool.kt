@@ -6,6 +6,8 @@ import kotlinx.serialization.json.JsonPrimitive
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import io.github.nastechresearch.nastech.data.ai.tools.AssistantToolPermissionResolver
+import io.github.nastechresearch.nastech.data.model.Assistant
 import kotlinx.serialization.json.Json
 
 fun buildStructuredPlanTool(
@@ -13,6 +15,8 @@ fun buildStructuredPlanTool(
     registry: ExecutionToolRegistry,
     engine: LocalExecutionEngine,
     isToolAutoApproved: suspend (String) -> Boolean,
+    toolPermissionResolver: AssistantToolPermissionResolver? = null,
+    assistant: Assistant? = null,
 ): Tool {
     return Tool(
         name = "execute_structured_plan",
@@ -129,6 +133,8 @@ fun buildStructuredPlanTool(
                     plan = plan,
                     registry = registry,
                     isToolAutoApproved = isToolAutoApproved,
+                    toolPermissionResolver = toolPermissionResolver,
+                    assistant = assistant,
                 )
                 listOf(
                     UIMessagePart.Text(
