@@ -76,10 +76,7 @@ class AssistantToolPermissionsVM(
         PermissionFilterState(null, "", null, null, null, null),
     )
 
-    val filteredMetadata: StateFlow<List<ToolMetadata>> = combine(
-        permissionFilterState,
-        assistant,
-    ) { filters, currentAssistant ->
+    val filteredMetadata: StateFlow<List<ToolMetadata>> = permissionFilterState.combine(assistant) { filters, currentAssistant ->
         val tools = filters.registry?.allMetadata().orEmpty()
         if (currentAssistant == null) return@combine emptyList()
 
