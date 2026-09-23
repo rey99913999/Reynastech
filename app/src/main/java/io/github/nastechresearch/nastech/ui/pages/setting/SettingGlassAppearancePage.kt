@@ -40,8 +40,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import kotlin.math.roundToInt
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.nastechresearch.nastech.R
 import io.github.nastechresearch.nastech.Screen
 import io.github.nastechresearch.nastech.data.datastore.BlackSilenceColorFamily
 import io.github.nastechresearch.nastech.data.datastore.GlassAppearance
@@ -68,8 +70,8 @@ fun SettingGlassAppearancePage(vm: SettingVM = koinViewModel()) {
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
-                title = { Text("Glass Appearance") },
-                subtitle = { Text("Adjust Nastech materials globally or surface by surface") },
+                title = { Text(stringResource(R.string.settings_glass_material)) },
+                subtitle = { Text(stringResource(R.string.setting_glass_adjust_desc)) },
                 navigationIcon = { BackButton() },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
@@ -94,14 +96,14 @@ fun SettingGlassAppearancePage(vm: SettingVM = koinViewModel()) {
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text("Restore readable Nastech colors", style = MaterialTheme.typography.titleSmall)
+                            Text(stringResource(R.string.setting_glass_restore_title), style = MaterialTheme.typography.titleSmall)
                             Text(
                                 "Reset tint, contrast, and text colors to the balanced Nastech dark appearance.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        OutlinedButton(onClick = { update(GlassAppearance()) }) { Text("Restore") }
+                        OutlinedButton(onClick = { update(GlassAppearance()) }) { Text(stringResource(R.string.restore)) }
                     }
                 }
             }
@@ -184,8 +186,8 @@ private fun GlassPreview(profile: GlassAppearance) {
             modifier = Modifier.padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("Live preview", style = MaterialTheme.typography.titleMedium, color = primaryText)
-            Text("Nastech surfaces update as you move the controls.", color = secondaryText)
+            Text(stringResource(R.string.setting_glass_live_preview), style = MaterialTheme.typography.titleMedium, color = primaryText)
+            Text(stringResource(R.string.setting_glass_live_preview_desc), color = secondaryText)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -232,7 +234,7 @@ private fun GlobalGlassControls(profile: GlassAppearance, onUpdate: (GlassAppear
             GlassSlider("Color saturation", profile.saturation) { onUpdate(profile.copy(saturation = it)) }
             GlassSlider("Background brightness", profile.backgroundBrightness) { onUpdate(profile.copy(backgroundBrightness = it)) }
             HorizontalDivider()
-            Text("Typography and colors", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.setting_glass_typography_colors), style = MaterialTheme.typography.titleSmall)
             Text(
                 "These controls update foreground text, supporting copy, and interactive accents across Nastech.",
                 style = MaterialTheme.typography.bodySmall,
@@ -273,7 +275,7 @@ private fun BlackSilenceFamilyPicker(
     onUpdate: (GlassAppearance) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Black Silence colour family", style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.setting_glass_black_silence_colors), style = MaterialTheme.typography.titleSmall)
         Text(
             "Every surface keeps the same quiet layout; the chosen family changes only the ambient bloom, active edge, and accent.",
             style = MaterialTheme.typography.bodySmall,
@@ -332,7 +334,7 @@ private fun SidebarControls(widthDp: Int, onWidthChange: (Int) -> Unit) {
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("Chat sidebar", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.setting_glass_chat_sidebar), style = MaterialTheme.typography.titleSmall)
             Text(
                 "Set a comfortable drawer width. Its tint, transparency, blur, border, and highlight can be adjusted separately in Workspace surfaces.",
                 style = MaterialTheme.typography.bodySmall,
@@ -391,7 +393,7 @@ private fun SurfaceGroupCard(group: GlassSurfaceGroup, profile: GlassAppearance,
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
-            Text("Edit", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Text(stringResource(R.string.edit), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
         }
     }
 }
@@ -441,7 +443,7 @@ private fun GlassSurfaceEditor(surface: GlassSurface, profile: GlassAppearance, 
                 OutlinedButton(
                     onClick = { onUpdate(profile.copy(surfaceOverrides = profile.surfaceOverrides - surface)) },
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("Reset ${surface.displayName()} to global") }
+                ) { Text(stringResource(R.string.setting_glass_reset_to_global, surface.displayName())) }
             }
         }
     }
@@ -490,7 +492,7 @@ private fun OptionalHexColorEditor(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (value != null) {
-                OutlinedButton(onClick = onReset) { Text("Use theme") }
+                OutlinedButton(onClick = onReset) { Text(stringResource(R.string.setting_glass_use_theme)) }
             }
         }
     }
@@ -593,9 +595,9 @@ private fun CustomHexColorField(value: Long, onValueChange: (Long) -> Unit) {
             text = it
             it.parseHexColor()?.let(onValueChange)
         },
-        label = { Text("Custom color") },
+        label = { Text(stringResource(R.string.setting_glass_custom_color)) },
         placeholder = { Text("#233044") },
-        supportingText = { Text("Enter any #RRGGBB color") },
+        supportingText = { Text(stringResource(R.string.setting_glass_custom_color_desc)) },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
     )

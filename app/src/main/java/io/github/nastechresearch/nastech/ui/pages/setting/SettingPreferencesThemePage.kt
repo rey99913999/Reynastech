@@ -87,8 +87,8 @@ fun SettingPreferencesThemePage(vm: SettingVM = koinViewModel()) {
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingGlassAppearance) },
-                        headlineContent = { Text("Glass Appearance") },
-                        supportingContent = { Text("Tint, transparency, blur, and manual surface overrides") },
+                        headlineContent = { Text(stringResource(R.string.settings_glass_material)) },
+                        supportingContent = { Text(stringResource(R.string.settings_glass_material_desc)) },
                         trailingContent = { Icon(HugeIcons.ArrowRight01, contentDescription = null) },
                     )
                     item(

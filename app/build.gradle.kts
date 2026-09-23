@@ -27,6 +27,10 @@ android {
     defaultConfig {
         applicationId = "io.github.nastechresearch.nastech"
         minSdk = 26
+
+        // The shipped Android UI intentionally supports Arabic and English only.
+        resourceConfigurations.add("en")
+        resourceConfigurations.add("ar")
         targetSdk = 37
         versionCode = 196
         versionName = "2.4.28"
