@@ -110,7 +110,7 @@ fun SettingChatStoragePage(
     if (showClearCacheDialog) {
         AlertDialog(
             onDismissRequest = { showClearCacheDialog = false },
-            title = { Text("Clear temporary cache?") },
+            title = { Text(stringResource(R.string.setting_chat_storage_clear_cache_title)) },
             text = {
                 Text(
                     "This removes temporary browser, preview, and cached media files. Your conversations, managed attachments, backups, and workspace files are not deleted."
@@ -124,10 +124,10 @@ fun SettingChatStoragePage(
                         scanRequest += 1
                         toaster.show("Temporary cache cleared")
                     }
-                ) { Text("Clear cache") }
+                ) { Text(stringResource(R.string.setting_chat_storage_clear_cache)) }
             },
             dismissButton = {
-                TextButton(onClick = { showClearCacheDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showClearCacheDialog = false }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -135,7 +135,7 @@ fun SettingChatStoragePage(
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
-                title = { Text("Chat Storage") },
+                title = { Text(stringResource(R.string.setting_page_chat_storage)) },
                 navigationIcon = { BackButton() },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
@@ -223,7 +223,7 @@ fun SettingChatStoragePage(
                             onClick = { navigator.navigate(Screen.SettingFiles) },
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
                         ) {
-                            Text("Manage all ${visibleAttachments.size} attachments")
+                            Text(stringResource(R.string.setting_chat_storage_manage_attachments, visibleAttachments.size))
                         }
                     }
                 }
@@ -282,7 +282,7 @@ private fun StorageHeroCard(
             modifier = Modifier.fillMaxWidth().padding(22.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Nastech storage", style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(R.string.setting_chat_storage_nastech_storage), style = MaterialTheme.typography.headlineSmall)
             Text(
                 snapshot.totalBytes.fileSizeToString(),
                 style = MaterialTheme.typography.displaySmall,
@@ -298,7 +298,7 @@ private fun StorageHeroCard(
                 StoragePill("Data ${snapshot.dataBytes.fileSizeToString()}")
                 StoragePill("Cache ${snapshot.cacheBytes.fileSizeToString()}")
             }
-            OutlinedButton(onClick = onRefresh) { Text("Refresh scan") }
+            OutlinedButton(onClick = onRefresh) { Text(stringResource(R.string.setting_chat_storage_refresh_scan)) }
         }
     }
 }
@@ -357,7 +357,7 @@ private fun StorageCategoryRow(
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(bytes.fileSizeToString(), style = MaterialTheme.typography.titleSmall)
-            if (onClick != null) TextButton(onClick = onClick) { Text("Open") }
+            if (onClick != null) TextButton(onClick = onClick) { Text(stringResource(R.string.open)) }
         }
     }
 }
@@ -368,7 +368,7 @@ private fun AttachmentFilterRow(selected: NastechStorageFilter, onSelect: (Naste
         modifier = Modifier.fillMaxWidth().padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text("Filter attachments", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.setting_chat_storage_filter_attachments), style = MaterialTheme.typography.titleMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.fillMaxWidth()) {
             NastechStorageFilter.entries.take(3).forEach { option ->
                 FilterChip(selected = selected == option, onClick = { onSelect(option) }, label = { Text(option.label) })
@@ -421,7 +421,7 @@ private fun StorageNoteCard(containerColor: androidx.compose.ui.graphics.Color, 
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text("Your data stays under your control", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.setting_chat_storage_control_title), style = MaterialTheme.typography.titleMedium)
             Text(
                 "Storage measurements are local to this device. Manage attachments individually, clear only temporary cache here, and use Backup before moving or resetting persistent Nastech data.",
                 style = MaterialTheme.typography.bodyMedium,
