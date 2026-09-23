@@ -7,6 +7,7 @@ import io.github.nastechresearch.nastech.data.execution.ToolRiskLevel
 import io.github.nastechresearch.nastech.data.model.Assistant
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlin.uuid.Uuid
