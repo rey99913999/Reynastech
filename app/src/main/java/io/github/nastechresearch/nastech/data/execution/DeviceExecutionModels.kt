@@ -29,6 +29,11 @@ data class DeviceCapabilityContract(
     fun requiredCapabilityFailure(): DeviceCapability? =
         requiredCapabilities.firstNotNullOfOrNull { name ->
             capability(name)?.takeIf { it.status != DeviceCapabilityStatus.AVAILABLE }
+                ?: DeviceCapability(
+                    name = name,
+                    status = DeviceCapabilityStatus.UNAVAILABLE,
+                    reason = "required_capability_not_registered",
+                )
         }
 }
 
