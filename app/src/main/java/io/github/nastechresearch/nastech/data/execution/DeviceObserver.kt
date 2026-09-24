@@ -150,6 +150,8 @@ class AndroidDeviceObserver(
         observation
     }
 
+    private fun sha256(value: String): String = sha256(value.toByteArray(Charsets.UTF_8))
+
     private fun sha256(bytes: ByteArray): String =
         MessageDigest.getInstance("SHA-256").digest(bytes)
             .joinToString("") { "%02x".format(it) }
