@@ -188,7 +188,7 @@ internal fun analyzeDeviceIntent(text: String): DeviceIntentPreflight {
         confidence = when {
             !phoneCue -> 0f
             keyboardCue && appCue -> 0.98f
-            appCue || screenCue -> 0.94f
+            appCue || actionCue -> 0.94f
             else -> 0.90f
         },
         requiredCapabilities = requiredCapabilities,
