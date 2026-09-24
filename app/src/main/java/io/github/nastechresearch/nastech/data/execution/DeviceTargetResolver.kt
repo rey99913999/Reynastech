@@ -177,7 +177,7 @@ class DeviceTargetResolver(
     }
 
     private fun parseCoordinates(value: String): DeviceTarget? {
-        val match = Regex("""^\\(?\\s*(\\d+(?:\\.\\d+)?)\\s*[, ]\\s*(\\d+(?:\\.\\d+)?)\\s*\\)?$""")
+        val match = Regex("""^\(?\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)\s*\)?$""")
             .matchEntire(normalizeDeviceText(value)) ?: return null
         val x = match.groupValues[1].toFloatOrNull() ?: return null
         val y = match.groupValues[2].toFloatOrNull() ?: return null
