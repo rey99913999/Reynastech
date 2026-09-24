@@ -10,6 +10,19 @@ import io.github.nastechresearch.nastech.data.agent.ConversationAgentRuntime
 import io.github.nastechresearch.nastech.data.task.TaskManager
 import io.github.nastechresearch.nastech.data.execution.ExecutionTelemetry
 import io.github.nastechresearch.nastech.data.execution.LocalExecutionEngine
+import io.github.nastechresearch.nastech.data.execution.DeviceAgentCore
+import io.github.nastechresearch.nastech.data.execution.DeviceStateCache
+import io.github.nastechresearch.nastech.data.execution.DeviceObserver
+import io.github.nastechresearch.nastech.data.execution.AndroidDeviceObserver
+import io.github.nastechresearch.nastech.data.execution.DeviceTargetResolver
+import io.github.nastechresearch.nastech.data.execution.AndroidAccessibilityTargetLookup
+import io.github.nastechresearch.nastech.data.execution.VisionPipelineTargetLookup
+import io.github.nastechresearch.nastech.data.execution.DevicePostconditionVerifier
+import io.github.nastechresearch.nastech.data.execution.AndroidDeviceStateVerifier
+import io.github.nastechresearch.nastech.data.execution.DeviceStateWaiter
+import io.github.nastechresearch.nastech.data.execution.BoundedDeviceStateWaiter
+import io.github.nastechresearch.nastech.data.execution.DeviceRecoveryEngine
+import io.github.nastechresearch.nastech.data.vision.VisionPipeline
 import io.github.nastechresearch.nastech.data.repository.ConversationRepository
 import io.github.nastechresearch.nastech.data.repository.FavoriteRepository
 import io.github.nastechresearch.nastech.data.repository.FolderRepository
@@ -47,7 +60,63 @@ val repositoryModule = module {
 
     single { ExecutionTelemetry(get()) }
 
-    single { LocalExecutionEngine(taskManager = get(), telemetry = get()) }
+    single { DeviceStateCache() }
+
+    single<DeviceObserver> {
+        AndroidDeviceObserver(
+            context = get(),
+            cache = get(),
+        )
+    }
+
+    single {
+        DeviceTargetResolver(
+            cache = get(),
+            accessibilityLookup = AndroidAccessibilityTargetLookup(),
+            visionLookup = VisionPipelineTargetLookup(
+                VisionPipeline(
+                    context = get(),
+                    providerManager = get(),
+                )
+            ),
+        )
+    }
+
+    single<DevicePostconditionVerifier> {
+        AndroidDeviceStateVerifier(
+            context = get(),
+            observer = get(),
+        )
+    }
+
+    single<DeviceStateWaiter> {
+        BoundedDeviceStateWaiter(verifier = get())
+    }
+
+    single { DeviceRecoveryEngine(maxAttempts = 4) }
+
+    single {
+        DeviceAgentCore(
+            context = get(),
+            telemetry = get(),
+            taskManager = get(),
+            stateCache = get(),
+            observer = get(),
+            targetResolver = get(),
+            verifier = get(),
+            waiter = get(),
+            recoveryEngine = get(),
+            agentConfigRepository = get(),
+        )
+    }
+
+    single {
+        LocalExecutionEngine(
+            taskManager = get(),
+            telemetry = get(),
+            deviceAgentCore = get(),
+        )
+    }
 
     single { AgentConfigRepository(get()) }
 
