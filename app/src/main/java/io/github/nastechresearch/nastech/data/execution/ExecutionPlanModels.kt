@@ -80,6 +80,7 @@ data class ExecutionStepResult(
     val lifecycle: DeviceActionLifecycle? = null,
     val observationSource: String? = null,
     val recoveryAttempts: Int = 0,
+    val artifactState: DeviceArtifactState? = null,
 )
 
 @Serializable
