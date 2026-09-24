@@ -1,7 +1,6 @@
 package io.github.nastechresearch.nastech.data.ai.tools
 
 import android.view.KeyEvent
-import kotlinx.coroutines.delay
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -28,11 +27,6 @@ import io.github.nastechresearch.nastech.data.keyboard.KeyboardApiClient
  * HARDLINE arm: typing a string into a focused field is not shell execution and the
  * keyboard itself refuses password / sensitive fields.
  */
-
-// Settle delay between committing typed text and firing Enter in keyboard_type(submit=true).
-// Gives the target app a beat to commit the text and re-focus before the key event, which
-// is what prevents the type/press_key race that garbles terminal input.
-private const val SUBMIT_SETTLE_DELAY_MS = 120L
 
 // keycode aliases the LLM is likely to use, mapped to android.view.KeyEvent constants.
 private val KEY_NAME_ALIASES: Map<String, Int> = mapOf(
@@ -109,9 +103,10 @@ private inline fun <T> handle(
 fun keyboardTypeTool(client: KeyboardApiClient): Tool = Tool(
     name = "keyboard_type",
     description = "Type text into the currently focused text field on the device via the " +
-        "agent-keyboard IME. Inserts at the cursor. Set submit=true to press Enter right " +
-        "after typing, as one atomic action - prefer this over a separate keyboard_press_key " +
-        "call, which can race the app and garble input (especially in terminals). Fails if " +
+        "agent-keyboard IME. Inserts at the cursor. Set submit=true to insert the text and " +
+        "press Enter as one atomic action inside the keyboard service - prefer this over a " +
+        "separate keyboard_press_key(enter) call, which can race the app and garble input " +
+        "(especially in terminals). Fails if " +
         "no field is focused or the field is a password field. In terminal-like apps " +
         "keyboard_read_field returns empty, so take a screenshot first to confirm the prompt " +
         "is ready before typing. Example: keyboard_type(text=\"whoami\", submit=true).",
@@ -140,21 +135,17 @@ fun keyboardTypeTool(client: KeyboardApiClient): Tool = Tool(
                 "Provide the text to type.",
             )
         val submit = args.jsonObject["submit"]?.jsonPrimitive?.booleanOrNull ?: false
-        when (val typed = client.typeText(text)) {
-            is KeyboardApiClient.Result.Err -> failureEnvelope(typed.failure)
-            is KeyboardApiClient.Result.Ok -> {
-                if (!submit) {
-                    ok { put("typed", text.length) }
-                } else {
-                    // Let the app commit the text and re-focus before Enter fires.
-                    delay(SUBMIT_SETTLE_DELAY_MS)
-                    when (val entered = client.pressKey(KeyEvent.KEYCODE_ENTER)) {
-                        is KeyboardApiClient.Result.Err -> failureEnvelope(entered.failure)
-                        is KeyboardApiClient.Result.Ok ->
-                            ok { put("typed", text.length); put("submitted", true) }
-                    }
+        when (val result = if (submit) {
+            client.typeTextAndSubmit(text)
+        } else {
+            client.typeText(text)
+        }) {
+            is KeyboardApiClient.Result.Err -> failureEnvelope(result.failure)
+            is KeyboardApiClient.Result.Ok ->
+                ok {
+                    put("typed", text.length)
+                    if (submit) put("submitted", true)
                 }
-            }
         }
     },
 )

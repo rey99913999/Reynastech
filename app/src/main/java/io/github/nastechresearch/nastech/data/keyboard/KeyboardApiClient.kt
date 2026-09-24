@@ -71,6 +71,14 @@ class KeyboardApiClient(private val context: Context) {
     suspend fun typeText(text: String): Result<Unit> =
         boolCall { api, t -> api.typeText(t, text) }
 
+    /**
+     * Inserts [text] and sends Enter as one ordered keyboard-service transaction.
+     * This is preferable to two separate AIDL calls because another Enter call cannot
+     * overtake the text commit.
+     */
+    suspend fun typeTextAndSubmit(text: String): Result<Unit> =
+        boolCall { api, t -> api.typeTextAndSubmit(t, text) }
+
     suspend fun pressKey(keyCode: Int): Result<Unit> =
         boolCall { api, t -> api.pressKey(t, keyCode) }
 

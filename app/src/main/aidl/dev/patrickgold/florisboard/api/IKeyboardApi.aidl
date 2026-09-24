@@ -22,6 +22,10 @@ interface IKeyboardApi {
 
     // Core text actions
     boolean typeText(String token, String text);
+
+    // Atomically insert text and press Enter in the same ordered operation.
+    boolean typeTextAndSubmit(String token, String text);
+
     boolean pressKey(String token, int keyCode);
     boolean deleteChars(String token, int count);
     boolean clearField(String token);
