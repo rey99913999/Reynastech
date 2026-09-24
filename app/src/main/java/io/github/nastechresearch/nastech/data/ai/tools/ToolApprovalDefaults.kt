@@ -66,6 +66,7 @@ object ToolApprovalDefaults {
         "click_node",
         "global_action",
         "launch_app",
+        "open_app",
         "open_url",          // can dial tel:, draft mailto:, hand a URI to any app
         "open_file",         // ACTION_VIEW on a user-supplied path — same surface as launch_app
         "wake_screen",       // acquires wake lock, turns screen on at night
