@@ -139,7 +139,7 @@ internal fun analyzeDeviceIntent(text: String): DeviceIntentPreflight {
     val normalized = normalizeDeviceText(text)
     if (normalized.isBlank()) return DeviceIntentPreflight()
 
-    val appCue = Regex("""\\b(open|launch|start|switch to|go to)\\b""").containsMatchIn(normalized)
+    val appCue = Regex("""\b(open|launch|start|switch to|go to)\b""").containsMatchIn(normalized)
     val screenCue = listOf(
         "tap", "click", "press", "swipe", "scroll", "screenshot", "screen",
         "look at the screen", "read the screen", "find the button", "find the",
