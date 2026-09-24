@@ -44,6 +44,8 @@ data class StructuredExecutionPlan(
     val logicalPlan: String? = null,
     val taskId: String? = null,
     val version: Int = 1,
+    val requiredCapabilities: Set<String> = emptySet(),
+    val requiredConstraints: Set<String> = emptySet(),
 )
 
 @Serializable
@@ -59,6 +61,10 @@ data class StructuredExecutionStep(
     val approvalRequired: Boolean = true,
     val taskStepId: String? = null,
     val alternativeToolNames: List<String> = emptyList(),
+    val deviceAction: DeviceAction? = null,
+    val preconditions: List<DevicePostcondition> = emptyList(),
+    val postconditions: List<DevicePostcondition> = emptyList(),
+    val requiredConstraints: Set<String> = emptySet(),
 )
 
 @Serializable
@@ -71,6 +77,9 @@ data class ExecutionStepResult(
     val output: String? = null,
     val error: String? = null,
     val checkpointId: String? = null,
+    val lifecycle: DeviceActionLifecycle? = null,
+    val observationSource: String? = null,
+    val recoveryAttempts: Int = 0,
 )
 
 @Serializable
