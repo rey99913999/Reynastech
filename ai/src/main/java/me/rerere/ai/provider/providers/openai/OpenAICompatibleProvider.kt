@@ -1,24 +1,22 @@
-
 package me.rerere.ai.provider.providers.openai
 
+import android.content.Context
 import kotlinx.coroutines.flow.Flow
+import me.rerere.ai.provider.EmbeddingGenerationParams
+import me.rerere.ai.provider.EmbeddingGenerationResult
+import me.rerere.ai.provider.ImageEditParams
+import me.rerere.ai.provider.ImageGenerationParams
+import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
+import me.rerere.ai.provider.ProviderCredential
 import me.rerere.ai.provider.ProviderCredentialResolver
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.TextGenerationResult
-import me.rerere.ai.provider.Model
-import me.rerere.ai.provider.StreamChunk
-import me.rerere.ai.provider.ImageGenerationParams
-import me.rerere.ai.provider.ImageEditParams
-import me.rerere.ai.provider.ImageGenerationItem
-import me.rerere.ai.provider.EmbeddingGenerationParams
-import me.rerere.ai.provider.EmbeddingGenerationResult
-import me.rerere.ai.provider.ProviderCredential
-import android.content.Context
-import kotlinx.coroutines.flow.flow
+import me.rerere.ai.ui.StreamChunk
+import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.ImageGenerationItem
 import okhttp3.OkHttpClient
-import kotlinx.serialization.json.Json
 
 /**
  * Adapter for user-owned OpenAI-compatible endpoints and current Hugging Face inference-provider
@@ -60,14 +58,14 @@ class OpenAICompatibleProvider(
 
     override suspend fun generateText(
         providerSetting: ProviderSetting.Custom,
-        messages: List<me.rerere.ai.ui.UIMessage>,
+        messages: List<UIMessage>,
         params: TextGenerationParams,
     ): TextGenerationResult =
         delegate.generateText(runtimeSetting(providerSetting), messages, params)
 
     override suspend fun streamText(
         providerSetting: ProviderSetting.Custom,
-        messages: List<me.rerere.ai.ui.UIMessage>,
+        messages: List<UIMessage>,
         params: TextGenerationParams,
     ): Flow<StreamChunk> =
         delegate.streamText(runtimeSetting(providerSetting), messages, params)
@@ -81,20 +79,18 @@ class OpenAICompatibleProvider(
     override suspend fun generateImage(
         providerSetting: ProviderSetting,
         params: ImageGenerationParams,
-    ): Flow<ImageGenerationItem> = flow {
-        emitAllCompat(delegate.generateImage(runtimeSetting(providerSetting), params))
+    ): Flow<ImageGenerationItem> {
+        val custom = providerSetting as? ProviderSetting.Custom
+            ?: error("Custom adapter requires ProviderSetting.Custom")
+        return delegate.generateImage(runtimeSetting(custom), params)
     }
 
     override suspend fun editImage(
         providerSetting: ProviderSetting,
         params: ImageEditParams,
-    ): Flow<ImageGenerationItem> = flow {
-        emitAllCompat(delegate.editImage(runtimeSetting(providerSetting), params))
-    }
-
-    private suspend fun kotlinx.coroutines.flow.FlowCollector<ImageGenerationItem>.emitAllCompat(
-        source: Flow<ImageGenerationItem>,
-    ) {
-        source.collect { emit(it) }
+    ): Flow<ImageGenerationItem> {
+        val custom = providerSetting as? ProviderSetting.Custom
+            ?: error("Custom adapter requires ProviderSetting.Custom")
+        return delegate.editImage(runtimeSetting(custom), params)
     }
 }
