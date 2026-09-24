@@ -145,7 +145,7 @@ fun openAppTool(
                         )
                     }
                 }
-                put("success", confirmed || !accessibilityRunning || keyguardLocked)
+                put("success", confirmed)
             }.toString()))
         } catch (t: Throwable) {
             listOf(UIMessagePart.Text(buildJsonObject {
