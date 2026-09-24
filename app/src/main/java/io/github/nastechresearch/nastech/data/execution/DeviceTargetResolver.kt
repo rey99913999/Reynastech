@@ -10,7 +10,11 @@ fun interface AccessibilityTargetLookup {
 }
 
 fun interface VisionTargetLookup {
-    suspend fun resolve(target: String, minConfidence: Float): DeviceTargetResolution?
+    suspend fun resolve(
+        target: String,
+        minConfidence: Float,
+        visionModelId: String?,
+    ): DeviceTargetResolution?
 }
 
 class AndroidAccessibilityTargetLookup : AccessibilityTargetLookup {
@@ -76,14 +80,18 @@ class AndroidAccessibilityTargetLookup : AccessibilityTargetLookup {
 class VisionPipelineTargetLookup(
     private val visionPipeline: VisionPipeline,
 ) : VisionTargetLookup {
-    override suspend fun resolve(target: String, minConfidence: Float): DeviceTargetResolution? {
+    override suspend fun resolve(
+        target: String,
+        minConfidence: Float,
+        visionModelId: String?,
+    ): DeviceTargetResolution? {
         val decision = runCatching {
             visionPipeline.findTarget(
                 target = target,
                 displayId = 0,
                 highConfidence = minConfidence.coerceAtLeast(0.90f),
                 mediumConfidence = (minConfidence - 0.10f).coerceAtLeast(0.50f),
-                visionModelId = null,
+                visionModelId = visionModelId,
             )
         }.getOrNull() ?: return null
 
@@ -148,7 +156,7 @@ class DeviceTargetResolver(
             }
         }
 
-        visionLookup.resolve(target, minConfidence)?.let { result ->
+        visionLookup.resolve(target, minConfidence, visionModelId)?.let { result ->
             when (result) {
                 is DeviceTargetResolution.Resolved -> {
                     cache.rememberTarget(key, result.target)
