@@ -168,8 +168,26 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
         vm.updateSettings(newSettings)
     }
     val onDelete = {
+        val removedModelIds = provider.models.map { it.id }.toSet()
+        val replacementModelId = io.github.nastechresearch.nastech.data.datastore.DEFAULT_AUTO_MODEL_ID
         val newSettings = settings.copy(
-            providers = settings.providers - provider
+            providers = settings.providers - provider,
+            chatModelId = settings.chatModelId.takeUnless { it in removedModelIds } ?: replacementModelId,
+            fastModelId = settings.fastModelId.takeUnless { it in removedModelIds } ?: replacementModelId,
+            translateModeId = settings.translateModeId.takeUnless { it in removedModelIds } ?: replacementModelId,
+            compressModelId = settings.compressModelId.takeUnless { it in removedModelIds } ?: replacementModelId,
+            titleModelId = settings.titleModelId?.takeUnless { it in removedModelIds },
+            suggestionModelId = settings.suggestionModelId?.takeUnless { it in removedModelIds },
+            imageGenerationModelId = settings.imageGenerationModelId.takeUnless { it in removedModelIds }
+                ?: replacementModelId,
+            ocrModelId = settings.ocrModelId.takeUnless { it in removedModelIds } ?: replacementModelId,
+            assistants = settings.assistants.map { assistant ->
+                if (assistant.chatModelId == null || assistant.chatModelId !in removedModelIds) {
+                    assistant
+                } else {
+                    assistant.copy(chatModelId = null)
+                }
+            },
         )
         vm.updateSettings(newSettings)
         navController.popBackStack()
@@ -654,6 +672,52 @@ private fun ModelSettingsForm(
                             onTypeSelected = {
                                 onModelChange(model.copy(type = it))
                             }
+                        )
+
+                        OutlinedTextField(
+                            value = model.contextLength?.toString().orEmpty(),
+                            onValueChange = { value ->
+                                onModelChange(model.copy(contextLength = value.toIntOrNull()?.takeIf { it > 0 }))
+                            },
+                            label = { Text(stringResource(R.string.setting_provider_page_context_window)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                        )
+
+                        OutlinedTextField(
+                            value = model.pricePromptPerToken?.toString().orEmpty(),
+                            onValueChange = { value ->
+                                onModelChange(model.copy(pricePromptPerToken = value.toDoubleOrNull()?.takeIf { it >= 0.0 }))
+                            },
+                            label = { Text(stringResource(R.string.setting_provider_page_prompt_price)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                        )
+
+                        OutlinedTextField(
+                            value = model.priceCompletionPerToken?.toString().orEmpty(),
+                            onValueChange = { value ->
+                                onModelChange(model.copy(priceCompletionPerToken = value.toDoubleOrNull()?.takeIf { it >= 0.0 }))
+                            },
+                            label = { Text(stringResource(R.string.setting_provider_page_completion_price)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                        )
+
+                        OutlinedTextField(
+                            value = model.supportedParameters.joinToString(", "),
+                            onValueChange = { value ->
+                                onModelChange(
+                                    model.copy(
+                                        supportedParameters = value.split(",")
+                                            .map(String::trim)
+                                            .filter(String::isNotBlank)
+                                    )
+                                )
+                            },
+                            label = { Text(stringResource(R.string.setting_provider_page_supported_parameters)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
                         )
 
                         ModelModalitySelector(
@@ -1189,6 +1253,8 @@ fun ModalAbilitySelector(
                             when (ability) {
                                 ModelAbility.TOOL -> R.string.setting_provider_page_tool
                                 ModelAbility.REASONING -> R.string.setting_provider_page_reasoning
+                                ModelAbility.STRUCTURED_OUTPUT -> R.string.setting_provider_page_structured_output
+                                ModelAbility.STREAMING -> R.string.setting_provider_page_streaming
                             }
                         )
                     )

@@ -2133,4 +2133,20 @@
     <string name="setting_speech_output">Speech output</string>
     <string name="setting_voice_input">Voice input</string>
     <string name="setting_start_voice_conversation">Start voice conversation</string>
+    <string name="setting_provider_page_protocol">Protocol</string>
+    <string name="setting_provider_page_discover_models">Discover Models</string>
+    <string name="setting_provider_page_models_discovered_count">Discovered %1$d models</string>
+    <string name="provider_test_model_discovery">Models</string>
+    <string name="provider_test_capabilities">Capabilities</string>
+    <string name="provider_test_no_models">No models returned</string>
+    <string name="provider_test_models_found">%1$d models returned</string>
+    <string name="provider_test_model_available">Selected model is available</string>
+    <string name="provider_test_model_not_available">Selected model was not returned</string>
+    <string name="provider_test_unknown_capability">Unknown (not declared by the model)</string>
+    <string name="setting_provider_page_structured_output">Structured Output</string>
+    <string name="setting_provider_page_streaming">Streaming</string>
+    <string name="setting_provider_page_context_window">Context Window</string>
+    <string name="setting_provider_page_prompt_price">Prompt Price / Token</string>
+    <string name="setting_provider_page_completion_price">Completion Price / Token</string>
+    <string name="setting_provider_page_supported_parameters">Supported Parameters (comma-separated)</string>
 </resources>

@@ -60,7 +60,8 @@ sealed class ProviderSetting {
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
-        var apiKey: String = "",
+        @Transient var apiKey: String = "",
+        var credentialRef: String = "provider-$id",
         var baseUrl: String = "https://api.openai.com/v1",
         var chatCompletionsPath: String = "/chat/completions",
         var useResponseApi: Boolean = false,
@@ -128,12 +129,13 @@ sealed class ProviderSetting {
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
-        var apiKey: String = "",
+        @Transient var apiKey: String = "",
+        var credentialRef: String = "provider-$id",
         var baseUrl: String = "https://generativelanguage.googleapis.com/v1beta",
         var vertexAI: Boolean = false,
         var useServiceAccount: Boolean = false,
-        var privateKey: String = "", // only for vertex AI service account
-        var serviceAccountEmail: String = "", // only for vertex AI service account
+        @Transient var privateKey: String = "", // only for vertex AI service account
+        @Transient var serviceAccountEmail: String = "", // only for vertex AI service account
         var location: String = "us-central1", // only for vertex AI service account
         var projectId: String = "", // only for vertex AI service account
     ) : ProviderSetting() {
@@ -193,7 +195,8 @@ sealed class ProviderSetting {
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
-        var apiKey: String = "",
+        @Transient var apiKey: String = "",
+        var credentialRef: String = "provider-$id",
         var baseUrl: String = "https://api.anthropic.com/v1",
         var promptCaching: Boolean = true,  // ~10% input rate on cache hits, near-pure win
         var promptCacheTtl: ClaudePromptCacheTtl = ClaudePromptCacheTtl.FIVE_MINUTES,
@@ -393,6 +396,58 @@ sealed class ProviderSetting {
         }
     }
 
+    @Serializable
+    @SerialName("custom")
+    data class Custom(
+        override var id: Uuid = Uuid.random(),
+        override var enabled: Boolean = true,
+        override var name: String = "Custom Provider",
+        override var models: List<Model> = emptyList(),
+        override val balanceOption: BalanceOption = BalanceOption(),
+        @Transient override val builtIn: Boolean = false,
+        @Transient override val description: @Composable (() -> Unit) = {},
+        @Transient override val shortDescription: @Composable (() -> Unit) = {},
+        var protocolId: String = "openai_compatible",
+        var baseUrl: String = "https://api.example.com/v1",
+        var chatCompletionsPath: String = "/chat/completions",
+        var credentialRef: String = "provider-$id",
+        @Transient var apiKey: String = "",
+    ) : ProviderSetting() {
+        override fun addModel(model: Model): ProviderSetting = copy(models = models + model)
+
+        override fun editModel(model: Model): ProviderSetting =
+            copy(models = models.map { if (it.id == model.id) model.copy() else it })
+
+        override fun delModel(model: Model): ProviderSetting =
+            copy(models = models.filter { it.id != model.id })
+
+        override fun moveMove(from: Int, to: Int): ProviderSetting =
+            copy(models = models.toMutableList().apply {
+                val model = removeAt(from)
+                add(to, model)
+            })
+
+        override fun copyProvider(
+            id: Uuid,
+            enabled: Boolean,
+            name: String,
+            models: List<Model>,
+            balanceOption: BalanceOption,
+            builtIn: Boolean,
+            description: @Composable (() -> Unit),
+            shortDescription: @Composable (() -> Unit),
+        ): ProviderSetting = copy(
+            id = id,
+            enabled = enabled,
+            name = name,
+            models = models,
+            balanceOption = balanceOption,
+            builtIn = builtIn,
+            description = description,
+            shortDescription = shortDescription,
+        )
+    }
+
     companion object {
         /** Cloud-compatible types presented when a custom provider is added or converted. */
         val Types by lazy {
@@ -400,6 +455,7 @@ sealed class ProviderSetting {
                 OpenAI::class,
                 Google::class,
                 Claude::class,
+                Custom::class,
             )
         }
     }

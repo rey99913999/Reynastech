@@ -34,8 +34,8 @@ class RequestLoggingInterceptor : Interceptor {
                     tag = "HTTP",
                     url = request.url.toString(),
                     method = request.method,
-                    requestHeaders = requestHeaders,
-                    requestBody = requestBody,
+                    requestHeaders = requestHeaders.redacted(),
+                    requestBody = requestBody.redacted(),
                     error = error
                 )
             )
@@ -50,10 +50,10 @@ class RequestLoggingInterceptor : Interceptor {
                 tag = "HTTP",
                 url = request.url.toString(),
                 method = request.method,
-                requestHeaders = requestHeaders,
-                requestBody = requestBody,
+                requestHeaders = requestHeaders.redacted(),
+                requestBody = requestBody.redacted(),
                 responseCode = response.code,
-                responseHeaders = responseHeaders,
+                responseHeaders = responseHeaders.redacted(),
                 durationMs = durationMs,
                 error = error
             )
@@ -64,5 +64,30 @@ class RequestLoggingInterceptor : Interceptor {
 
     private fun okhttp3.Headers.toMap(): Map<String, String> {
         return names().associateWith { get(it) ?: "" }
+    }
+
+    private fun Map<String, String>.redacted(): Map<String, String> =
+        mapValues { (name, value) ->
+            if (isSensitiveHeader(name)) "<redacted>" else value
+        }
+
+    private fun String?.redacted(): String? {
+        if (this == null) return null
+        return replace(
+            Regex("""("(?:api[_-]?key|authorization|access[_-]?token|token|secret|password)"\s*:\s*")([^"]*)(")""", RegexOption.IGNORE_CASE),
+            "$1<redacted>$3",
+        )
+    }
+
+    private fun isSensitiveHeader(name: String): Boolean {
+        val normalized = name.lowercase()
+        return normalized == "authorization" ||
+            normalized.contains("api-key") ||
+            normalized.contains("apikey") ||
+            normalized.contains("access-token") ||
+            normalized == "token" ||
+            normalized.contains("secret") ||
+            normalized == "cookie" ||
+            normalized == "set-cookie"
     }
 }

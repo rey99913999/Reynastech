@@ -17,6 +17,8 @@ import androidx.compose.material3.Button
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Icon
@@ -63,6 +65,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.ProviderRegistry
 import io.github.nastechresearch.nastech.R
 import io.github.nastechresearch.nastech.data.openrouter.OpenRouterOAuthManager
 import io.github.nastechresearch.nastech.data.openrouter.OpenRouterOAuthStatus
@@ -75,6 +78,7 @@ import io.github.nastechresearch.nastech.ui.theme.JetbrainsMono
 import io.github.nastechresearch.nastech.ui.theme.glassContentColor
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -125,6 +129,10 @@ fun ProviderConfigure(
                     ProviderConfigureClaude(provider, onEdit)
                 }
 
+                is ProviderSetting.Custom -> {
+                    ProviderConfigureCustom(provider, onEdit)
+                }
+
                 is ProviderSetting.Codex -> Unit
                 is ProviderSetting.Grok -> Unit
                 is ProviderSetting.GeminiOAuth -> Unit
@@ -143,6 +151,7 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
         is ProviderSetting.Codex -> "" // OAuth, no API key
         is ProviderSetting.Grok -> "" // OAuth, no API key
         is ProviderSetting.GeminiOAuth -> "" // OAuth, no API key
+        is ProviderSetting.Custom -> this.apiKey
         else -> "" // retired provider record; migration removes it on load
     }
     val sourceBaseUrl = when (this) {
@@ -152,12 +161,14 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
         is ProviderSetting.Codex -> "" // OAuth, no base URL
         is ProviderSetting.Grok -> "" // OAuth, no base URL
         is ProviderSetting.GeminiOAuth -> "" // OAuth, no base URL
+        is ProviderSetting.Custom -> this.baseUrl
         else -> "" // retired provider record; migration removes it on load
     }
     val targetDefaultBaseUrl = when (type) {
         ProviderSetting.OpenAI::class -> ProviderSetting.OpenAI().baseUrl
         ProviderSetting.Google::class -> ProviderSetting.Google().baseUrl
         ProviderSetting.Claude::class -> ProviderSetting.Claude().baseUrl
+        ProviderSetting.Custom::class -> ProviderSetting.Custom().baseUrl
         else -> error("Unsupported provider type: $type")
     }
     val convertedBaseUrl = sourceBaseUrl.convertToTargetBaseUrl(targetDefaultBaseUrl)
@@ -182,6 +193,17 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
 
+        ProviderSetting.Custom::class -> ProviderSetting.Custom(
+            id = this.id, enabled = this.enabled, name = this.name, models = this.models,
+            balanceOption = this.balanceOption, builtIn = this.builtIn,
+            description = this.description, shortDescription = this.shortDescription,
+            protocolId = when (this) {
+                is ProviderSetting.Custom -> this.protocolId
+                else -> "openai_compatible"
+            },
+            baseUrl = convertedBaseUrl,
+            apiKey = apiKey,
+        )
 
         else -> error("Unsupported provider type: $type")
     }
@@ -197,6 +219,7 @@ internal fun ProviderSetting.defaultBaseUrlForReset(): String {
             is ProviderSetting.Codex -> return "" // OAuth, no base URL
             is ProviderSetting.Grok -> return "" // OAuth, no base URL
             is ProviderSetting.GeminiOAuth -> return "" // OAuth, no base URL
+            is ProviderSetting.Custom -> return defaultBaseUrlForCustom(this)
             else -> return "" // retired provider record; migration removes it on load
         }
     }
@@ -211,6 +234,9 @@ internal fun ProviderSetting.defaultBaseUrlForReset(): String {
     }
 }
 
+
+private fun defaultBaseUrlForCustom(provider: ProviderSetting.Custom): String =
+    ProviderRegistry.defaultUrl(provider.protocolId).ifBlank { ProviderSetting.Custom().baseUrl }
 internal fun ProviderSetting.resetBaseUrlToDefault(): ProviderSetting {
     val defaultBaseUrl = defaultBaseUrlForReset()
     return when (this) {
@@ -220,6 +246,7 @@ internal fun ProviderSetting.resetBaseUrlToDefault(): ProviderSetting {
         is ProviderSetting.Codex -> this // OAuth, no base URL to reset
         is ProviderSetting.Grok -> this // OAuth, no base URL to reset
         is ProviderSetting.GeminiOAuth -> this // OAuth, no base URL to reset
+        is ProviderSetting.Custom -> this.copy(baseUrl = defaultBaseUrlForCustom(this))
         else -> this // retired provider record; migration removes it on load
     }
 }
@@ -232,6 +259,7 @@ internal fun ProviderSetting.isUsingDefaultBaseUrl(): Boolean {
         is ProviderSetting.Codex -> return true // OAuth, no base URL concept
         is ProviderSetting.Grok -> return true // OAuth, no base URL concept
         is ProviderSetting.GeminiOAuth -> return true // OAuth, no base URL concept
+        is ProviderSetting.Custom -> return baseUrl == defaultBaseUrlForCustom(this)
         else -> return true // retired provider record; migration removes it on load
     }
     return baseUrl == defaultBaseUrlForReset()
@@ -277,6 +305,106 @@ private val OFFICIAL_PROVIDER_HOSTS = setOf(
     GOOGLE_OFFICIAL_HOST,
     CLAUDE_OFFICIAL_HOST
 )
+
+@Composable
+private fun ProviderConfigureCustom(
+    provider: ProviderSetting.Custom,
+    onEdit: (ProviderSetting.Custom) -> Unit,
+) {
+    val toaster = LocalToaster.current
+    val context = LocalContext.current
+    val providerManager = koinInject<me.rerere.ai.provider.ProviderManager>()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var menuExpanded by remember { mutableStateOf(false) }
+    val descriptor = ProviderRegistry.descriptor(provider.protocolId)
+    val customDescriptors = ProviderRegistry.addProviderDescriptors
+
+    OutlinedTextField(
+        value = provider.name,
+        onValueChange = { onEdit(provider.copy(name = it)) },
+        label = { Text(stringResource(R.string.setting_provider_page_name)) },
+        modifier = Modifier.fillMaxWidth(),
+    )
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(stringResource(R.string.setting_provider_page_protocol), style = MaterialTheme.typography.labelLarge)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = { menuExpanded = true }) {
+                Text(descriptor?.displayName ?: provider.protocolId)
+            }
+            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                customDescriptors.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option.displayName) },
+                        onClick = {
+                            menuExpanded = false
+                            onEdit(provider.copy(
+                                protocolId = option.id,
+                                baseUrl = if (provider.baseUrl.isBlank() || provider.baseUrl == descriptor?.defaultBaseUrl) option.defaultBaseUrl else provider.baseUrl,
+                            ))
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    OutlinedTextField(
+        value = provider.baseUrl,
+        onValueChange = { onEdit(provider.copy(baseUrl = it.trim())) },
+        label = { Text(stringResource(R.string.setting_provider_page_api_base_url)) },
+        modifier = Modifier.fillMaxWidth(),
+        isError = provider.baseUrl.isBlank() || provider.baseUrl.toHttpUrlOrNull() == null,
+    )
+
+    val requiresKey = descriptor?.requiresApiKey == true
+    if (requiresKey) {
+        var keyVisible by remember { mutableStateOf(false) }
+        OutlinedTextField(
+            value = provider.apiKey,
+            onValueChange = { onEdit(provider.copy(apiKey = it)) },
+            label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
+            modifier = Modifier.fillMaxWidth(),
+            maxLines = 3,
+            visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                IconButton(onClick = { keyVisible = !keyVisible }) {
+                    Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+                }
+            },
+        )
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(stringResource(R.string.setting_provider_page_enable))
+        Switch(checked = provider.enabled, onCheckedChange = { onEdit(provider.copy(enabled = it)) })
+    }
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Button(onClick = {
+            scope.launch {
+                runCatching {
+                    providerManager.getProviderByType(provider).listModels(provider)
+                }.onSuccess { models ->
+                    onEdit(provider.copy(models = models.distinctBy { it.modelId }))
+                    toaster.show(
+                        message = context.getString(R.string.setting_provider_page_models_discovered_count, models.size),
+                        type = ToastType.Success,
+                    )
+                }.onFailure { error ->
+                    toaster.show(error.message ?: "Model discovery failed", type = ToastType.Error)
+                }
+            }
+        }) {
+            Text(stringResource(R.string.setting_provider_page_discover_models))
+        }
+        ProviderConnectionTester(provider)
+    }
+}
 
 @Composable
 private fun ProviderConfigureOpenAI(

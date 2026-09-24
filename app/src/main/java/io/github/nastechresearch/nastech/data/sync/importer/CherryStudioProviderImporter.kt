@@ -13,6 +13,7 @@ import me.rerere.ai.registry.ModelRegistry
 import me.rerere.common.http.jsonObjectOrNull
 import io.github.nastechresearch.nastech.utils.JsonInstant
 import java.io.File
+import java.security.MessageDigest
 import java.util.zip.ZipFile
 
 object CherryStudioProviderImporter {
@@ -123,12 +124,20 @@ object CherryStudioProviderImporter {
 
     private fun importedProviderKey(provider: ProviderSetting): String {
         return when (provider) {
-            is ProviderSetting.OpenAI -> "openai|${provider.baseUrl}|${provider.apiKey}"
-            is ProviderSetting.Google -> "google|${provider.baseUrl}|${provider.apiKey}"
-            is ProviderSetting.Claude -> "claude|${provider.baseUrl}|${provider.apiKey}"
+            is ProviderSetting.OpenAI -> "openai|${provider.baseUrl}|${secretFingerprint(provider.apiKey)}"
+            is ProviderSetting.Google -> "google|${provider.baseUrl}|${secretFingerprint(provider.apiKey)}"
+            is ProviderSetting.Claude -> "claude|${provider.baseUrl}|${secretFingerprint(provider.apiKey)}"
             is ProviderSetting.Codex -> "codex|${provider.id}"
             is ProviderSetting.Grok -> "grok|${provider.id}"
             is ProviderSetting.GeminiOAuth -> "gemini_oauth|${provider.id}"
+            is ProviderSetting.Custom -> "custom|${provider.protocolId}|${provider.baseUrl}|${secretFingerprint(provider.apiKey)}"
         }
+    }
+
+    private fun secretFingerprint(secret: String): String {
+        if (secret.isBlank()) return "none"
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(secret.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { byte -> "%02x".format(byte) }
     }
 }
