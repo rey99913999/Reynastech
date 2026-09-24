@@ -5,7 +5,7 @@ import kotlinx.coroutines.delay
 fun interface DeviceStateWaiter {
     suspend fun waitFor(
         postcondition: DevicePostcondition,
-        before: DeviceObservation? = null,
+        before: DeviceObservation?,
     ): DeviceVerificationResult
 }
 
