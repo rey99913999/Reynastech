@@ -841,6 +841,8 @@ fun ModelAbilityTag(model: Model) {
                     )
                 }
             }
+            ModelAbility.STRUCTURED_OUTPUT,
+            ModelAbility.STREAMING -> Unit
         }
     }
 }
