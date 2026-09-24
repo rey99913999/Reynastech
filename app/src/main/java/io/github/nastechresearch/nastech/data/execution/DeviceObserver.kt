@@ -77,39 +77,52 @@ class AndroidDeviceObserver(
         var screenshotState = DeviceArtifactState.NONE
         val ocrText = ArrayList<String>()
 
-        if (captureScreenshot && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+        if ((captureScreenshot || captureOcr) &&
+            android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R
+        ) {
             when (val result = service.captureScreenshot(0)) {
                 is RikkaAccessibilityService.ScreenshotOutcome.Success -> {
                     val bitmap = result.bitmap
+                    var transientFile: File? = null
                     try {
                         val dir = File(context.cacheDir, "device-core").apply { mkdirs() }
-                        val file = File(
-                            dir,
-                            "shot-${System.currentTimeMillis()}-${UUID.randomUUID()}.png",
-                        )
-                        FileOutputStream(file).use { output ->
-                            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
-                        }
-                        if (file.length() in 1..maxScreenshotBytes) {
-                            screenshotPath = file.absolutePath
-                            screenshotState = DeviceArtifactState.CAPTURED_NOT_DELIVERED
-                            if (captureOcr) {
-                                val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-                                try {
-                                    val resultText = recognizer.process(InputImage.fromBitmap(bitmap, 0)).await()
-                                    resultText.textBlocks.forEach { block ->
-                                        block.lines.forEach { line ->
-                                            line.text.trim().takeIf { it.isNotBlank() }?.let(ocrText::add)
-                                        }
-                                    }
-                                } finally {
-                                    recognizer.close()
-                                }
+
+                        if (captureScreenshot) {
+                            val file = File(
+                                dir,
+                                "shot-${System.currentTimeMillis()}-${UUID.randomUUID()}.png",
+                            )
+                            FileOutputStream(file).use { output ->
+                                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
                             }
-                        } else {
-                            file.delete()
+                            if (file.length() in 1..maxScreenshotBytes) {
+                                screenshotPath = file.absolutePath
+                                screenshotState = DeviceArtifactState.CAPTURED_NOT_DELIVERED
+                            } else {
+                                file.delete()
+                            }
+                        } else if (captureOcr) {
+                            transientFile = File.createTempFile("ocr-", ".png", dir)
+                            FileOutputStream(transientFile).use { output ->
+                                check(bitmap.compress(Bitmap.CompressFormat.PNG, 90, output))
+                            }
+                        }
+
+                        if (captureOcr) {
+                            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                            try {
+                                val resultText = recognizer.process(InputImage.fromBitmap(bitmap, 0)).await()
+                                resultText.textBlocks.forEach { block ->
+                                    block.lines.forEach { line ->
+                                        line.text.trim().takeIf { it.isNotBlank() }?.let(ocrText::add)
+                                    }
+                                }
+                            } finally {
+                                recognizer.close()
+                            }
                         }
                     } finally {
+                        transientFile?.delete()
                         bitmap.recycle()
                     }
                 }
