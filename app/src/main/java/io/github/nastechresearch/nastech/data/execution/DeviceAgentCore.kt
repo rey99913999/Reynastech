@@ -280,6 +280,7 @@ class DeviceAgentCore(
                 checkpointId = checkpointId,
                 observationSource = verificationSource ?: action.target?.source?.name,
                 recoveryAttempts = action.recoveryAttempts,
+                artifactState = action.artifactState,
             )
 
             telemetry.recordDeviceEvent(
@@ -821,6 +822,7 @@ class DeviceAgentCore(
             error = reason,
             observationSource = observationSource,
             recoveryAttempts = verificationAttempts,
+            artifactState = null,
         )
     }
 
