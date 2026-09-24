@@ -9,6 +9,10 @@ import me.rerere.ai.ui.UIMessagePart
 import io.github.nastechresearch.nastech.data.ai.tools.AssistantToolPermissionResolver
 import io.github.nastechresearch.nastech.data.model.Assistant
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import java.io.File
 
 fun buildStructuredPlanTool(
     json: Json,
@@ -164,11 +168,33 @@ fun buildStructuredPlanTool(
                     toolPermissionResolver = toolPermissionResolver,
                     assistant = assistant,
                 )
-                listOf(
+                val parts = mutableListOf<UIMessagePart>(
                     UIMessagePart.Text(
                         json.encodeToString(ExecutionPlanResult.serializer(), result)
                     )
                 )
+
+                val artifactPaths = result.results
+                    .asSequence()
+                    .mapNotNull { it.output }
+                    .flatMap { output ->
+                        val element = runCatching { Json.parseToJsonElement(output).jsonObject }.getOrNull()
+                            ?: return@flatMap emptySequence<String>()
+                        sequenceOf(
+                            element["screenshot_path"]?.jsonPrimitive?.contentOrNull,
+                            element["file_path"]?.jsonPrimitive?.contentOrNull,
+                        ).filterNotNull()
+                    }
+                    .distinct()
+                    .filter { path -> File(path).isFile && File(path).length() > 0L }
+                    .take(4)
+                    .toList()
+
+                artifactPaths.forEach { artifactPath ->
+                    parts += UIMessagePart.Image(url = "file://" + artifactPath)
+                }
+
+                parts
             }
         }
     )
