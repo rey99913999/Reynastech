@@ -32,6 +32,7 @@ class DeviceExecutionModelsTest {
         assertEquals("read a file", decoded.goal)
         assertTrue(decoded.requiredCapabilities.isEmpty())
         assertTrue(decoded.requiredConstraints.isEmpty())
-        assertEquals(DeviceAction::class, StructuredExecutionStep::class.java.declaredFields.first { it.name == "deviceAction" }.type.kotlin)
+        assertEquals(null, decoded.steps.single().deviceAction)
+        assertTrue(decoded.steps.single().preconditions.isEmpty())
     }
 }
