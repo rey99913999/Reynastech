@@ -576,11 +576,16 @@ class GenerationHandler(
 
         var deviceCompletionGuardRetried = false
 
-        val registrySystemAddendum = listOfNotNull(
+        val baseRegistrySystemAddendum = listOfNotNull(
             systemAddendum,
-            deviceGuardInstruction,
             registry.discoverySummary(model).takeIf { registry.hasRegisteredTools() },
         ).joinToString("\n\n")
+
+        fun currentRegistrySystemAddendum(): String =
+            listOfNotNull(
+                baseRegistrySystemAddendum,
+                deviceGuardInstruction,
+            ).joinToString("\n\n")
 
         val turnStartMs = android.os.SystemClock.elapsedRealtime()
         var loopGuardTripCount = 0
@@ -641,7 +646,7 @@ class GenerationHandler(
                     generateInternal(
                         assistant = assistant,
                         settings = settings,
-                        systemAddendum = registrySystemAddendum,
+                        systemAddendum = currentRegistrySystemAddendum(),
                         messages = messages,
                         onUpdateMessages = {
                             messages = it.transforms(
