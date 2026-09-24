@@ -97,6 +97,7 @@ sealed interface DeviceTargetResolution {
     data class NotFound(val target: String, val reason: String) : DeviceTargetResolution
 }
 
+@Serializable
 enum class DeviceActionLifecycle {
     DISPATCHED,
     EXECUTED,
@@ -105,6 +106,7 @@ enum class DeviceActionLifecycle {
     RECOVERED,
 }
 
+@Serializable
 enum class DeviceArtifactState {
     NONE,
     CAPTURED_NOT_DELIVERED,
