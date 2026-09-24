@@ -188,6 +188,19 @@ class DeviceAgentCore(
             )
 
             val postconditions = normalizedPostconditions(step)
+            if (
+                step.deviceAction == null &&
+                step.toolName in VERIFICATION_REQUIRED_CORE_TOOLS &&
+                postconditions.isEmpty()
+            ) {
+                results += failure(
+                    plan,
+                    step,
+                    "device_postcondition_required:" + step.toolName,
+                )
+                break
+            }
+
             var verified = postconditions.isEmpty()
             var verificationAttempts = 0
             var verificationSource: String? = null
@@ -793,6 +806,21 @@ class DeviceAgentCore(
     private fun isRecoverable(step: StructuredExecutionStep): Boolean =
         step.deviceAction == DeviceAction.TAP_TARGET ||
             step.toolName in setOf("tap", "click_node", "find_node")
+
+    private companion object {
+        val VERIFICATION_REQUIRED_CORE_TOOLS: Set<String> = setOf(
+            "open_app",
+            "launch_app",
+            "keyboard_type",
+            "tap",
+            "click_node",
+            "set_text",
+            "global_action",
+            "scroll",
+            "swipe",
+            "long_press",
+        )
+    }
 
     private suspend fun failure(
         plan: StructuredExecutionPlan,
