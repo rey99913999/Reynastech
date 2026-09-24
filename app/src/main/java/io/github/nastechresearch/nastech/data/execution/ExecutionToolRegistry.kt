@@ -61,13 +61,6 @@ enum class ToolCategory {
 
         fun isCoreDeviceTool(name: String): Boolean = name in CORE_DEVICE_TOOL_NAMES
 
-        fun fromLabel(value: String): ToolCategory? {
-            val normalized = value.trim().lowercase().replace('_', ' ').replace('-', ' ').replace('/', ' ')
-            return entries.firstOrNull {
-                it.displayName.lowercase() == normalized ||
-                    it.name.lowercase() == normalized.replace(' ', '_')
-            }
-        }
     }
 }
 
