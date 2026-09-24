@@ -83,7 +83,6 @@ class AndroidDeviceObserver(
             when (val result = service.captureScreenshot(0)) {
                 is RikkaAccessibilityService.ScreenshotOutcome.Success -> {
                     val bitmap = result.bitmap
-                    var transientFile: File? = null
                     try {
                         val dir = File(context.cacheDir, "device-core").apply { mkdirs() }
 
@@ -101,11 +100,6 @@ class AndroidDeviceObserver(
                             } else {
                                 file.delete()
                             }
-                        } else if (captureOcr) {
-                            transientFile = File.createTempFile("ocr-", ".png", dir)
-                            FileOutputStream(transientFile).use { output ->
-                                check(bitmap.compress(Bitmap.CompressFormat.PNG, 90, output))
-                            }
                         }
 
                         if (captureOcr) {
@@ -122,7 +116,6 @@ class AndroidDeviceObserver(
                             }
                         }
                     } finally {
-                        transientFile?.delete()
                         bitmap.recycle()
                     }
                 }
