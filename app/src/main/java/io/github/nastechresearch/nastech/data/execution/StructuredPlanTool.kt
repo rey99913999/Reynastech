@@ -9,6 +9,10 @@ import me.rerere.ai.ui.UIMessagePart
 import io.github.nastechresearch.nastech.data.ai.tools.AssistantToolPermissionResolver
 import io.github.nastechresearch.nastech.data.model.Assistant
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import java.io.File
 
 fun buildStructuredPlanTool(
     json: Json,
@@ -29,6 +33,8 @@ fun buildStructuredPlanTool(
             
             Safety rules:
             - verification is never removed to save tokens;
+            - side-effecting core device tools require explicit postconditions unless a high-level
+              DeviceAction supplies a structured verification path;
             - actions that normally require approval still require the corresponding tool to be
               pre-approved;
             - steps with level VISION or LLM are returned for higher-level planning instead of
@@ -57,7 +63,17 @@ fun buildStructuredPlanTool(
                     })
                     put("taskId", buildJsonObject {
                         put("type", JsonPrimitive("string"))
-                        put("description", JsonPrimitive("Optional Update 02 task id to reuse its state/checkpoints"))
+                        put("description", JsonPrimitive("Optional task id to reuse its state/checkpoints"))
+                    })
+                    put("requiredCapabilities", buildJsonObject {
+                        put("type", JsonPrimitive("array"))
+                        put("items", buildJsonObject { put("type", JsonPrimitive("string")) })
+                        put("description", JsonPrimitive("Required device capabilities such as app_launch, device_control, keyboard"))
+                    })
+                    put("requiredConstraints", buildJsonObject {
+                        put("type", JsonPrimitive("array"))
+                        put("items", buildJsonObject { put("type", JsonPrimitive("string")) })
+                        put("description", JsonPrimitive("Explicit constraints such as use_keyboard or use_screenshot_tool"))
                     })
                     put("steps", buildJsonObject {
                         put("type", JsonPrimitive("array"))
@@ -94,6 +110,24 @@ fun buildStructuredPlanTool(
                                 put("approvalRequired", buildJsonObject { put("type", JsonPrimitive("boolean")) })
                                 put("taskStepId", buildJsonObject { put("type", JsonPrimitive("string")) })
                                 put("alternativeToolNames", buildJsonObject {
+                                    put("type", JsonPrimitive("array"))
+                                    put("items", buildJsonObject { put("type", JsonPrimitive("string")) })
+                                })
+                                put("deviceAction", buildJsonObject {
+                                    put("type", JsonPrimitive("string"))
+                                    put("enum", kotlinx.serialization.json.buildJsonArray {
+                                        DeviceAction.entries.forEach { add(JsonPrimitive(it.name)) }
+                                    })
+                                })
+                                put("preconditions", buildJsonObject {
+                                    put("type", JsonPrimitive("array"))
+                                    put("items", buildJsonObject { put("type", JsonPrimitive("object")) })
+                                })
+                                put("postconditions", buildJsonObject {
+                                    put("type", JsonPrimitive("array"))
+                                    put("items", buildJsonObject { put("type", JsonPrimitive("object")) })
+                                })
+                                put("requiredConstraints", buildJsonObject {
                                     put("type", JsonPrimitive("array"))
                                     put("items", buildJsonObject { put("type", JsonPrimitive("string")) })
                                 })
@@ -136,11 +170,33 @@ fun buildStructuredPlanTool(
                     toolPermissionResolver = toolPermissionResolver,
                     assistant = assistant,
                 )
-                listOf(
+                val parts = mutableListOf<UIMessagePart>(
                     UIMessagePart.Text(
                         json.encodeToString(ExecutionPlanResult.serializer(), result)
                     )
                 )
+
+                val artifactPaths = result.results
+                    .asSequence()
+                    .mapNotNull { it.output }
+                    .flatMap { output ->
+                        val element = runCatching { Json.parseToJsonElement(output).jsonObject }.getOrNull()
+                            ?: return@flatMap emptySequence<String>()
+                        sequenceOf(
+                            element["screenshot_path"]?.jsonPrimitive?.contentOrNull,
+                            element["file_path"]?.jsonPrimitive?.contentOrNull,
+                        ).filterNotNull()
+                    }
+                    .distinct()
+                    .filter { path -> File(path).isFile && File(path).length() > 0L }
+                    .take(4)
+                    .toList()
+
+                artifactPaths.forEach { artifactPath ->
+                    parts += UIMessagePart.Image(url = "file://" + artifactPath)
+                }
+
+                parts
             }
         }
     )

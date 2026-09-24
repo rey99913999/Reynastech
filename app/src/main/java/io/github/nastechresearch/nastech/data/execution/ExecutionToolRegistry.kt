@@ -45,7 +45,10 @@ enum class ToolCategory {
 
     companion object {
         fun fromLabel(value: String): ToolCategory? {
-            val normalized = value.trim().lowercase().replace('_', ' ').replace('-', ' ').replace('/', ' ')
+            val normalized = value.trim().lowercase()
+                .replace('_', ' ')
+                .replace('-', ' ')
+                .replace('/', ' ')
             return entries.firstOrNull {
                 it.displayName.lowercase() == normalized ||
                     it.name.lowercase() == normalized.replace(' ', '_')
@@ -169,6 +172,9 @@ class ExecutionToolRegistry(
         visibility.keys.toList().forEach { visibility[it] = ToolVisibilityStage.HIDDEN }
         alwaysVisibleTools.values.forEach { tool ->
             findRegistered(tool.name)?.let { visibility[it.identity] = ToolVisibilityStage.FULL_SCHEMA_LOADED }
+        }
+        CORE_DEVICE_TOOL_NAMES.forEach { name ->
+            findRegistered(name)?.let { visibility[it.identity] = ToolVisibilityStage.FULL_SCHEMA_LOADED }
         }
     }
 
@@ -622,6 +628,25 @@ class ExecutionToolRegistry(
         val fields: List<String> = emptyList(),
         val required: List<String> = emptyList(),
     )
+
+    companion object {
+        val CORE_DEVICE_TOOL_NAMES: Set<String> = setOf(
+            "open_app",
+            "launch_app",
+            "keyboard_type",
+            "read_window_tree",
+            "find_node",
+            "click_node",
+            "set_text",
+            "take_screenshot",
+            "clipboard_tool",
+            "global_action",
+            "tap",
+            "scroll",
+        )
+
+        fun isCoreDeviceTool(name: String): Boolean = name in CORE_DEVICE_TOOL_NAMES
+    }
 }
 
 fun ToolMetadata.toDiscoveryJson(): JsonObject = buildJsonObject {

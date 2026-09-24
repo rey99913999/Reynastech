@@ -61,6 +61,9 @@ import io.github.nastechresearch.nastech.data.ai.transformers.visualTransforms
 import io.github.nastechresearch.nastech.data.ai.limits.ToolRuntimeLimits
 import io.github.nastechresearch.nastech.data.execution.ExecutionToolRegistry
 import io.github.nastechresearch.nastech.data.execution.LocalExecutionEngine
+import io.github.nastechresearch.nastech.data.execution.ExecutionTelemetry
+import io.github.nastechresearch.nastech.data.execution.DeviceCapabilityContractBuilder
+import io.github.nastechresearch.nastech.data.execution.analyzeDeviceIntent
 import io.github.nastechresearch.nastech.data.execution.ToolOutputPreprocessor
 import io.github.nastechresearch.nastech.data.execution.buildStructuredPlanTool
 import io.github.nastechresearch.nastech.data.task.TaskToolUsage
@@ -421,6 +424,7 @@ class GenerationHandler(
     private val aiLoggingManager: AILoggingManager,
     private val systemPromptBuilder: SystemPromptBuilder,
     private val localExecutionEngine: LocalExecutionEngine,
+    private val executionTelemetry: ExecutionTelemetry,
 ) {
     fun generateText(
         settings: Settings,
@@ -533,10 +537,55 @@ class GenerationHandler(
                     .distinct()
             )
         }
-        val registrySystemAddendum = listOfNotNull(
+        val latestUserText = messages.asReversed()
+            .firstOrNull { it.role == MessageRole.USER }
+            ?.toText()
+            .orEmpty()
+        val devicePreflight = analyzeDeviceIntent(latestUserText)
+        val deviceCapabilityContract = if (devicePreflight.isDeviceTask) {
+            DeviceCapabilityContractBuilder.build(
+                context = context,
+                registry = registry,
+                requiredCapabilities = devicePreflight.requiredCapabilities,
+                requiredConstraints = devicePreflight.requiredConstraints,
+            )
+        } else {
+            null
+        }
+
+        var deviceGuardInstruction: String? = if (devicePreflight.isDeviceTask) {
+            buildString {
+                appendLine("Device Core preflight is active for this turn.")
+                appendLine("Core device tools are already materialized; do not use discover_tools merely to find them.")
+                appendLine("For multi-step device work, use execute_structured_plan so the Device Core can execute local steps without a general-model round trip between actions.")
+                appendLine(
+                    "Required capabilities: " +
+                        devicePreflight.requiredCapabilities.joinToString(", ").ifBlank { "none" }
+                )
+                appendLine(
+                    "Required constraints: " +
+                        devicePreflight.requiredConstraints.joinToString(", ").ifBlank { "none" }
+                )
+                deviceCapabilityContract?.requiredCapabilityFailure()?.let {
+                    appendLine("Unavailable required capability: " + it.name + " - " + it.reason.orEmpty())
+                }
+            }
+        } else {
+            null
+        }
+
+        var deviceCompletionGuardRetried = false
+
+        val baseRegistrySystemAddendum = listOfNotNull(
             systemAddendum,
             registry.discoverySummary(model).takeIf { registry.hasRegisteredTools() },
         ).joinToString("\n\n")
+
+        fun currentRegistrySystemAddendum(): String =
+            listOfNotNull(
+                baseRegistrySystemAddendum,
+                deviceGuardInstruction,
+            ).joinToString("\n\n")
 
         val turnStartMs = android.os.SystemClock.elapsedRealtime()
         var loopGuardTripCount = 0
@@ -591,10 +640,13 @@ class GenerationHandler(
             if (pendingTools.isEmpty()) {
                 try {
                     onBeforeModelRequest()
+                    if (devicePreflight.isDeviceTask) {
+                        executionTelemetry.recordGeneralDeviceModelRequest(taskId)
+                    }
                     generateInternal(
                         assistant = assistant,
                         settings = settings,
-                        systemAddendum = registrySystemAddendum,
+                        systemAddendum = currentRegistrySystemAddendum(),
                         messages = messages,
                         onUpdateMessages = {
                             messages = it.transforms(
@@ -679,7 +731,41 @@ class GenerationHandler(
 
                 val tools = messages.last().getTools().filter { !it.isExecuted }
                 if (tools.isEmpty()) {
-                    // no tool calls, break
+                    if (devicePreflight.isDeviceTask && !deviceCompletionGuardRetried) {
+                        deviceCompletionGuardRetried = true
+                        deviceGuardInstruction =
+                            "The previous model turn did not produce an executable Device Core tool plan. " +
+                                "Do not answer this device request as completed or claim that you cannot control the device. " +
+                                "Use execute_structured_plan or another available core device tool now. " +
+                                "Honor explicit constraints such as use_keyboard. If a required capability is unavailable or unauthorized, return the structured failure state instead of pretending the action occurred."
+                        processingStatus.value = "Device execution required; selecting a local execution path."
+                        continue
+                    }
+
+                    if (devicePreflight.isDeviceTask && deviceCompletionGuardRetried) {
+                        val failureMessage = UIMessage(
+                            role = MessageRole.ASSISTANT,
+                            parts = listOf(
+                                UIMessagePart.Text(
+                                    buildJsonObject {
+                                        put("error", "device_execution_not_completed")
+                                        put("status", "REPLAN_REQUIRED")
+                                        put(
+                                            "detail",
+                                            "The request was classified as a device task, but no executable Device Core plan was produced."
+                                        )
+                                        put("confidence", devicePreflight.confidence)
+                                        deviceCapabilityContract?.requiredCapabilityFailure()?.let {
+                                            put("unavailable_capability", it.name)
+                                            put("capability_reason", it.reason.orEmpty())
+                                        }
+                                    }.toString()
+                                )
+                            )
+                        )
+                        messages = messages.dropLast(1) + failureMessage
+                        emit(GenerationChunk.Messages(messages))
+                    }
                     break
                 }
 

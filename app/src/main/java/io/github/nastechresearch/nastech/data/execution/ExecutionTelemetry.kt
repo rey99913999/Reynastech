@@ -8,6 +8,8 @@ class ExecutionTelemetry(
     private val db: AppDatabase,
 ) {
     private val mutex = Mutex()
+    private val deviceEvents = java.util.concurrent.CopyOnWriteArrayList<DeviceTelemetryEvent>()
+    private val maxDeviceEvents = 256
 
     suspend fun recordPlan(taskId: String?, stepCount: Int) {
         update(taskId) { current ->
@@ -84,6 +86,28 @@ class ExecutionTelemetry(
             }.copy(updatedAt = System.currentTimeMillis())
         }
     }
+
+    suspend fun recordDeviceEvent(event: DeviceTelemetryEvent) {
+        deviceEvents += event
+        while (deviceEvents.size > maxDeviceEvents) {
+            deviceEvents.removeAt(0)
+        }
+    }
+
+    suspend fun recordGeneralDeviceModelRequest(taskId: String?) {
+        recordDeviceEvent(
+            DeviceTelemetryEvent(
+                taskId = taskId,
+                executionPath = "CORE",
+                actionType = "GENERAL_LLM_REQUEST",
+                generalLlmRequests = 1,
+            )
+        )
+    }
+
+    fun recentDeviceEvents(taskId: String? = null): List<DeviceTelemetryEvent> =
+        if (taskId.isNullOrBlank()) deviceEvents.toList()
+        else deviceEvents.filter { it.taskId == taskId }
 
     suspend fun snapshot(taskId: String): TaskExecutionUsageEntity? =
         db.taskExecutionUsageDao().get(taskId)

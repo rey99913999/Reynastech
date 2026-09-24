@@ -14,6 +14,7 @@ import me.rerere.ai.ui.UIMessagePart
 class LocalExecutionEngine(
     private val taskManager: TaskManager,
     private val telemetry: ExecutionTelemetry,
+    private val deviceAgentCore: DeviceAgentCore? = null,
 ) {
     suspend fun execute(
         plan: StructuredExecutionPlan,
@@ -39,6 +40,15 @@ class LocalExecutionEngine(
         require(plan.steps.isNotEmpty()) { "Execution plan requires at least one step" }
         require(plan.steps.size <= 32) { "Execution plan is limited to 32 steps per local run" }
 
+        if (deviceAgentCore != null && isDeviceAwarePlan(plan)) {
+            return deviceAgentCore.executePlan(
+                plan = plan,
+                registry = registry,
+                isToolAutoApproved = isToolAutoApproved,
+                toolPermissionResolver = toolPermissionResolver,
+                assistant = assistant,
+            )
+        }
 
         val results = mutableListOf<ExecutionStepResult>()
         val policy = plan.taskId?.let { taskManager.getTask(it) }
@@ -75,7 +85,8 @@ class LocalExecutionEngine(
                     taskStepId = step.taskStepId,
                     toolName = toolName,
                     status = ExecutionStepStatus.REPLAN_REQUIRED,
-                    error = "Step requires a higher execution level: " + step.level.name,
+                    lifecycle = DeviceActionLifecycle.DISPATCHED,
+                    error = "Device Core required but no core execution boundary is available.",
                 )
                 break
             }
@@ -309,6 +320,15 @@ class LocalExecutionEngine(
             error = reason,
         )
     }
+
+    private fun isDeviceAwarePlan(plan: StructuredExecutionPlan): Boolean =
+        plan.requiredCapabilities.isNotEmpty() ||
+            plan.requiredConstraints.isNotEmpty() ||
+            plan.steps.any { step ->
+                step.deviceAction != null ||
+                    step.level == ExecutionLevel.VISION ||
+                    ExecutionToolRegistry.isCoreDeviceTool(step.toolName.orEmpty())
+            }
 
     private fun List<UIMessagePart>.extractText(): String =
         filterIsInstance<UIMessagePart.Text>()

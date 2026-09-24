@@ -883,6 +883,7 @@ class LocalTools(
             tools.add(io.github.nastechresearch.nastech.data.ai.tools.local.wakeScreenTool(context))
         }
         if (options.contains(LocalToolOption.AppLauncher)) {
+            tools.add(io.github.nastechresearch.nastech.data.ai.tools.local.openAppTool(context, invocationContext, interactiveToolStreamer))
             tools.add(io.github.nastechresearch.nastech.data.ai.tools.local.launchAppTool(context, invocationContext, interactiveToolStreamer))
             tools.add(io.github.nastechresearch.nastech.data.ai.tools.local.listInstalledAppsTool(context))
             tools.add(io.github.nastechresearch.nastech.data.ai.tools.local.listAppActivitiesTool(context))
