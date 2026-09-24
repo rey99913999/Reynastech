@@ -44,6 +44,121 @@ private suspend fun waitForForegroundPackage(
  * The companion list_installed_apps tool exposes available package names so the model does
  * not have to guess.
  */
+
+fun openAppTool(
+    context: Context,
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
+    name = "open_app",
+    description = "Open an installed Android app by its human-readable label. Resolve locally, reject ambiguous matches, launch the app, and distinguish dispatch from confirmed foreground.",
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("name", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Human-readable installed app label, such as Gemini")
+                })
+            },
+            required = listOf("name"),
+        )
+    },
+    execute = { input ->
+        val requested = input.jsonObject["name"]?.jsonPrimitive?.contentOrNull?.trim()
+        if (requested.isNullOrBlank()) {
+            return@Tool listOf(UIMessagePart.Text("""{"error":"app_name_required"}"""))
+        }
+
+        val resolution = io.github.nastechresearch.nastech.data.execution.AppResolver(
+            io.github.nastechresearch.nastech.data.execution.PackageManagerInstalledAppCatalog(context)
+        ).resolve(requested)
+
+        val candidate = when (resolution) {
+            is io.github.nastechresearch.nastech.data.execution.AppResolution.Resolved -> resolution.candidate
+            is io.github.nastechresearch.nastech.data.execution.AppResolution.NotFound -> {
+                return@Tool listOf(UIMessagePart.Text(
+                    buildJsonObject {
+                        put("error", "app_not_found")
+                        put("name", requested)
+                    }.toString()
+                ))
+            }
+            is io.github.nastechresearch.nastech.data.execution.AppResolution.Ambiguous -> {
+                return@Tool listOf(UIMessagePart.Text(
+                    buildJsonObject {
+                        put("error", "app_ambiguous")
+                        put("name", requested)
+                        put("candidates", buildJsonArray {
+                            resolution.candidates.forEach { item ->
+                                addJsonObject {
+                                    put("label", item.label)
+                                    put("package", item.packageName)
+                                }
+                            }
+                        })
+                    }.toString()
+                ))
+            }
+        }
+
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(candidate.packageName)
+            ?: return@Tool listOf(UIMessagePart.Text(
+                buildJsonObject {
+                    put("error", "no_launch_intent")
+                    put("name", candidate.label)
+                    put("package", candidate.packageName)
+                }.toString()
+            ))
+
+        val wasOff = !ScreenWaker.isInteractive(context)
+        val woke = if (wasOff) ScreenWaker.wakeIfOff(context) else false
+        val keyguardLocked = ScreenWaker.isKeyguardLocked(context)
+        val keyguardSecure = ScreenWaker.isKeyguardSecure(context)
+
+        return@Tool try {
+            context.startActivity(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            val accessibilityRunning = RikkaAccessibilityService.instance != null
+            val foreground = if (accessibilityRunning && !keyguardLocked) {
+                waitForForegroundPackage(candidate.packageName)
+            } else null
+            val confirmed = foreground == candidate.packageName
+
+            AgentTurnTracker.recordNavigatedAway(candidate.packageName)
+            AgentTurnTracker.touchPackage(candidate.packageName)
+            streamer.streamIfHeadless(invocationContext, "OpenApp " + candidate.label)
+
+            listOf(UIMessagePart.Text(buildJsonObject {
+                put("dispatch_succeeded", true)
+                put("confirmed_foreground", confirmed)
+                put("label", candidate.label)
+                put("package", candidate.packageName)
+                put("activity", candidate.activityName)
+                if (foreground != null) put("foreground_package", foreground)
+                if (wasOff) put("woke_screen", woke)
+                if (keyguardLocked) {
+                    put("keyguard_locked", true)
+                    put("keyguard_secure", keyguardSecure)
+                    if (keyguardSecure) {
+                        put(
+                            "warn",
+                            "Screen is woken but PIN/biometric keyguard is up; foreground cannot be confirmed until the user unlocks the device."
+                        )
+                    }
+                }
+                put("success", confirmed || !accessibilityRunning || keyguardLocked)
+            }.toString()))
+        } catch (t: Throwable) {
+            listOf(UIMessagePart.Text(buildJsonObject {
+                put("error", "launch_failed")
+                put("dispatch_succeeded", false)
+                put("name", candidate.label)
+                put("package", candidate.packageName)
+                put("reason", t.message ?: t::class.java.simpleName)
+            }.toString()))
+        }
+    },
+)
+
 fun launchAppTool(
     context: Context,
     invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
