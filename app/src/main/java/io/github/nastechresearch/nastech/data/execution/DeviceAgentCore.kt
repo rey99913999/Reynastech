@@ -122,10 +122,14 @@ class DeviceAgentCore(
             }
 
             val current = before ?: observer.observe()
-            val preconditionFailure = step.preconditions
-                .asSequence()
-                .map { verifier.verify(it, current) }
-                .firstOrNull { !it.verified }
+            var preconditionFailure: DeviceVerificationResult? = null
+            for (precondition in step.preconditions) {
+                val verification = verifier.verify(precondition, current)
+                if (!verification.verified) {
+                    preconditionFailure = verification
+                    break
+                }
+            }
 
             if (preconditionFailure != null) {
                 results += failure(
@@ -422,17 +426,17 @@ class DeviceAgentCore(
             lifecycle = DeviceActionLifecycle.DISPATCHED,
             error = "tool_unavailable",
         )
-        sequenceOfNotNull(step.toolName)
-            .plus(step.alternativeToolNames.asSequence())
+        (listOfNotNull(step.toolName) + step.alternativeToolNames)
             .distinct()
             .take(4)
             .forEach { name ->
-                if (last.executed || last.requiresApproval) return@forEach
-                registry.findLoaded(name)?.let { tool ->
-                    last = executeTool(
-                        name, tool, step.args, registry, isToolAutoApproved,
-                        permissionResolver, assistant, taskId,
-                    )
+                if (!last.executed && !last.requiresApproval) {
+                    registry.findLoaded(name)?.let { tool ->
+                        last = executeTool(
+                            name, tool, step.args, registry, isToolAutoApproved,
+                            permissionResolver, assistant, taskId,
+                        )
+                    }
                 }
             }
         return last
@@ -584,6 +588,7 @@ class DeviceAgentCore(
                     .map(String::trim)
                     .filter { it.length >= 2 }
                     .distinct()
+                    .toList()
                     .takeLast(100)
                     .joinToString("\n")
                     .trim()
@@ -644,8 +649,13 @@ class DeviceAgentCore(
                                 ActionExecution(false, DeviceActionLifecycle.DISPATCHED, error = "low_confidence_vision_target")
                             } else {
                                 val tap = registry.findLoaded("tap")
-                                    ?: return@suspend ActionExecution(false, DeviceActionLifecycle.DISPATCHED, error = "tap_unavailable")
-                                executeTool(
+                                if (tap == null) {
+                                    ActionExecution(
+                                        false,
+                                        DeviceActionLifecycle.DISPATCHED,
+                                        error = "tap_unavailable",
+                                    )
+                                } else executeTool(
                                     "tap",
                                     tap,
                                     buildJsonObject {
@@ -673,9 +683,16 @@ class DeviceAgentCore(
                                 val command = "input tap " +
                                     resolution.target.clickX.toInt() + " " +
                                     resolution.target.clickY.toInt()
-                                executeTool(
+                                val shizuku = registry.findLoaded("shizuku_exec")
+                                if (shizuku == null) {
+                                    ActionExecution(
+                                        false,
+                                        DeviceActionLifecycle.DISPATCHED,
+                                        error = "shizuku_unavailable",
+                                    )
+                                } else executeTool(
                                     "shizuku_exec",
-                                    registry.findLoaded("shizuku_exec")!!,
+                                    shizuku,
                                     buildJsonObject { put("command", command) },
                                     registry, isToolAutoApproved, permissionResolver, assistant, taskId,
                                 ).copy(
