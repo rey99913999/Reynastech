@@ -134,19 +134,17 @@ fun keyboardTypeTool(client: KeyboardApiClient): Tool = Tool(
                 "Provide the text to type.",
             )
         val submit = args.jsonObject["submit"]?.jsonPrimitive?.booleanOrNull ?: false
-        when (val typed = client.typeText(text)) {
-            is KeyboardApiClient.Result.Err -> failureEnvelope(typed.failure)
-            is KeyboardApiClient.Result.Ok -> {
-                if (!submit) {
-                    ok { put("typed", text.length) }
-                } else {
-                    when (val submitted = client.typeTextAndSubmit(text)) {
-                        is KeyboardApiClient.Result.Err -> failureEnvelope(submitted.failure)
-                        is KeyboardApiClient.Result.Ok ->
-                            ok { put("typed", text.length); put("submitted", true) }
-                    }
+        when (val result = if (submit) {
+            client.typeTextAndSubmit(text)
+        } else {
+            client.typeText(text)
+        }) {
+            is KeyboardApiClient.Result.Err -> failureEnvelope(result.failure)
+            is KeyboardApiClient.Result.Ok ->
+                ok {
+                    put("typed", text.length)
+                    if (submit) put("submitted", true)
                 }
-            }
         }
     },
 )
