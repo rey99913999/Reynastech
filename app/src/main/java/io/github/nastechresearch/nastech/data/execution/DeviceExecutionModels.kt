@@ -1,0 +1,180 @@
+package io.github.nastechresearch.nastech.data.execution
+
+import kotlinx.serialization.Serializable
+
+@Serializable
+enum class DeviceCapabilityStatus {
+    AVAILABLE,
+    UNAVAILABLE,
+    SERVICE_UNAVAILABLE,
+    AUTHORIZATION_REQUIRED,
+    AUTHORIZATION_DENIED,
+}
+
+@Serializable
+data class DeviceCapability(
+    val name: String,
+    val status: DeviceCapabilityStatus,
+    val reason: String? = null,
+)
+
+@Serializable
+data class DeviceCapabilityContract(
+    val capabilities: List<DeviceCapability> = emptyList(),
+    val requiredCapabilities: Set<String> = emptySet(),
+    val requiredConstraints: Set<String> = emptySet(),
+) {
+    fun capability(name: String): DeviceCapability? = capabilities.firstOrNull { it.name == name }
+
+    fun requiredCapabilityFailure(): DeviceCapability? =
+        requiredCapabilities.firstNotNullOfOrNull { name ->
+            capability(name)?.takeIf { it.status != DeviceCapabilityStatus.AVAILABLE }
+        }
+}
+
+@Serializable
+enum class DevicePostconditionType {
+    APP_FOREGROUND,
+    NODE_PRESENT,
+    TEXT_PRESENT,
+    KEYBOARD_VISIBLE,
+    SCREEN_CHANGED,
+    SCREEN_FINGERPRINT_CHANGED,
+    CLIPBOARD_NON_EMPTY,
+    RESPONSE_TEXT_NON_EMPTY,
+    TARGET_PROPERTY_TRUE,
+}
+
+@Serializable
+data class DevicePostcondition(
+    val type: DevicePostconditionType,
+    val value: String? = null,
+    val expected: Boolean = true,
+    val timeoutMs: Long = 5_000L,
+)
+
+@Serializable
+enum class DeviceAction {
+    OPEN_APP,
+    FIND_TARGET,
+    TAP_TARGET,
+    TYPE_AND_SUBMIT,
+    WAIT_FOR_RESPONSE,
+    CAPTURE_SCREENSHOT,
+    EXTRACT_RESPONSE,
+    RETURN_RESULT,
+}
+
+enum class DeviceTargetSource {
+    ACCESSIBILITY,
+    OCR,
+    VISION,
+    COORDINATE,
+    NONE,
+}
+
+data class DeviceTarget(
+    val semanticName: String,
+    val clickX: Float,
+    val clickY: Float,
+    val boundsLeft: Int,
+    val boundsTop: Int,
+    val boundsRight: Int,
+    val boundsBottom: Int,
+    val confidence: Float,
+    val source: DeviceTargetSource,
+    val clickable: Boolean,
+)
+
+sealed interface DeviceTargetResolution {
+    data class Resolved(val target: DeviceTarget) : DeviceTargetResolution
+    data class Ambiguous(val target: String, val candidates: List<DeviceTarget>) : DeviceTargetResolution
+    data class NotFound(val target: String, val reason: String) : DeviceTargetResolution
+}
+
+enum class DeviceActionLifecycle {
+    DISPATCHED,
+    EXECUTED,
+    EFFECT_OBSERVED,
+    VERIFIED,
+    RECOVERED,
+}
+
+enum class DeviceArtifactState {
+    NONE,
+    CAPTURED_NOT_DELIVERED,
+    DELIVERED,
+}
+
+data class DeviceVerificationResult(
+    val verified: Boolean,
+    val reason: String,
+    val observationSource: String? = null,
+)
+
+data class DeviceObservation(
+    val foregroundPackage: String = "",
+    val windowTitle: String = "",
+    val visibleText: List<String> = emptyList(),
+    val focusedText: String? = null,
+    val keyboardVisible: Boolean = false,
+    val screenFingerprint: String = "",
+    val windowTreeFingerprint: String = "",
+    val screenshotPath: String? = null,
+    val screenshotState: DeviceArtifactState = DeviceArtifactState.NONE,
+    val createdAtMs: Long = System.currentTimeMillis(),
+)
+
+data class DeviceIntentPreflight(
+    val isDeviceTask: Boolean = false,
+    val confidence: Float = 0f,
+    val requiredCapabilities: Set<String> = emptySet(),
+    val requiredConstraints: Set<String> = emptySet(),
+)
+
+internal fun normalizeDeviceText(value: String): String =
+    value.trim().replace(Regex("\\s+"), " ").lowercase()
+
+internal fun analyzeDeviceIntent(text: String): DeviceIntentPreflight {
+    val normalized = normalizeDeviceText(text)
+    if (normalized.isBlank()) return DeviceIntentPreflight()
+
+    val appCue = Regex("""\\b(open|launch|start|switch to|go to)\\b""").containsMatchIn(normalized)
+    val screenCue = listOf(
+        "tap", "click", "press", "swipe", "scroll", "screenshot", "screen",
+        "look at the screen", "read the screen", "find the button", "find the",
+    ).any(normalized::contains)
+    val keyboardCue = listOf(
+        "use the keyboard", "use keyboard", "type with the keyboard",
+        "keyboard tool", "type this", "enter this",
+    ).any(normalized::contains)
+
+    val phoneCue = appCue || screenCue || keyboardCue ||
+        listOf("clipboard", "copy the response", "take a screenshot", "on my phone", "on the device")
+            .any(normalized::contains)
+
+    val requiredCapabilities = buildSet {
+        if (appCue) add("app_launch")
+        if (screenCue) add("device_control")
+        if (keyboardCue) add("keyboard")
+        if ("screenshot" in normalized || "take a screenshot" in normalized) add("screenshot")
+        if ("clipboard" in normalized || "copy" in normalized) add("clipboard")
+    }
+
+    val requiredConstraints = buildSet {
+        if (keyboardCue) add("use_keyboard")
+        if ("screenshot tool" in normalized) add("use_screenshot_tool")
+    }
+
+    return DeviceIntentPreflight(
+        isDeviceTask = phoneCue,
+        confidence = when {
+            !phoneCue -> 0f
+            keyboardCue && appCue -> 0.98f
+            appCue || screenCue -> 0.94f
+            else -> 0.90f
+        },
+        requiredCapabilities = requiredCapabilities,
+        requiredConstraints = requiredConstraints,
+    )
+}
