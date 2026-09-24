@@ -199,6 +199,7 @@ val dataSourceModule = module {
             aiLoggingManager = get(),
             systemPromptBuilder = get(),
             localExecutionEngine = get(),
+            executionTelemetry = get(),
         )
     }
 
