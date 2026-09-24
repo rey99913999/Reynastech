@@ -137,6 +137,7 @@ class DeviceTargetResolver(
     suspend fun resolve(
         target: String,
         minConfidence: Float = 0.70f,
+        visionModelId: String? = null,
     ): DeviceTargetResolution {
         val key = normalizeDeviceText(target)
         cache.rememberedTarget(key)?.let { remembered ->
