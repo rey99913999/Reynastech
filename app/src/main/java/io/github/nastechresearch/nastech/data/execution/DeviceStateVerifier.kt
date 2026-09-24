@@ -6,7 +6,7 @@ import io.github.nastechresearch.nastech.utils.readClipboardText
 fun interface DevicePostconditionVerifier {
     suspend fun verify(
         postcondition: DevicePostcondition,
-        before: DeviceObservation? = null,
+        before: DeviceObservation?,
     ): DeviceVerificationResult
 }
 
