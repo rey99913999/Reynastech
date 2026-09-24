@@ -33,6 +33,8 @@ fun buildStructuredPlanTool(
             
             Safety rules:
             - verification is never removed to save tokens;
+            - side-effecting core device tools require explicit postconditions unless a high-level
+              DeviceAction supplies a structured verification path;
             - actions that normally require approval still require the corresponding tool to be
               pre-approved;
             - steps with level VISION or LLM are returned for higher-level planning instead of
