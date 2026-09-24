@@ -57,7 +57,17 @@ fun buildStructuredPlanTool(
                     })
                     put("taskId", buildJsonObject {
                         put("type", JsonPrimitive("string"))
-                        put("description", JsonPrimitive("Optional Update 02 task id to reuse its state/checkpoints"))
+                        put("description", JsonPrimitive("Optional task id to reuse its state/checkpoints"))
+                    })
+                    put("requiredCapabilities", buildJsonObject {
+                        put("type", JsonPrimitive("array"))
+                        put("items", buildJsonObject { put("type", JsonPrimitive("string")) })
+                        put("description", JsonPrimitive("Required device capabilities such as app_launch, device_control, keyboard"))
+                    })
+                    put("requiredConstraints", buildJsonObject {
+                        put("type", JsonPrimitive("array"))
+                        put("items", buildJsonObject { put("type", JsonPrimitive("string")) })
+                        put("description", JsonPrimitive("Explicit constraints such as use_keyboard or use_screenshot_tool"))
                     })
                     put("steps", buildJsonObject {
                         put("type", JsonPrimitive("array"))
@@ -94,6 +104,24 @@ fun buildStructuredPlanTool(
                                 put("approvalRequired", buildJsonObject { put("type", JsonPrimitive("boolean")) })
                                 put("taskStepId", buildJsonObject { put("type", JsonPrimitive("string")) })
                                 put("alternativeToolNames", buildJsonObject {
+                                    put("type", JsonPrimitive("array"))
+                                    put("items", buildJsonObject { put("type", JsonPrimitive("string")) })
+                                })
+                                put("deviceAction", buildJsonObject {
+                                    put("type", JsonPrimitive("string"))
+                                    put("enum", kotlinx.serialization.json.buildJsonArray {
+                                        DeviceAction.entries.forEach { add(JsonPrimitive(it.name)) }
+                                    })
+                                })
+                                put("preconditions", buildJsonObject {
+                                    put("type", JsonPrimitive("array"))
+                                    put("items", buildJsonObject { put("type", JsonPrimitive("object")) })
+                                })
+                                put("postconditions", buildJsonObject {
+                                    put("type", JsonPrimitive("array"))
+                                    put("items", buildJsonObject { put("type", JsonPrimitive("object")) })
+                                })
+                                put("requiredConstraints", buildJsonObject {
                                     put("type", JsonPrimitive("array"))
                                     put("items", buildJsonObject { put("type", JsonPrimitive("string")) })
                                 })
