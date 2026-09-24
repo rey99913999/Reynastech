@@ -139,25 +139,37 @@ internal fun analyzeDeviceIntent(text: String): DeviceIntentPreflight {
     val normalized = normalizeDeviceText(text)
     if (normalized.isBlank()) return DeviceIntentPreflight()
 
-    val appCue = Regex("""\b(open|launch|start|switch to|go to)\b""").containsMatchIn(normalized)
-    val screenCue = listOf(
-        "tap", "click", "press", "swipe", "scroll", "screenshot", "screen",
-        "look at the screen", "read the screen", "find the button", "find the",
+    val appCue =
+        Regex("""\b(open|launch|start|switch to|go to)\b""").containsMatchIn(normalized) ||
+            listOf("افتح", "شغّل", "شغل", "تشغيل", "انتقل إلى", "انتقل الى").any(normalized::contains)
+
+    val actionCue = listOf(
+        "tap", "click", "press", "swipe", "scroll", "screenshot", "take a screenshot",
+        "capture screenshot", "read the screen", "find the button", "find the target",
+        "type with the keyboard", "use the keyboard", "copy the response",
+        "اضغط", "انقر", "اسحب", "مرر", "لقطة شاشة", "التقط لقطة", "اقرأ الشاشة",
+        "ابحث عن الزر", "استخدم لوحة المفاتيح", "اكتب باستخدام لوحة المفاتيح", "انسخ الرد",
     ).any(normalized::contains)
+
     val keyboardCue = listOf(
         "use the keyboard", "use keyboard", "type with the keyboard",
         "keyboard tool", "type this", "enter this",
+        "استخدم لوحة المفاتيح", "لوحة المفاتيح", "اكتب باستخدام لوحة المفاتيح",
     ).any(normalized::contains)
 
-    val phoneCue = appCue || screenCue || keyboardCue ||
-        listOf("clipboard", "copy the response", "take a screenshot", "on my phone", "on the device")
+    val screenshotCue = listOf(
+        "screenshot", "take a screenshot", "capture screenshot", "لقطة شاشة", "التقط لقطة",
+    ).any(normalized::contains)
+
+    val phoneCue = appCue || actionCue || keyboardCue ||
+        listOf("clipboard", "copy the response", "on my phone", "on the device", "الحافظة", "انسخ")
             .any(normalized::contains)
 
     val requiredCapabilities = buildSet {
         if (appCue) add("app_launch")
         if (screenCue) add("device_control")
         if (keyboardCue) add("keyboard")
-        if ("screenshot" in normalized || "take a screenshot" in normalized) add("screenshot")
+        if (screenshotCue) add("screenshot")
         if ("clipboard" in normalized || "copy" in normalized) add("clipboard")
     }
 
