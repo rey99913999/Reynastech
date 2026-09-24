@@ -559,7 +559,7 @@ class DeviceAgentCore(
                     )
                 }
                 val started = System.currentTimeMillis()
-                val result = waiter.waitFor(predicate)
+                val result = waiter.waitFor(predicate, null)
                 ActionExecution(
                     executed = result.verified,
                     lifecycle = if (result.verified) DeviceActionLifecycle.VERIFIED else DeviceActionLifecycle.EXECUTED,
