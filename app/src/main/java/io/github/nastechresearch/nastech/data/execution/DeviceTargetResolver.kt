@@ -146,6 +146,11 @@ class DeviceTargetResolver(
             }
         }
 
+        parseCoordinates(target)?.let { coordinate ->
+            cache.rememberTarget(key, coordinate)
+            return DeviceTargetResolution.Resolved(coordinate)
+        }
+
         accessibilityLookup.resolve(target)?.let { result ->
             when (result) {
                 is DeviceTargetResolution.Resolved -> {
@@ -166,11 +171,6 @@ class DeviceTargetResolver(
                 is DeviceTargetResolution.Ambiguous -> return result
                 is DeviceTargetResolution.NotFound -> Unit
             }
-        }
-
-        parseCoordinates(target)?.let { coordinate ->
-            cache.rememberTarget(key, coordinate)
-            return DeviceTargetResolution.Resolved(coordinate)
         }
 
         return DeviceTargetResolution.NotFound(target, "target_not_found")
