@@ -23,7 +23,8 @@ class DeviceStateWaiterTest {
         )
 
         val result = waiter.waitFor(
-            DevicePostcondition(DevicePostconditionType.TEXT_PRESENT, "done", timeoutMs = 1_000L)
+            DevicePostcondition(DevicePostconditionType.TEXT_PRESENT, "done", timeoutMs = 1_000L),
+            null,
         )
 
         assertTrue(result.verified)
