@@ -76,10 +76,10 @@ class DeviceAgentCore(
 
                 ExecutionStepKind.VERIFY -> {
                     val predicate = step.postconditions.firstOrNull()
-                        ?: run {
-                            results += failure(plan, step, "verify_step_missing_postcondition")
-                            break
-                        }
+                    if (predicate == null) {
+                        results += failure(plan, step, "verify_step_missing_postcondition")
+                        break
+                    }
                     val verification = verifier.verify(predicate, before)
                     val result = if (verification.verified) {
                         ExecutionStepResult(
