@@ -167,10 +167,10 @@ internal fun analyzeDeviceIntent(text: String): DeviceIntentPreflight {
 
     val requiredCapabilities = buildSet {
         if (appCue) add("app_launch")
-        if (screenCue) add("device_control")
+        if (actionCue) add("device_control")
         if (keyboardCue) add("keyboard")
         if (screenshotCue) add("screenshot")
-        if ("clipboard" in normalized || "copy" in normalized) add("clipboard")
+        if (listOf("clipboard", "copy", "الحافظة", "انسخ").any(normalized::contains)) add("clipboard")
     }
 
     val requiredConstraints = buildSet {
