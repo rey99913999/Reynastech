@@ -142,6 +142,13 @@ fun AssistantDetailPage(id: String) {
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_local_tools)) },
                         trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
+                    item(
+                        onClick = { navController.navigate(Screen.AssistantTools(id)) },
+                        leadingContent = { Icon(HugeIcons.Wrench01, null) },
+                        supportingContent = { Text("Enabled Tools and per-tool permissions for this Assistant.") },
+                        headlineContent = { Text("Tools") },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
+                    )
                 }
             }
         }

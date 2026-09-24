@@ -65,6 +65,21 @@ val appModule = module {
     }
     single { io.github.nastechresearch.nastech.data.preferences.ToolApprovalPreferences(get()) }
     single {
+        io.github.nastechresearch.nastech.data.ai.tools.AssistantToolPermissionRepository(
+            settingsStore = get(),
+            registryCatalog = get(),
+        )
+    }
+    single {
+        io.github.nastechresearch.nastech.data.ai.tools.AssistantToolRegistryCatalog(
+            localTools = get(),
+            mcpManager = get(),
+            skillManager = get(),
+            pluginManager = get(),
+            workspaceRepository = get(),
+        )
+    }
+    single {
         TelegramBotClient(
             tokenProvider = { runCatching { kotlinx.coroutines.runBlocking { get<TelegramBotPreferences>().current().token } }.getOrDefault("") },
             proxyConfigProvider = {
@@ -272,7 +287,9 @@ val appModule = module {
             toolApprovalPreferences = get(),
             workspaceRepository = get(),
             folderRepository = get(),
-            conversationAgentRuntime = get()
+            conversationAgentRuntime = get(),
+            taskManager = get(),
+            assistantToolPermissionRepository = get(),
         )
     }
 

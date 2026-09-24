@@ -2,6 +2,11 @@ package io.github.nastechresearch.nastech.data.execution
 
 import io.github.nastechresearch.nastech.data.task.TaskManager
 import io.github.nastechresearch.nastech.data.task.TaskRecoveryAction
+import io.github.nastechresearch.nastech.data.ai.tools.AssistantToolPermissionResolver
+import io.github.nastechresearch.nastech.data.ai.tools.ToolPermissionDecision
+import io.github.nastechresearch.nastech.data.model.Assistant
+import io.github.nastechresearch.nastech.data.task.TaskToolUsage
+import io.github.nastechresearch.nastech.data.task.TaskToolUsageTracker
 import kotlinx.coroutines.delay
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
@@ -27,6 +32,8 @@ class LocalExecutionEngine(
         plan: StructuredExecutionPlan,
         registry: ExecutionToolRegistry,
         isToolAutoApproved: suspend (String) -> Boolean = { false },
+        toolPermissionResolver: AssistantToolPermissionResolver? = null,
+        assistant: Assistant? = null,
     ): ExecutionPlanResult {
         require(plan.goal.isNotBlank()) { "Execution plan goal cannot be blank" }
         require(plan.steps.isNotEmpty()) { "Execution plan requires at least one step" }
@@ -84,7 +91,57 @@ class LocalExecutionEngine(
             val resolvedToolName = resolvedName.first
             val tool = resolvedName.second
 
-            if (registry.requiresApproval(resolvedToolName, step.args) && !isToolAutoApproved(registry.approvalKey(resolvedToolName))) {
+            if (toolPermissionResolver != null && assistant != null) {
+                when (
+                    toolPermissionResolver.decide(
+                        assistant = assistant,
+                        registry = registry,
+                        toolName = resolvedToolName,
+                        args = step.args,
+                        taskId = plan.taskId,
+                    ).action
+                ) {
+                    ToolPermissionDecision.Action.ALLOW -> Unit
+                    ToolPermissionDecision.Action.ASK -> {
+                        TaskToolUsageTracker.record(
+                            plan.taskId,
+                            TaskToolUsage(
+                                toolName = resolvedToolName,
+                                status = TaskToolUsage.Status.PENDING_APPROVAL,
+                                decision = "Ask",
+                            ),
+                        )
+                        results += ExecutionStepResult(
+                            stepId = step.id,
+                            taskStepId = step.taskStepId,
+                            toolName = toolName,
+                            status = ExecutionStepStatus.APPROVAL_REQUIRED,
+                            error = "Approval is required for " + resolvedToolName + " before local execution.",
+                        )
+                        break
+                    }
+                    ToolPermissionDecision.Action.DENY -> {
+                        TaskToolUsageTracker.record(
+                            plan.taskId,
+                            TaskToolUsage(
+                                toolName = resolvedToolName,
+                                status = TaskToolUsage.Status.DENIED,
+                                decision = "Deny",
+                            ),
+                        )
+                        results += ExecutionStepResult(
+                            stepId = step.id,
+                            taskStepId = step.taskStepId,
+                            toolName = toolName,
+                            status = ExecutionStepStatus.REPLAN_REQUIRED,
+                            error = "Tool " + resolvedToolName + " was denied by the Assistant tool policy. Re-plan without it.",
+                        )
+                        break
+                    }
+                }
+            } else if (registry.requiresApproval(resolvedToolName, step.args) &&
+                !isToolAutoApproved(registry.approvalKey(resolvedToolName))
+            ) {
                 results += ExecutionStepResult(
                     stepId = step.id,
                     taskStepId = step.taskStepId,
@@ -141,6 +198,13 @@ class LocalExecutionEngine(
                         recoveryAttempt = attempt > 1,
                     )
 
+                    TaskToolUsageTracker.record(
+                        plan.taskId,
+                        TaskToolUsage(
+                            toolName = resolvedToolName,
+                            status = TaskToolUsage.Status.COMPLETED,
+                        ),
+                    )
                     successResult = ExecutionStepResult(
                         stepId = step.id,
                         taskStepId = step.taskStepId,
@@ -170,6 +234,13 @@ class LocalExecutionEngine(
                 continue
             }
 
+            TaskToolUsageTracker.record(
+                plan.taskId,
+                TaskToolUsage(
+                    toolName = resolvedToolName,
+                    status = TaskToolUsage.Status.FAILED,
+                ),
+            )
             results += failure(plan, step, lastError)
             break
         }

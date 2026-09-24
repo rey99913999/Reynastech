@@ -20,6 +20,13 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE status = :status ORDER BY updatedAt DESC")
     suspend fun listByStatus(status: String): List<TaskEntity>
 
+    @Query(
+        "SELECT * FROM tasks WHERE conversationId = :conversationId " +
+            "AND status IN ('RUNNING', 'WAITING_FOR_USER', 'PAUSED') " +
+            "ORDER BY updatedAt DESC LIMIT 1"
+    )
+    suspend fun latestActiveForConversation(conversationId: String): TaskEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: TaskEntity)
 

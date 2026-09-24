@@ -67,6 +67,10 @@ import io.github.nastechresearch.nastech.data.ai.GenerationChunk
 import io.github.nastechresearch.nastech.data.ai.GenerationHandler
 import io.github.nastechresearch.nastech.data.execution.ExecutionToolRegistry
 import io.github.nastechresearch.nastech.data.execution.ToolSourceHint
+import io.github.nastechresearch.nastech.data.ai.tools.AssistantToolPermissionResolver
+import io.github.nastechresearch.nastech.data.ai.tools.AssistantToolPermissionRepository
+import io.github.nastechresearch.nastech.data.ai.tools.AssistantToolPermissionPolicy
+import io.github.nastechresearch.nastech.data.ai.tools.TaskToolApprovalGrants
 import io.github.nastechresearch.nastech.data.agent.ConversationAgentRuntime
 import io.github.nastechresearch.nastech.data.agent.buildAutonomousTaskTool
 import io.github.nastechresearch.nastech.data.ai.ContextBudgetPlanner
@@ -114,6 +118,7 @@ import io.github.nastechresearch.nastech.data.repository.ConversationRepository
 import io.github.nastechresearch.nastech.data.repository.FolderRepository
 import io.github.nastechresearch.nastech.data.repository.MemoryRepository
 import io.github.nastechresearch.nastech.data.repository.WorkspaceRepository
+import io.github.nastechresearch.nastech.data.task.TaskManager
 import io.github.nastechresearch.nastech.web.BadRequestException
 import io.github.nastechresearch.nastech.web.NotFoundException
 import io.github.nastechresearch.nastech.utils.applyPlaceholders
@@ -125,6 +130,8 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.uuid.Uuid
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 private const val TAG = "ChatService"
 private const val COMPACTION_REQUEST_TIMEOUT_MS = 3 * 60_000L
@@ -236,7 +243,11 @@ class ChatService(
     private val workspaceRepository: WorkspaceRepository,
     private val folderRepository: FolderRepository,
     private val conversationAgentRuntime: ConversationAgentRuntime,
+    private val taskManager: TaskManager,
+    private val assistantToolPermissionRepository: AssistantToolPermissionRepository,
 ) {
+    private val assistantToolPermissionResolver = AssistantToolPermissionResolver()
+
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
 
@@ -800,10 +811,9 @@ class ChatService(
 
     // ---- 处理工具调用审批 ----
 
-    /** Scope of an "approve" decision. Once = this single tool call only. ChatScope =
-     *  every future call of the same tool name in this conversation (until /new). Always =
-     *  every future call of this tool name across the whole app, persisted to disk. */
-    enum class ApprovalScope { Once, ChatScope, Always }
+    /** Runtime decision scope. ChatScope is retained only for decoding old callers and
+     *  is intentionally treated as Once; it is no longer an authoritative permission scope. */
+    enum class ApprovalScope { Once, Task, ChatScope, Always }
 
     fun handleToolApproval(
         conversationId: Uuid,
@@ -813,6 +823,7 @@ class ChatService(
         answer: String? = null,
         scope: ApprovalScope = ApprovalScope.Once,
         toolName: String? = null,
+        taskId: String? = null,
     ) {
         val session = getOrCreateSession(conversationId)
         val convMutex = mutexFor(conversationId)
@@ -826,26 +837,6 @@ class ChatService(
         // generation never resumes. The YOLO toggle masked this because auto-approval
         // skips the Pending → handleToolApproval path entirely.
         val priorGenerationJob = session.getJob()
-
-        // Commit the broader-scope grant on a NonCancellable scope BEFORE the cancellable
-        // mutation block. Previous design ran grantAlways() inside the cancellable
-        // appScope.launch — a rapid second tap would cancel the first job and silently
-        // drop the persisted Always-Allow grant; the user thinks they granted it, the next
-        // prompt reappears. NonCancellable + before-launch-completion guarantees the write.
-        if (approved && toolName != null && scope != ApprovalScope.Once) {
-            appScope.launch(NonCancellable) {
-                runCatching {
-                    // Smart-cast on the surrounding `if` excluded Once already, so only
-                    // ChatScope and Always remain — the when is exhaustive without else.
-                    when (scope) {
-                        ApprovalScope.ChatScope -> io.github.nastechresearch.nastech.data.ai.tools
-                            .ToolApprovalAllowList.grantForChat(conversationId, toolName)
-                        ApprovalScope.Always -> toolApprovalPreferences.grantAlways(toolName)
-                        ApprovalScope.Once -> Unit
-                    }
-                }.onFailure { Log.w(TAG, "approval grant write failed", it) }
-            }
-        }
 
         val releaseForegroundWork = foregroundWorkTracker.acquire()
         val job = appScope.launch {
@@ -877,6 +868,8 @@ class ChatService(
                     // /stop or a concurrent decision could have already flipped it to
                     // Denied(cancelled); we don't want to overwrite that with Approved.
                     var foundActivePending = false
+                    var approvedToolId: String? = null
+                    var approvedTaskId: String? = null
                     val updatedNodes = conversation.messageNodes.map { node ->
                         node.copy(
                             messages = node.messages.map { msg ->
@@ -885,6 +878,11 @@ class ChatService(
                                         if (part is UIMessagePart.Tool && part.toolCallId == toolCallId) {
                                             if (part.isPending) {
                                                 foundActivePending = true
+                                                val metadata = part.metadata
+                                                approvedToolId = metadata?.get("permission_tool_id")?.jsonPrimitive?.contentOrNull
+                                                    ?: toolName
+                                                approvedTaskId = metadata?.get("permission_task_id")?.jsonPrimitive?.contentOrNull
+                                                    ?: taskId
                                                 part.copy(approvalState = newApprovalState)
                                             } else part
                                         } else part
@@ -900,6 +898,34 @@ class ChatService(
                     }
                     val updatedConversation = conversation.copy(messageNodes = updatedNodes)
                     saveConversation(conversationId, updatedConversation)
+
+                    // Update 04 runtime grants are committed only after the pending tool was
+                    // found and persisted, so a stale callback cannot grant another Assistant.
+                    val effectiveTaskId = approvedTaskId
+                    val effectiveToolId = approvedToolId
+                    when {
+                        approved && scope == ApprovalScope.Task &&
+                            !effectiveTaskId.isNullOrBlank() && !effectiveToolId.isNullOrBlank() -> {
+                            TaskToolApprovalGrants.grant(
+                                taskId = effectiveTaskId,
+                                assistantId = conversation.assistantId,
+                                toolId = effectiveToolId,
+                            )
+                        }
+                        approved && scope == ApprovalScope.Always &&
+                            !toolName.isNullOrBlank() &&
+                            assistantToolPermissionResolver.canPersistAlwaysAllow(toolName) &&
+                            !effectiveToolId.isNullOrBlank() -> {
+                            withContext(NonCancellable) {
+                                assistantToolPermissionRepository.setToolPolicy(
+                                    assistantId = conversation.assistantId,
+                                    toolId = effectiveToolId,
+                                    policy = AssistantToolPermissionPolicy.ALWAYS_ALLOW,
+                                )
+                            }
+                        }
+                        // Legacy ChatScope is deliberately not persisted. It behaves as Allow once.
+                    }
 
                     // Check if there are still pending tools across the conversation
                     val hasPendingTools = updatedNodes.any { node ->
@@ -1137,6 +1163,10 @@ class ChatService(
                 tools = generationTools,
                 sourceHints = registrySourceHints,
             )
+            val activeTaskId = taskManager
+                .latestActiveTaskForConversation(conversationId.toString())
+                ?.taskId
+
             generationHandler.generateText(
                 settings = settings,
                 model = model,
@@ -1147,41 +1177,18 @@ class ChatService(
                 // for in-app conversations that didn't register one.
                 systemAddendum = io.github.nastechresearch.nastech.data.ai.tools
                     .ConversationSystemAddendum.get(conversationId),
-                isToolAutoApproved = { toolName ->
-                    // YOLO mode ("I AM STUPID" toggle in Settings → Tool approvals): every
-                    // tool auto-approves. User opted into this explicitly. HARDLINE still
-                    // blocks rm -rf / et al — that check runs BEFORE auto-approval in
-                    // GenerationHandler, so YOLO can't smuggle one through.
-                    //
-                    // Headless conversations (cron-driven) also auto-approve EVERY tool;
-                    // the user pre-authorised the schedule itself at job-creation time
-                    // and there's no UI surface to prompt at fire time.
-                    //
-                    // Otherwise: "Allow for this chat" (in-memory, per-conversation) OR
-                    // "Always Allow" (DataStore-backed, across the whole app). The
-                    // Once-grant lives in the message itself as
-                    // ToolApprovalState.Approved, so it's already handled by the regular
-                    // Pending → Approved transition.
-                    //
-                    // ask_user is a human-input request, NOT a permission gate. It must pause
-                    // for the user whenever there's a surface to ask on (the in-app question card
-                    // or the Telegram clarify flow), so it ignores YOLO and the allow-lists —
-                    // otherwise it auto-executes its placeholder body and returns
-                    // ask_user_unavailable. In a headless run (cron / sub-agent) there's nobody to
-                    // answer, so it still auto-approves there and falls through to that graceful
-                    // envelope instead of hanging the turn.
-                    if (toolName == "ask_user") {
-                        io.github.nastechresearch.nastech.data.ai.tools.HeadlessConversations
-                            .shouldAutoApprove(conversationId)
-                    } else {
-                        toolApprovalPreferences.currentYolo() ||
-                            io.github.nastechresearch.nastech.data.ai.tools.HeadlessConversations
-                                .shouldAutoApprove(conversationId) ||
-                            io.github.nastechresearch.nastech.data.ai.tools.ToolApprovalAllowList
-                                .isAllowedForChat(conversationId, toolName) ||
-                            toolApprovalPreferences.current().contains(toolName)
-                    }
+                // Headless execution has no approval UI; preserve the existing deliberate
+                // headless authorization path. Foreground/in-app execution always uses the
+                // Assistant-scoped resolver and never reads a global grant list.
+                isToolAutoApproved = { _ ->
+                    io.github.nastechresearch.nastech.data.ai.tools.HeadlessConversations
+                        .shouldAutoApprove(conversationId)
                 },
+                toolPermissionResolver =
+                    if (io.github.nastechresearch.nastech.data.ai.tools.HeadlessConversations
+                        .isHeadless(conversationId)
+                    ) null else assistantToolPermissionResolver,
+                taskId = activeTaskId,
                 onAfterToolExecution = { generatedMessages ->
                     if (messageRange != null || !settings.enableAutoCompaction) {
                         null
@@ -1241,6 +1248,8 @@ class ChatService(
                 conversationModeInjectionIds = conversation.modeInjectionIds,
                 conversationLorebookIds = conversation.lorebookIds,
                 workspaceCwd = conversation.workspaceCwd,
+                // Update 04: taskId remains optional for normal chats; structured task
+                // executors pass their task id through their own approval resolver.
                 memories = if (assistant.useGlobalMemory) {
                     memoryRepository.getGlobalMemories()
                 } else {

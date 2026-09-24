@@ -63,7 +63,11 @@ import io.github.nastechresearch.nastech.data.execution.ExecutionToolRegistry
 import io.github.nastechresearch.nastech.data.execution.LocalExecutionEngine
 import io.github.nastechresearch.nastech.data.execution.ToolOutputPreprocessor
 import io.github.nastechresearch.nastech.data.execution.buildStructuredPlanTool
+import io.github.nastechresearch.nastech.data.task.TaskToolUsage
+import io.github.nastechresearch.nastech.data.task.TaskToolUsageTracker
 import io.github.nastechresearch.nastech.data.ai.tools.buildMemoryTools
+import io.github.nastechresearch.nastech.data.ai.tools.AssistantToolPermissionResolver
+import io.github.nastechresearch.nastech.data.ai.tools.ToolPermissionDecision
 import io.github.nastechresearch.nastech.data.datastore.Settings
 import io.github.nastechresearch.nastech.data.datastore.findModelById
 import io.github.nastechresearch.nastech.data.datastore.findProvider
@@ -446,6 +450,11 @@ class GenerationHandler(
         // closure that reads ToolApprovalAllowList + ToolApprovalPreferences. Default
         // returns false so callers that don't care still get vanilla approval gating.
         isToolAutoApproved: suspend (toolName: String) -> Boolean = { false },
+        // Update 04 — authoritative per-Assistant permission gate. When present, this
+        // resolver replaces the legacy global allow-list checks while retaining the old
+        // callback for callers outside ChatService.
+        toolPermissionResolver: AssistantToolPermissionResolver? = null,
+        taskId: String? = null,
         // Optional per-call addendum appended to the system prompt. Used by surfaces that
         // need the model to know runtime context (e.g. "you're talking via Telegram, the
         // chat_id is 12345") without polluting the user message body — without this the
@@ -507,6 +516,8 @@ class GenerationHandler(
                 registry = registry,
                 engine = localExecutionEngine,
                 isToolAutoApproved = isToolAutoApproved,
+                toolPermissionResolver = toolPermissionResolver,
+                assistant = assistant,
             )
             registry.registerAlwaysVisible(structuredPlanTool)
             registry.resetVisibility()
@@ -701,15 +712,99 @@ class GenerationHandler(
                                     "should run it themselves in a terminal outside the agent."
                             ))
                         }
-                        // Tool needs approval and state is Auto:
+                        // Update 04 — Assistant-scoped policy resolver. Explicit DENY is
+                        // returned to the model as a structured denial so it can re-plan; ASK
+                        // creates the normal user approval card; ALLOW proceeds without a prompt.
+                        toolPermissionResolver != null &&
+                            tool.approvalState is ToolApprovalState.Auto -> {
+                            run {
+                                val decision = toolPermissionResolver.decide(
+                                    assistant = assistant,
+                                    registry = registry,
+                                    toolName = tool.toolName,
+                                    args = tool.inputAsJson() as? kotlinx.serialization.json.JsonObject
+                                        ?: kotlinx.serialization.json.JsonObject(emptyMap()),
+                                    taskId = taskId,
+                                )
+                                when (decision.action) {
+                                    ToolPermissionDecision.Action.ALLOW -> {
+                                        if (decision.reason == "allowed for this task") {
+                                            TaskToolUsageTracker.record(
+                                                taskId,
+                                                TaskToolUsage(
+                                                    toolName = tool.toolName,
+                                                    status = TaskToolUsage.Status.ALLOWED_FOR_TASK,
+                                                    decision = "Allow for this task",
+                                                ),
+                                            )
+                                        }
+                                        tool
+                                    }
+                                    ToolPermissionDecision.Action.ASK -> {
+                                        TaskToolUsageTracker.record(
+                                            taskId,
+                                            TaskToolUsage(
+                                                toolName = tool.toolName,
+                                                status = TaskToolUsage.Status.PENDING_APPROVAL,
+                                                decision = "Ask",
+                                            ),
+                                        )
+                                        hasPendingApproval = true
+                                        tool.copy(
+                                            approvalState = ToolApprovalState.Pending,
+                                            metadata = tool.metadata ?: buildJsonObject {
+                                                put("permission_policy", "ask")
+                                                decision.metadata?.let { meta ->
+                                                    put("permission_tool_id", meta.identity.stableId)
+                                                    put("permission_source", meta.identity.source.name)
+                                                    put("permission_source_id", meta.identity.sourceId)
+                                                    put("permission_risk", meta.risk.name)
+                                                    put("permission_description", meta.description)
+                                                    put("permission_category", meta.category.displayName)
+                                                    put("permission_side_effects", meta.sideEffects.joinToString(", "))
+                                                    put("permission_output", meta.outputContract)
+                                                }
+                                                decision.reason?.let { put("permission_reason", it) }
+                                                taskId?.let { put("permission_task_id", it) }
+                                            },
+                                        )
+                                    }
+                                    ToolPermissionDecision.Action.DENY -> {
+                                        TaskToolUsageTracker.record(
+                                            taskId,
+                                            TaskToolUsage(
+                                                toolName = tool.toolName,
+                                                status = TaskToolUsage.Status.DENIED,
+                                                decision = "Deny",
+                                            ),
+                                        )
+                                        tool.copy(
+                                            approvalState = ToolApprovalState.Denied(
+                                                decision.reason ?: "denied by Assistant tool policy"
+                                            ),
+                                            metadata = tool.metadata ?: buildJsonObject {
+                                                put("permission_policy", "deny")
+                                                decision.metadata?.let { meta ->
+                                                    put("permission_tool_id", meta.identity.stableId)
+                                                    put("permission_source", meta.identity.source.name)
+                                                    put("permission_source_id", meta.identity.sourceId)
+                                                    put("permission_risk", meta.risk.name)
+                                                    put("permission_description", meta.description)
+                                                    put("permission_category", meta.category.displayName)
+                                                    put("permission_side_effects", meta.sideEffects.joinToString(", "))
+                                                }
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        // Legacy compatibility: callers that do not provide the new resolver
+                        // continue using their existing auto-approval callback.
                         toolDef?.needsApproval(tool.inputAsJson()) == true &&
                             tool.approvalState is ToolApprovalState.Auto -> {
-                            // Fresh per-tool auto-approval check (was a frozen pre-
-                            // resolved set). Costs a DataStore.first() per tool but tools
-                            // are typically <5 per turn so the latency is negligible, and
-                            // freshness matters for the YOLO toggle / mid-iteration grants.
                             if (isToolAutoApproved(tool.toolName)) {
-                                tool  // leave as Auto so the executor runs it without prompting
+                                tool
                             } else {
                                 hasPendingApproval = true
                                 tool.copy(approvalState = ToolApprovalState.Pending)
@@ -1004,6 +1099,13 @@ class GenerationHandler(
                                 output = maybeTruncateToolOutput(tool.toolCallId, result, hasShellAccess)
                             )
                             registry.markExecuted(toolDef.name)
+                            TaskToolUsageTracker.record(
+                                taskId,
+                                TaskToolUsage(
+                                    toolName = toolDef.name,
+                                    status = TaskToolUsage.Status.COMPLETED,
+                                ),
+                            )
                         }.onFailure {
                             // Stack trace stays in logcat for debugging; the JSON envelope
                             // sent BACK to the LLM gets just the exception's message and a
@@ -1013,6 +1115,13 @@ class GenerationHandler(
                             // user-visible "java.lang.IllegalStateException at ..." walls
                             // for what was usually a one-line "name is required" problem.
                             Log.w(TAG, "tool ${tool.toolName} threw", it)
+                            TaskToolUsageTracker.record(
+                                taskId,
+                                TaskToolUsage(
+                                    toolName = tool.toolName,
+                                    status = TaskToolUsage.Status.FAILED,
+                                ),
+                            )
                             executedTools += tool.copy(
                                 output = listOf(
                                     UIMessagePart.Text(

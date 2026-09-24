@@ -36,6 +36,9 @@ import io.github.nastechresearch.nastech.data.task.TaskPolicy
 import io.github.nastechresearch.nastech.data.task.TaskStatus
 import io.github.nastechresearch.nastech.data.task.TaskStepEntity
 import io.github.nastechresearch.nastech.data.task.TaskStepStatus
+import io.github.nastechresearch.nastech.data.task.TaskToolUsageTracker
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import io.github.nastechresearch.nastech.ui.components.execution.TaskStepInspectorDialog
 import io.github.nastechresearch.nastech.ui.components.nav.BackButton
 import io.github.nastechresearch.nastech.ui.context.LocalNavController
@@ -58,10 +61,18 @@ fun TaskDetailPage(
     val executionUsage by taskManager.observeExecutionUsage(taskId).collectAsStateWithLifecycle(initialValue = null)
     var policy by remember(task?.conversationId) { mutableStateOf<TaskPolicy?>(null) }
     var selectedStep by remember { mutableStateOf<TaskStepEntity?>(null) }
+    var toolUsage by remember(taskId) { mutableStateOf(emptyList<io.github.nastechresearch.nastech.data.task.TaskToolUsage>()) }
 
     LaunchedEffect(task?.conversationId) {
         val conversationId = task?.conversationId ?: return@LaunchedEffect
         policy = taskManager.getPolicy(conversationId)
+    }
+
+    LaunchedEffect(taskId) {
+        while (isActive) {
+            toolUsage = TaskToolUsageTracker.snapshot(taskId)
+            delay(750L)
+        }
     }
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -208,6 +219,25 @@ fun TaskDetailPage(
                         ListItem(
                             headlineContent = { Text(checkpoint.note ?: "Checkpoint") },
                             supportingContent = { Text(checkpoint.stateSummary) },
+                        )
+                    }
+                }
+
+                item { Text("Tools used", style = MaterialTheme.typography.titleMedium) }
+                if (toolUsage.isEmpty()) {
+                    item { Text("No tool activity recorded for this task yet.") }
+                } else {
+                    items(toolUsage.take(50), key = { it.toolName + ":" + it.status.name }) { usage ->
+                        ListItem(
+                            headlineContent = {
+                                Text(usage.toolName)
+                            },
+                            supportingContent = {
+                                Text(
+                                    usage.status.name.replace('_', ' ') +
+                                        (usage.decision?.let { " • " + it } ?: "")
+                                )
+                            },
                         )
                     }
                 }
