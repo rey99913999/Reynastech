@@ -44,23 +44,16 @@ enum class ToolCategory {
         }
 
     companion object {
-        val CORE_DEVICE_TOOL_NAMES: Set<String> = setOf(
-            "open_app",
-            "launch_app",
-            "keyboard_type",
-            "read_window_tree",
-            "find_node",
-            "click_node",
-            "set_text",
-            "take_screenshot",
-            "clipboard_tool",
-            "global_action",
-            "tap",
-            "scroll",
-        )
-
-        fun isCoreDeviceTool(name: String): Boolean = name in CORE_DEVICE_TOOL_NAMES
-
+        fun fromLabel(value: String): ToolCategory? {
+            val normalized = value.trim().lowercase()
+                .replace('_', ' ')
+                .replace('-', ' ')
+                .replace('/', ' ')
+            return entries.firstOrNull {
+                it.displayName.lowercase() == normalized ||
+                    it.name.lowercase() == normalized.replace(' ', '_')
+            }
+        }
     }
 }
 
@@ -635,6 +628,25 @@ class ExecutionToolRegistry(
         val fields: List<String> = emptyList(),
         val required: List<String> = emptyList(),
     )
+
+    companion object {
+        val CORE_DEVICE_TOOL_NAMES: Set<String> = setOf(
+            "open_app",
+            "launch_app",
+            "keyboard_type",
+            "read_window_tree",
+            "find_node",
+            "click_node",
+            "set_text",
+            "take_screenshot",
+            "clipboard_tool",
+            "global_action",
+            "tap",
+            "scroll",
+        )
+
+        fun isCoreDeviceTool(name: String): Boolean = name in CORE_DEVICE_TOOL_NAMES
+    }
 }
 
 fun ToolMetadata.toDiscoveryJson(): JsonObject = buildJsonObject {
