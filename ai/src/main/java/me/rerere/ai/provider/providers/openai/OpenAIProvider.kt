@@ -23,6 +23,8 @@ import me.rerere.ai.provider.EmbeddingGenerationResult
 import me.rerere.ai.provider.ImageEditParams
 import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.Modality
+import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationResult
@@ -126,14 +128,83 @@ class OpenAIProvider(
                     // current zero-cost models without a hard-coded catalogue.
                     openRouterModelFromJson(modelObj)
                 } else {
-                    val id = modelObj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-                    Model(
-                        modelId = id,
-                        displayName = id,
-                    )
+                    genericOpenAiModelFromJson(modelObj)
                 }
             }
         }
+
+    /** Parse optional standard/vendor metadata without claiming unsupported capabilities. */
+    private fun genericOpenAiModelFromJson(modelObj: JsonObject): Model? {
+        val id = modelObj["id"]?.jsonPrimitive?.contentOrNull ?: return null
+        val displayName = modelObj["name"]?.jsonPrimitive?.contentOrNull?.ifBlank { id } ?: id
+        val supportedParameters = modelObj["supported_parameters"]?.jsonArray
+            ?.mapNotNull { it.jsonPrimitive.contentOrNull }
+            .orEmpty()
+        val architecture = modelObj["architecture"] as? JsonObject
+        val providerMeta = (modelObj["providers"] as? JsonArray)
+            ?.mapNotNull { it as? JsonObject }
+            ?.firstOrNull { it["status"]?.jsonPrimitive?.contentOrNull == "live" }
+            ?: ((modelObj["providers"] as? JsonArray)?.firstOrNull() as? JsonObject)
+            ?: emptyJsonObject()
+        val inputModalities = ((modelObj["input_modalities"] as? JsonArray)
+            ?: (architecture?.get("input_modalities") as? JsonArray))
+            ?.mapNotNull { it.jsonPrimitive.contentOrNull?.uppercase()?.let { value -> runCatching { Modality.valueOf(value) }.getOrNull() } }
+            ?.ifEmpty { listOf(Modality.TEXT) }
+            ?: listOf(Modality.TEXT)
+        val outputModalities = ((modelObj["output_modalities"] as? JsonArray)
+            ?: (architecture?.get("output_modalities") as? JsonArray))
+            ?.mapNotNull { it.jsonPrimitive.contentOrNull?.uppercase()?.let { value -> runCatching { Modality.valueOf(value) }.getOrNull() } }
+            ?.ifEmpty { listOf(Modality.TEXT) }
+            ?: listOf(Modality.TEXT)
+
+        val abilities = buildList {
+            if (modelObj.booleanField("supports_tools") == true ||
+                providerMeta.booleanField("supports_tools") == true ||
+                modelObj.booleanField("tool_calling") == true ||
+                supportedParameters.any { it.contains("tool", ignoreCase = true) }
+            ) add(ModelAbility.TOOL)
+            if (modelObj.booleanField("supports_structured_output") == true ||
+                providerMeta.booleanField("supports_structured_output") == true ||
+                modelObj.booleanField("structured_output") == true ||
+                supportedParameters.any { it.contains("structured", ignoreCase = true) }
+            ) add(ModelAbility.STRUCTURED_OUTPUT)
+            if (modelObj.booleanField("supports_streaming") == true ||
+                providerMeta.booleanField("supports_streaming") == true ||
+                modelObj.booleanField("streaming") == true
+            ) add(ModelAbility.STREAMING)
+            if (modelObj.booleanField("supports_reasoning") == true ||
+                providerMeta.booleanField("supports_reasoning") == true ||
+                modelObj.booleanField("reasoning") == true ||
+                supportedParameters.any { it.contains("reason", ignoreCase = true) }
+            ) add(ModelAbility.REASONING)
+        }
+
+        val pricing = (modelObj["pricing"] as? JsonObject) ?: (providerMeta["pricing"] as? JsonObject)
+        val promptPrice = (pricing?.get("input") ?: pricing?.get("prompt"))
+            ?.jsonPrimitive?.contentOrNull?.toDoubleOrNull()
+        val completionPrice = (pricing?.get("output") ?: pricing?.get("completion"))
+            ?.jsonPrimitive?.contentOrNull?.toDoubleOrNull()
+        val contextLength = providerMeta["context_length"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+            ?: modelObj["context_length"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+            ?: modelObj["context_window"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+
+        return Model(
+            modelId = id,
+            displayName = displayName,
+            inputModalities = inputModalities,
+            outputModalities = outputModalities,
+            abilities = abilities,
+            contextLength = contextLength,
+            supportedParameters = supportedParameters,
+            pricePromptPerToken = promptPrice,
+            priceCompletionPerToken = completionPrice,
+        )
+    }
+
+    private fun JsonObject.booleanField(name: String): Boolean? =
+        this[name]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull()
+
+    private fun emptyJsonObject(): JsonObject = JsonObject(emptyMap())
 
     override suspend fun getBalance(providerSetting: ProviderSetting.OpenAI): String = withContext(Dispatchers.IO) {
         val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())

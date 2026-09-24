@@ -577,7 +577,7 @@ private fun AddButton(onAdd: (ProviderSetting) -> Unit) {
 
     IconButton(
         onClick = {
-            dialogState.open(ProviderSetting.OpenAI())
+            dialogState.open(ProviderSetting.Custom())
         }
     ) {
         Icon(HugeIcons.Add01, stringResource(R.string.accessibility_add_provider))

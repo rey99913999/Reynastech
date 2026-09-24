@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.ModelType
+import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
@@ -70,12 +72,16 @@ fun ProviderConnectionTester(
         var nonStreamingState: UiState<String> by remember { mutableStateOf(UiState.Idle) }
         var streamingState: UiState<String> by remember { mutableStateOf(UiState.Idle) }
         var toolsState: UiState<String> by remember { mutableStateOf(UiState.Idle) }
+        var discoveryState: UiState<String> by remember { mutableStateOf(UiState.Idle) }
+        var capabilityState: UiState<String> by remember { mutableStateOf(UiState.Idle) }
         var streamingText by remember { mutableStateOf("") }
 
         fun resetStates() {
             nonStreamingState = UiState.Idle
             streamingState = UiState.Idle
             toolsState = UiState.Idle
+            discoveryState = UiState.Idle
+            capabilityState = UiState.Idle
             streamingText = ""
         }
 
@@ -112,6 +118,18 @@ fun ProviderConnectionTester(
                         state = toolsState,
                         resultText = (toolsState as? UiState.Success)?.data ?: ""
                     )
+
+                    TestResultItem(
+                        label = stringResource(R.string.provider_test_model_discovery),
+                        state = discoveryState,
+                        resultText = (discoveryState as? UiState.Success)?.data ?: ""
+                    )
+
+                    TestResultItem(
+                        label = stringResource(R.string.provider_test_capabilities),
+                        state = capabilityState,
+                        resultText = (capabilityState as? UiState.Success)?.data ?: ""
+                    )
                 }
             },
             dismissButton = {
@@ -126,6 +144,39 @@ fun ProviderConnectionTester(
                         val provider = providerManager.getProviderByType(internalProvider)
                         resetStates()
                         scope.launch {
+                            launch {
+                                runCatching {
+                                    discoveryState = UiState.Loading
+                                    val discovered = provider.listModels(internalProvider)
+                                    val selectedId = model?.modelId
+                                    discoveryState = UiState.Success(
+                                        when {
+                                            discovered.isEmpty() -> context.getString(R.string.provider_test_no_models)
+                                            selectedId.isNullOrBlank() -> context.getString(R.string.provider_test_models_found, discovered.size)
+                                            discovered.any { it.modelId == selectedId } -> context.getString(R.string.provider_test_model_available)
+                                            else -> context.getString(R.string.provider_test_model_not_available)
+                                        }
+                                    )
+                                }.onFailure { discoveryState = UiState.Error(it) }
+                            }
+                            launch {
+                                val selected = model
+                                val abilities = selected?.abilities.orEmpty()
+                                val vision = selected != null && Modality.IMAGE in selected.inputModalities
+                                val toolCalling = ModelAbility.TOOL in abilities
+                                val structured = ModelAbility.STRUCTURED_OUTPUT in abilities
+                                val streaming = ModelAbility.STREAMING in abilities
+                                val reasoning = ModelAbility.REASONING in abilities
+                                capabilityState = UiState.Success(
+                                    buildString {
+                                        append("Vision: ").append(if (selected == null) "Unknown" else if (vision) "Supported" else "Unknown")
+                                        append(" · Tool: ").append(if (selected == null) "Unknown" else if (toolCalling) "Supported" else "Unknown")
+                                        append(" · Structured: ").append(if (selected == null) "Unknown" else if (structured) "Supported" else "Unknown")
+                                        append(" · Streaming: ").append(if (selected == null) "Unknown" else if (streaming) "Supported" else "Unknown")
+                                        append(" · Reasoning: ").append(if (selected == null) "Unknown" else if (reasoning) "Supported" else "Unknown")
+                                    }
+                                )
+                            }
                             launch {
                                 runCatching {
                                     nonStreamingState = UiState.Loading
@@ -172,6 +223,10 @@ fun ProviderConnectionTester(
                             }
                             launch {
                                 runCatching {
+                                    if (ModelAbility.TOOL !in model!!.abilities) {
+                                        toolsState = UiState.Success(context.getString(R.string.provider_test_unknown_capability))
+                                        return@runCatching
+                                    }
                                     toolsState = UiState.Loading
                                     val testTool = Tool(
                                         name = "get_current_time",

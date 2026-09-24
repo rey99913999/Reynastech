@@ -35,6 +35,7 @@ import io.github.nastechresearch.nastech.data.gemini.GeminiOAuthManager
 import io.github.nastechresearch.nastech.data.gemini.GeminiProvider
 import io.github.nastechresearch.nastech.data.grok.GrokProvider
 import io.github.nastechresearch.nastech.data.datastore.SettingsStore
+import io.github.nastechresearch.nastech.data.provider.ProviderCredentialStore
 import io.github.nastechresearch.nastech.data.db.AppDatabase
 import io.github.nastechresearch.nastech.data.db.fts.MessageFtsManager
 import io.github.nastechresearch.nastech.data.db.fts.SimpleDictManager
@@ -67,7 +68,7 @@ import java.util.concurrent.TimeUnit
 
 val dataSourceModule = module {
     single {
-        SettingsStore(context = get(), scope = get())
+        SettingsStore(context = get(), scope = get(), providerCredentialStore = get())
     }
 
     single {
@@ -248,6 +249,10 @@ val dataSourceModule = module {
                 // Debug-only so release builds never leak provider keys to logcat.
                 if (BuildConfig.DEBUG) {
                     addInterceptor(HttpLoggingInterceptor().apply {
+                        redactHeader("Authorization")
+                        redactHeader("X-Api-Key")
+                        redactHeader("Api-Key")
+                        redactHeader("X-Goog-Api-Key")
                         level = HttpLoggingInterceptor.Level.HEADERS
                     })
                 }
@@ -347,7 +352,11 @@ val dataSourceModule = module {
     single {
         val codexRepository: CodexAccountRepository = get()
         val json: Json = get()
-        ProviderManager(client = get(), context = get()).also { pm ->
+        ProviderManager(
+            client = get(),
+            context = get(),
+            credentialResolver = get<ProviderCredentialStore>(),
+        ).also { pm ->
             pm.registerProvider(
                 "codex",
                 CodexProvider(

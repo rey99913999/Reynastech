@@ -41,6 +41,8 @@ enum class Modality {
 enum class ModelAbility {
     TOOL,
     REASONING,
+    STRUCTURED_OUTPUT,
+    STREAMING,
 }
 
 // 模型(提供商)提供的内置工具选项

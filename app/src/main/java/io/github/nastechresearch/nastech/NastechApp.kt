@@ -21,6 +21,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.first
 import me.rerere.common.android.Logging
 import me.rerere.common.android.appTempFolder
@@ -65,6 +66,15 @@ class NastechApp : Application() {
             modules(appModule, viewModelModule, dataSourceModule, repositoryModule)
         }
         this.createNotificationChannel()
+
+        // Update 05 — move legacy provider API keys out of DataStore before any settings
+        // consumer can decode or rewrite the provider list. The operation is idempotent and
+        // only rewrites the persisted provider JSON after the encrypted vault write succeeds.
+        runCatching {
+            runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+                get<SettingsStore>().migrateLegacyProviderCredentials()
+            }
+        }.onFailure { Log.w(TAG, "Provider credential migration is pending and will be retried", it) }
 
         // Update 04 — retire legacy global tool grants without copying them across Assistants.
         // The new per-Assistant permission center owns all authoritative policy state.

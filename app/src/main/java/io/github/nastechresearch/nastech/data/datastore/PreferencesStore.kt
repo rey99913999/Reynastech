@@ -12,8 +12,11 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import io.pebbletemplates.pebble.PebbleEngine
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.sync.withLock
@@ -29,10 +32,12 @@ import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ProviderCredential
 import me.rerere.ai.provider.ProviderSetting
 import io.github.nastechresearch.nastech.AppScope
 import io.github.nastechresearch.nastech.data.ai.mcp.McpServerConfig
 import io.github.nastechresearch.nastech.data.ai.tools.LocalToolOption
+import io.github.nastechresearch.nastech.data.provider.ProviderCredentialStore
 import io.github.nastechresearch.nastech.data.gemini.DENIED_MODEL_IDS
 import io.github.nastechresearch.nastech.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
 import io.github.nastechresearch.nastech.data.ai.prompts.DEFAULT_OCR_PROMPT
@@ -183,6 +188,7 @@ private val Context.settingsStore by preferencesDataStore(
 class SettingsStore(
     context: Context,
     scope: AppScope,
+    private val providerCredentialStore: ProviderCredentialStore,
 ) : KoinComponent {
     companion object {
         // 版本号
@@ -225,6 +231,7 @@ class SettingsStore(
         // IDs of built-in providers the user explicitly deleted; the re-seed pass
         // skips these so deletions are sticky across app restarts.
         val DELETED_BUILTIN_PROVIDER_IDS = stringPreferencesKey("deleted_builtin_provider_ids")
+        val PROVIDER_CREDENTIAL_MIGRATION_VERSION = intPreferencesKey("provider_credential_migration_version")
 
         // 助手
         val SELECT_ASSISTANT = stringPreferencesKey("select_assistant")
@@ -561,6 +568,9 @@ class SettingsStore(
             )
         }
         .map { settings ->
+            settings.copy(providers = hydrateProviderCredentials(settings.providers))
+        }
+        .map { settings ->
             // 去重并清理无效引用
             val validMcpServerIds = settings.mcpServers.map { it.id }.toSet()
             val validModeInjectionIds = settings.modeInjections.map { it.id }.toSet()
@@ -594,6 +604,10 @@ class SettingsStore(
 
                         is ProviderSetting.GeminiOAuth -> provider.copy(
                             models = dropDeniedGeminiOAuthModels(provider.models)
+                        )
+
+                        is ProviderSetting.Custom -> provider.copy(
+                            models = provider.models.distinctBy { model -> model.id }
                         )
 
                     }
@@ -643,6 +657,130 @@ class SettingsStore(
         .distinctUntilChanged()
         .toMutableStateFlow(scope, Settings.dummy())
 
+    /**
+     * Migrates legacy raw provider secrets into the encrypted Android Keystore-backed vault.
+     * The raw DataStore payload is only rewritten after every secret has been stored successfully,
+     * so an interrupted migration can be safely retried without losing the original credential.
+     */
+    suspend fun migrateLegacyProviderCredentials() = withContext(Dispatchers.IO) {
+        val preferences = dataStore.data.first()
+        if ((preferences[PROVIDER_CREDENTIAL_MIGRATION_VERSION] ?: 0) >= 1) return@withContext
+        val raw = preferences[PROVIDERS].orEmpty()
+        if (raw.isBlank()) {
+            dataStore.edit { it[PROVIDER_CREDENTIAL_MIGRATION_VERSION] = 1 }
+            return@withContext
+        }
+
+        val array = JsonInstant.parseToJsonElement(raw) as? JsonArray
+            ?: throw IllegalArgumentException("Stored provider configuration is not a JSON array")
+        val credentials = linkedMapOf<String, ProviderCredential>()
+        val sanitized = array.map { element ->
+            val objectValue = element as? JsonObject ?: return@map element
+            val type = objectValue["type"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val ref = objectValue["credentialRef"]?.jsonPrimitive?.contentOrNull?.ifBlank { null }
+                ?: "provider:" + (objectValue["id"]?.jsonPrimitive?.contentOrNull ?: Uuid.random().toString())
+            val apiKey = objectValue["apiKey"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val privateKey = objectValue["privateKey"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val serviceAccountEmail = objectValue["serviceAccountEmail"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val hasSecret = when (type) {
+                "openai", "claude", "google" -> apiKey.isNotBlank() || privateKey.isNotBlank() || serviceAccountEmail.isNotBlank()
+                else -> false
+            }
+            if (hasSecret) {
+                credentials[ref] = ProviderCredential(
+                    apiKey = apiKey,
+                    privateKey = privateKey,
+                    serviceAccountEmail = serviceAccountEmail,
+                )
+            }
+            JsonObject(objectValue.toMutableMap().apply {
+                put("credentialRef", JsonPrimitive(ref))
+                remove("apiKey")
+                remove("privateKey")
+                remove("serviceAccountEmail")
+            })
+        }
+
+        providerCredentialStore.migrateLegacySecrets(credentials)
+        dataStore.edit {
+            it[PROVIDERS] = JsonInstant.encodeToString(JsonArray(sanitized))
+            it[PROVIDER_CREDENTIAL_MIGRATION_VERSION] = 1
+        }
+    }
+
+    private suspend fun hydrateProviderCredentials(providers: List<ProviderSetting>): List<ProviderSetting> {
+        val credentials = runCatching { providerCredentialStore.snapshot() }
+            .onFailure { Log.w(TAG, "Provider credential vault could not be read; credentials remain recoverable", it) }
+            .getOrDefault(emptyMap())
+        if (credentials.isEmpty()) return providers
+        return providers.map { provider ->
+            val ref = when (provider) {
+                is ProviderSetting.OpenAI -> provider.credentialRef
+                is ProviderSetting.Google -> provider.credentialRef
+                is ProviderSetting.Claude -> provider.credentialRef
+                is ProviderSetting.Custom -> provider.credentialRef
+                is ProviderSetting.Codex, is ProviderSetting.Grok, is ProviderSetting.GeminiOAuth -> ""
+            }
+            val credential = credentials[ref] ?: return@map provider
+            when (provider) {
+                is ProviderSetting.OpenAI -> provider.copy(apiKey = credential.apiKey)
+                is ProviderSetting.Google -> provider.copy(
+                    apiKey = credential.apiKey,
+                    privateKey = credential.privateKey,
+                    serviceAccountEmail = credential.serviceAccountEmail,
+                )
+                is ProviderSetting.Claude -> provider.copy(apiKey = credential.apiKey)
+                is ProviderSetting.Custom -> provider.copy(apiKey = credential.apiKey)
+                is ProviderSetting.Codex, is ProviderSetting.Grok, is ProviderSetting.GeminiOAuth -> provider
+            }
+        }
+    }
+
+    private suspend fun syncProviderCredentials(providers: List<ProviderSetting>) {
+        val credentials = linkedMapOf<String, ProviderCredential>()
+        val toRemove = mutableListOf<String>()
+        providers.forEach { provider ->
+            when (provider) {
+                is ProviderSetting.OpenAI -> {
+                    val ref = provider.credentialRef
+                    if (ref.isNotBlank()) {
+                        if (provider.apiKey.isBlank()) toRemove += ref
+                        else credentials[ref] = ProviderCredential(apiKey = provider.apiKey)
+                    }
+                }
+                is ProviderSetting.Google -> {
+                    val ref = provider.credentialRef
+                    if (ref.isNotBlank()) {
+                        val value = ProviderCredential(
+                            apiKey = provider.apiKey,
+                            privateKey = provider.privateKey,
+                            serviceAccountEmail = provider.serviceAccountEmail,
+                        )
+                        if (value.apiKey.isBlank() && value.privateKey.isBlank() && value.serviceAccountEmail.isBlank()) toRemove += ref
+                        else credentials[ref] = value
+                    }
+                }
+                is ProviderSetting.Claude -> {
+                    val ref = provider.credentialRef
+                    if (ref.isNotBlank()) {
+                        if (provider.apiKey.isBlank()) toRemove += ref
+                        else credentials[ref] = ProviderCredential(apiKey = provider.apiKey)
+                    }
+                }
+                is ProviderSetting.Custom -> {
+                    val ref = provider.credentialRef
+                    if (ref.isNotBlank()) {
+                        if (provider.apiKey.isBlank()) toRemove += ref
+                        else credentials[ref] = ProviderCredential(apiKey = provider.apiKey)
+                    }
+                }
+                is ProviderSetting.Codex, is ProviderSetting.Grok, is ProviderSetting.GeminiOAuth -> Unit
+            }
+        }
+        providerCredentialStore.putAll(credentials)
+        toRemove.distinct().forEach { providerCredentialStore.remove(it) }
+    }
+
     suspend fun update(settings: Settings) {
         if(settings.init) {
             Log.w(TAG, "Cannot update dummy settings")
@@ -661,6 +799,9 @@ class SettingsStore(
      * back on the next app launch.
      */
     private suspend fun updateInternal(settings: Settings) {
+        val migrationVersion = dataStore.data.first()[PROVIDER_CREDENTIAL_MIGRATION_VERSION] ?: 0
+        if (migrationVersion < 1) migrateLegacyProviderCredentials()
+        syncProviderCredentials(settings.providers)
         dataStore.edit { preferences ->
             preferences[DYNAMIC_COLOR] = settings.dynamicColor
             preferences[THEME_ID] = settings.themeId

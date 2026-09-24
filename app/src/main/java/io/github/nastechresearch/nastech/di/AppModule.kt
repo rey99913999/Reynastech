@@ -64,6 +64,7 @@ val appModule = module {
         io.github.nastechresearch.nastech.data.telegram.TelegramInteractiveToolStreamer(get(), get(), get(), get())
     }
     single { io.github.nastechresearch.nastech.data.preferences.ToolApprovalPreferences(get()) }
+    single { io.github.nastechresearch.nastech.data.provider.ProviderCredentialStore(get(), get()) }
     single {
         io.github.nastechresearch.nastech.data.ai.tools.AssistantToolPermissionRepository(
             settingsStore = get(),
