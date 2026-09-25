@@ -953,14 +953,14 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                     add(buildJsonObject {
                         put("role", "user")
                         putJsonArray("parts") {
-                            group.tools.forEach {
-                                add(
-                                it.toFunctionResponseParts(
+                            group.tools.forEach { tool ->
+                                tool.toFunctionResponseParts(
                                     mediaReferenceAllocator = mediaReferenceAllocator,
                                     allowMultimodal = allowMultimodal,
                                     mediaSerializationMode = mediaSerializationMode,
-                                ).forEach { add(it) }
-                                )
+                                ).forEach { responsePart ->
+                                    add(responsePart)
+                                }
                             }
                         }
                     })
