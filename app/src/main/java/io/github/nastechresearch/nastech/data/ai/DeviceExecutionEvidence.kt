@@ -5,6 +5,7 @@ import io.github.nastechresearch.nastech.data.execution.ExecutionToolRegistry
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.ui.UIMessagePart
 
@@ -87,9 +88,9 @@ internal object DeviceExecutionEvidenceTracker {
                 runCatching {
                     val obj = json.parseToJsonElement(part.text).jsonObject
                     val errorPresent = obj["error"] != null
-                    val successExplicitlyFalse = obj["success"]?.booleanOrNull == false
-                    val dispatchExplicitlyFalse = obj["dispatch_succeeded"]?.booleanOrNull == false
-                    val status = obj["status"]?.contentOrNull?.uppercase()
+                    val successExplicitlyFalse = (obj["success"] as? JsonPrimitive)?.booleanOrNull == false
+                    val dispatchExplicitlyFalse = (obj["dispatch_succeeded"] as? JsonPrimitive)?.booleanOrNull == false
+                    val status = (obj["status"] as? JsonPrimitive)?.contentOrNull?.uppercase()
                     val failedStatus = status in setOf("FAILED", "FAILURE", "ERROR", "REJECTED")
                     errorPresent || successExplicitlyFalse || dispatchExplicitlyFalse || failedStatus
                 }.getOrDefault(false)
