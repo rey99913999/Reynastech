@@ -89,36 +89,36 @@ jobs:
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
           SIGNING_KEY_PASS: ${{ secrets.SIGNING_KEY_PASS }}
         run: |
-          if [ -n "$SIGNING_KEYSTORE" ] && [ -n "$SIGNING_STORE_PASS" ] && [ -n "$SIGNING_KEY_ALIAS" ] && [ -n "$SIGNING_KEY_PASS" ]; then
-            printf '%s' "$SIGNING_KEYSTORE" | base64 --decode > app/nastech-release.jks
-            cat > local.properties <<EOF
+          set -euo pipefail
+
+          missing=()
+          [ -n "$SIGNING_KEYSTORE" ] || missing+=("SIGNING_KEYSTORE")
+          [ -n "$SIGNING_STORE_PASS" ] || missing+=("SIGNING_STORE_PASS")
+          [ -n "$SIGNING_KEY_ALIAS" ] || missing+=("SIGNING_KEY_ALIAS")
+          [ -n "$SIGNING_KEY_PASS" ] || missing+=("SIGNING_KEY_PASS")
+
+          if [ "${#missing[@]}" -ne 0 ]; then
+            printf 'ERROR: Stable Release signing is not configured. Missing GitHub Actions secret(s): %s\n' "${missing[*]}" >&2
+            printf 'The workflow will not generate a Release APK with a temporary or random signing key.\n' >&2
+            exit 1
+          fi
+
+          printf '%s' "$SIGNING_KEYSTORE" | base64 --decode > app/nastech-release.jks
+
+          cat > local.properties <<EOF
           storeFile=nastech-release.jks
           storePassword=$SIGNING_STORE_PASS
           keyAlias=$SIGNING_KEY_ALIAS
           keyPassword=$SIGNING_KEY_PASS
           EOF
-            echo "Release signing configuration is available."
-          else
-            fallback_keystore="$RUNNER_TEMP/nastech-ci-debug.keystore"
-            keytool -genkeypair -noprompt \
-              -keystore "$fallback_keystore" \
-              -storetype JKS \
-              -storepass android \
-              -keypass android \
-              -alias nastech-ci-debug \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -dname "CN=Nastech CI, OU=Engineering, O=Nastech, L=Internet, ST=Internet, C=US"
-            cat > local.properties <<EOF
-          storeFile=$fallback_keystore
-          storePassword=android
-          keyAlias=nastech-ci-debug
-          keyPassword=android
-          EOF
-            echo "Release signing secrets are unavailable; using a temporary CI debug keystore."
-          fi
 
+          echo "Release signing configuration is available."
+          echo "Release certificate fingerprint:"
+          keytool -list -v \
+            -keystore app/nastech-release.jks \
+            -storepass "$SIGNING_STORE_PASS" \
+            -alias "$SIGNING_KEY_ALIAS" \
+            | grep -E '^(Certificate fingerprints:|[[:space:]]+SHA256:)' || true
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
 

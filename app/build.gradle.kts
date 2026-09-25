@@ -32,8 +32,9 @@ android {
         resourceConfigurations.add("en")
         resourceConfigurations.add("ar")
         targetSdk = 37
-        versionCode = 196
-        versionName = "2.4.28"
+        // Increment for this release so Android accepts it as a newer build.
+        versionCode = 197
+        versionName = "2.4.29"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
