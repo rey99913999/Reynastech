@@ -3,6 +3,9 @@ package me.rerere.ai.provider.providers.google
 import me.rerere.ai.provider.providers.ToolMediaArtifact
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.encodeBase64
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.registry.ModelRegistry
 
 internal class GoogleMediaReferenceAllocator {
@@ -10,6 +13,46 @@ internal class GoogleMediaReferenceAllocator {
 
     fun next(): String = "nastech_media_${nextIndex++}"
 }
+
+internal enum class GoogleMediaSerializationMode {
+    PRIMARY_MULTIMODAL_FUNCTION_RESPONSE,
+    FALLBACK_INLINE_IMAGES,
+}
+
+internal object GoogleFunctionResponseMediaFallback {
+    internal fun isMediaReferenceValidationError(errorText: String): Boolean {
+        val normalized = errorText.lowercase()
+        val hasFunctionResponsePath =
+            "function_response.response" in normalized ||
+                "functionresponse.response" in normalized
+        val hasDisplayName = "display_name" in normalized || "displayname" in normalized
+        val hasReference = "\$ref" in normalized || "reference" in normalized
+        val hasMismatch = listOf(
+            "mismatch",
+            "mismatched",
+            "does not match",
+            "doesn't match",
+            "no matching",
+            "not match",
+            "must match",
+            "must equal",
+        ).any(normalized::contains)
+
+        return hasFunctionResponsePath && hasDisplayName && hasReference && hasMismatch
+    }
+
+    internal fun shouldAttemptFallback(
+        mode: GoogleMediaSerializationMode,
+        fallbackAttempted: Boolean,
+        meaningfulOutputDelivered: Boolean,
+        errorText: String,
+    ): Boolean =
+        mode == GoogleMediaSerializationMode.PRIMARY_MULTIMODAL_FUNCTION_RESPONSE &&
+            !fallbackAttempted &&
+            !meaningfulOutputDelivered &&
+            isMediaReferenceValidationError(errorText)
+}
+
 
 internal data class GoogleFunctionResponseMedia(
     val displayName: String,
