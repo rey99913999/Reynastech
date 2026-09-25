@@ -64,6 +64,10 @@ import io.github.nastechresearch.nastech.data.execution.LocalExecutionEngine
 import io.github.nastechresearch.nastech.data.execution.ExecutionTelemetry
 import io.github.nastechresearch.nastech.data.execution.DeviceCapabilityContractBuilder
 import io.github.nastechresearch.nastech.data.execution.analyzeDeviceIntent
+import io.github.nastechresearch.nastech.data.ai.DeviceCompletionGuard
+import io.github.nastechresearch.nastech.data.ai.DeviceCompletionGuardDecision
+import io.github.nastechresearch.nastech.data.ai.DeviceExecutionEvidence
+import io.github.nastechresearch.nastech.data.ai.DeviceExecutionEvidenceTracker
 import io.github.nastechresearch.nastech.data.execution.ToolOutputPreprocessor
 import io.github.nastechresearch.nastech.data.execution.buildStructuredPlanTool
 import io.github.nastechresearch.nastech.data.task.TaskToolUsage
@@ -575,6 +579,7 @@ class GenerationHandler(
         }
 
         var deviceCompletionGuardRetried = false
+        var deviceExecutionEvidence = DeviceExecutionEvidence()
 
         val baseRegistrySystemAddendum = listOfNotNull(
             systemAddendum,
@@ -731,40 +736,50 @@ class GenerationHandler(
 
                 val tools = messages.last().getTools().filter { !it.isExecuted }
                 if (tools.isEmpty()) {
-                    if (devicePreflight.isDeviceTask && !deviceCompletionGuardRetried) {
-                        deviceCompletionGuardRetried = true
-                        deviceGuardInstruction =
-                            "The previous model turn did not produce an executable Device Core tool plan. " +
-                                "Do not answer this device request as completed or claim that you cannot control the device. " +
-                                "Use execute_structured_plan or another available core device tool now. " +
-                                "Honor explicit constraints such as use_keyboard. If a required capability is unavailable or unauthorized, return the structured failure state instead of pretending the action occurred."
-                        processingStatus.value = "Device execution required; selecting a local execution path."
-                        continue
-                    }
+                    when (
+                        DeviceCompletionGuard.evaluate(
+                            isDeviceTask = devicePreflight.isDeviceTask,
+                            evidence = deviceExecutionEvidence,
+                            retryAlreadyUsed = deviceCompletionGuardRetried,
+                        )
+                    ) {
+                        DeviceCompletionGuardDecision.ALLOW -> Unit
 
-                    if (devicePreflight.isDeviceTask && deviceCompletionGuardRetried) {
-                        val failureMessage = UIMessage(
-                            role = MessageRole.ASSISTANT,
-                            parts = listOf(
-                                UIMessagePart.Text(
-                                    buildJsonObject {
-                                        put("error", "device_execution_not_completed")
-                                        put("status", "REPLAN_REQUIRED")
-                                        put(
-                                            "detail",
-                                            "The request was classified as a device task, but no executable Device Core plan was produced."
-                                        )
-                                        put("confidence", devicePreflight.confidence)
-                                        deviceCapabilityContract?.requiredCapabilityFailure()?.let {
-                                            put("unavailable_capability", it.name)
-                                            put("capability_reason", it.reason.orEmpty())
-                                        }
-                                    }.toString()
+                        DeviceCompletionGuardDecision.RETRY -> {
+                            deviceCompletionGuardRetried = true
+                            deviceGuardInstruction =
+                                "The previous model turn did not produce an executable Device Core tool plan. " +
+                                    "Do not answer this device request as completed or claim that you cannot control the device. " +
+                                    "Use execute_structured_plan or another available core device tool now. " +
+                                    "Honor explicit constraints such as use_keyboard. If a required capability is unavailable or unauthorized, return the structured failure state instead of pretending the action occurred."
+                            processingStatus.value = "Device execution required; selecting a local execution path."
+                            continue
+                        }
+
+                        DeviceCompletionGuardDecision.REPLAN -> {
+                            val failureMessage = UIMessage(
+                                role = MessageRole.ASSISTANT,
+                                parts = listOf(
+                                    UIMessagePart.Text(
+                                        buildJsonObject {
+                                            put("error", "device_execution_not_completed")
+                                            put("status", "REPLAN_REQUIRED")
+                                            put(
+                                                "detail",
+                                                "The request was classified as a device task, but no executable Device Core plan was produced."
+                                            )
+                                            put("confidence", devicePreflight.confidence)
+                                            deviceCapabilityContract?.requiredCapabilityFailure()?.let {
+                                                put("unavailable_capability", it.name)
+                                                put("capability_reason", it.reason.orEmpty())
+                                            }
+                                        }.toString()
+                                    )
                                 )
                             )
-                        )
-                        messages = messages.dropLast(1) + failureMessage
-                        emit(GenerationChunk.Messages(messages))
+                            messages = messages.dropLast(1) + failureMessage
+                            emit(GenerationChunk.Messages(messages))
+                        }
                     }
                     break
                 }
@@ -1108,24 +1123,25 @@ class GenerationHandler(
                             )
                             return@forEach
                         }
-                        runCatching {
-                            val toolDef = toolsInternal.firstOrNull { toolDef -> toolDef.name == tool.toolName }
-                                ?: registry.findLoaded(tool.toolName)
-                            if (toolDef == null) {
-                                executedTools += tool.copy(
-                                    output = listOf(
-                                        UIMessagePart.Text(
-                                            json.encodeToString(buildJsonObject {
-                                                put("error", JsonPrimitive("tool_not_available"))
-                                                put("detail", JsonPrimitive("Tool is not currently loaded by the runtime registry."))
-                                                put("tool_name", JsonPrimitive(tool.toolName))
-                                                put("recovery", JsonPrimitive("Use discover_tools, then load_tools, before retrying."))
-                                            })
-                                        )
+                        val toolDef = toolsInternal.firstOrNull { toolDef -> toolDef.name == tool.toolName }
+                            ?: registry.findLoaded(tool.toolName)
+                        if (toolDef == null) {
+                            executedTools += tool.copy(
+                                output = listOf(
+                                    UIMessagePart.Text(
+                                        json.encodeToString(buildJsonObject {
+                                            put("error", JsonPrimitive("tool_not_available"))
+                                            put("detail", JsonPrimitive("Tool is not currently loaded by the runtime registry."))
+                                            put("tool_name", JsonPrimitive(tool.toolName))
+                                            put("recovery", JsonPrimitive("Use discover_tools, then load_tools, before retrying."))
+                                        })
                                     )
                                 )
-                                return@forEach
-                            }
+                            )
+                            return@forEach
+                        }
+                        var toolInvocationStarted = false
+                        runCatching {
                             val args = parsedArgs.getOrThrow()
                             if (BuildConfig.DEBUG) {
                                 Log.i(TAG, "generateText: executing tool ${toolDef.name} with args: ${redactSecrets(args)}")
@@ -1148,6 +1164,7 @@ class GenerationHandler(
                                     emit(GenerationChunk.Messages(messages))
                                 }
                             }
+                            var toolInvocationStarted = false
                             // Hard-cap individual tool execution at the remaining wall-clock
                             // budget so a single tool with its OWN long timeout (camera 5min,
                             // ssh_exec timeout_seconds=300) can't carry the turn past the
@@ -1163,6 +1180,7 @@ class GenerationHandler(
                                     put("detail", JsonPrimitive("turn budget exceeded before tool started"))
                                 })))
                             } else {
+                                toolInvocationStarted = true
                                 withTimeoutOrNull(remainingMs) { toolDef.execute(args) }
                                     ?: run {
                                         Log.w(TAG, "generateText: ${toolDef.name} cancelled — wall-clock budget exhausted mid-execution")
@@ -1175,6 +1193,15 @@ class GenerationHandler(
                                         })))
                                     }
                             }
+
+                            deviceExecutionEvidence = DeviceExecutionEvidenceTracker.recordToolResult(
+                                current = deviceExecutionEvidence,
+                                toolName = toolDef.name,
+                                output = result,
+                                invocationStarted = toolInvocationStarted,
+                                json = json,
+                            )
+
                             // Upstream tool-output truncation: when the workspace shell is
                             // available, oversized text output is spilled to /tool_outputs/
                             // and replaced with a preview + read/grep instructions so the
@@ -1193,6 +1220,11 @@ class GenerationHandler(
                                 ),
                             )
                         }.onFailure {
+                            deviceExecutionEvidence = DeviceExecutionEvidenceTracker.recordToolFailure(
+                                current = deviceExecutionEvidence,
+                                toolName = toolDef.name,
+                                invocationStarted = toolInvocationStarted,
+                            )
                             // Stack trace stays in logcat for debugging; the JSON envelope
                             // sent BACK to the LLM gets just the exception's message and a
                             // short class hint. Stuffing the full multi-frame R8-obfuscated

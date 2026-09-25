@@ -12,6 +12,8 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -19,6 +21,81 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+
+internal sealed interface DeviceAppLaunchInvocation {
+    data class ToolInvocation(
+        val provider: ResolvedDeviceCapability,
+        val args: JsonObject,
+    ) : DeviceAppLaunchInvocation
+
+    data class Failure(
+        val error: String,
+        val output: String,
+    ) : DeviceAppLaunchInvocation
+}
+
+internal fun resolveDeviceAppLaunchInvocation(
+    registry: ExecutionToolRegistry,
+    appName: String,
+    appResolver: AppResolver,
+): DeviceAppLaunchInvocation {
+    val capability = DeviceCapabilityResolver.resolve(DeviceCapabilityResolver.APP_LAUNCH, registry)
+        ?: return DeviceAppLaunchInvocation.Failure(
+            error = "app_launch_capability_unavailable",
+            output = buildJsonObject {
+                put("error", "app_launch_capability_unavailable")
+                put("capability", DeviceCapabilityResolver.APP_LAUNCH)
+            }.toString(),
+        )
+
+    return when (capability.providerName) {
+        "open_app" -> DeviceAppLaunchInvocation.ToolInvocation(
+            provider = capability,
+            args = buildJsonObject { put("name", appName) },
+        )
+
+        "launch_app" -> when (val resolution = appResolver.resolve(appName)) {
+            is AppResolution.Resolved -> DeviceAppLaunchInvocation.ToolInvocation(
+                provider = capability,
+                args = buildJsonObject {
+                    put("package_name", resolution.candidate.packageName)
+                },
+            )
+
+            is AppResolution.NotFound -> DeviceAppLaunchInvocation.Failure(
+                error = "app_not_found",
+                output = buildJsonObject {
+                    put("error", "app_not_found")
+                    put("name", resolution.query)
+                }.toString(),
+            )
+
+            is AppResolution.Ambiguous -> DeviceAppLaunchInvocation.Failure(
+                error = "app_ambiguous",
+                output = buildJsonObject {
+                    put("error", "app_ambiguous")
+                    put("name", resolution.query)
+                    put("candidates", buildJsonArray {
+                        resolution.candidates.forEach { candidate ->
+                            addJsonObject {
+                                put("label", candidate.label)
+                                put("package", candidate.packageName)
+                            }
+                        }
+                    })
+                }.toString(),
+            )
+        }
+
+        else -> DeviceAppLaunchInvocation.Failure(
+            error = "app_launch_provider_unsupported:" + capability.providerName,
+            output = buildJsonObject {
+                put("error", "app_launch_provider_unsupported")
+                put("provider", capability.providerName)
+            }.toString(),
+        )
+    }
+}
 
 class DeviceAgentCore(
     private val context: Context,
@@ -455,14 +532,28 @@ class DeviceAgentCore(
             DeviceAction.OPEN_APP -> {
                 val name = step.args["name"]?.jsonPrimitive?.contentOrNull
                     ?: return ActionExecution(false, DeviceActionLifecycle.DISPATCHED, error = "app_name_required")
-                val tool = registry.findLoaded("open_app")
-                    ?: return ActionExecution(false, DeviceActionLifecycle.DISPATCHED, error = "app_launch_capability_unavailable")
-                executeTool(
-                    "open_app",
-                    tool,
-                    buildJsonObject { put("name", name) },
-                    registry, isToolAutoApproved, permissionResolver, assistant, taskId,
-                )
+
+                when (
+                    val invocation = resolveDeviceAppLaunchInvocation(
+                        registry = registry,
+                        appName = name,
+                        appResolver = AppResolver(PackageManagerInstalledAppCatalog(context)),
+                    )
+                ) {
+                    is DeviceAppLaunchInvocation.ToolInvocation -> executeTool(
+                        invocation.provider.providerName,
+                        invocation.provider.tool,
+                        invocation.args,
+                        registry, isToolAutoApproved, permissionResolver, assistant, taskId,
+                    )
+
+                    is DeviceAppLaunchInvocation.Failure -> ActionExecution(
+                        executed = false,
+                        lifecycle = DeviceActionLifecycle.DISPATCHED,
+                        output = invocation.output,
+                        error = invocation.error,
+                    )
+                }
             }
 
             DeviceAction.FIND_TARGET -> {

@@ -21,13 +21,7 @@ object DeviceCapabilityContractBuilder {
                 available = RikkaAccessibilityService.instance != null,
                 reason = "AccessibilityService is not active",
             ),
-            capability(
-                name = "app_launch",
-                registry = registry,
-                toolName = "open_app",
-                available = registry.find("open_app") != null,
-                reason = "open_app is not registered for this Assistant",
-            ),
+            appLaunchCapability(registry),
             capability(
                 name = "keyboard",
                 registry = registry,
@@ -77,7 +71,24 @@ object DeviceCapabilityContractBuilder {
         )
     }
 
-    private fun capability(
+    internal fun appLaunchCapability(
+        registry: ExecutionToolRegistry,
+    ): DeviceCapability {
+        return DeviceCapabilityResolver.resolve(DeviceCapabilityResolver.APP_LAUNCH, registry)
+            ?.let {
+                DeviceCapability(
+                    name = DeviceCapabilityResolver.APP_LAUNCH,
+                    status = DeviceCapabilityStatus.AVAILABLE,
+                )
+            }
+            ?: DeviceCapability(
+                name = DeviceCapabilityResolver.APP_LAUNCH,
+                status = DeviceCapabilityStatus.UNAVAILABLE,
+                reason = DeviceCapabilityResolver.unavailableReason(DeviceCapabilityResolver.APP_LAUNCH),
+            )
+    }
+
+    internal fun capability(
         name: String,
         registry: ExecutionToolRegistry,
         toolName: String,
