@@ -7,6 +7,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.onFailure
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
@@ -279,13 +280,14 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             )
         }
 
-        fun requestFor(mode: GoogleMediaSerializationMode): Request =
+        suspend fun requestFor(mode: GoogleMediaSerializationMode): Request =
             buildCompletionRequest(
                 providerSetting = providerSetting,
                 params = params,
-                requestBody = buildCompletionRequestBody(
+                requestBody = buildCompletionRequestBodyForMode(
                     messages = messages,
                     params = params,
+                    safetyCategories = GOOGLE_SAFETY_CATEGORIES,
                     mediaSerializationMode = mode,
                 ),
                 streaming = false,
@@ -416,9 +418,10 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             mediaSerializationMode: GoogleMediaSerializationMode,
             generation: Int,
         ): EventSource {
-            val requestBody = buildCompletionRequestBody(
+            val requestBody = buildCompletionRequestBodyForMode(
                 messages = messages,
                 params = params,
+                safetyCategories = GOOGLE_SAFETY_CATEGORIES,
                 mediaSerializationMode = mediaSerializationMode,
             )
             logStreamRequestBody(requestBody, mediaSerializationMode)
@@ -581,7 +584,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         messages: List<UIMessage>,
         params: TextGenerationParams,
         safetyCategories: List<String> = GOOGLE_SAFETY_CATEGORIES,
-    ): JsonObject = buildCompletionRequestBody(
+    ): JsonObject = buildCompletionRequestBodyForMode(
         messages = messages,
         params = params,
         safetyCategories = safetyCategories,
@@ -589,7 +592,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             GoogleMediaSerializationMode.PRIMARY_MULTIMODAL_FUNCTION_RESPONSE,
     )
 
-    private fun buildCompletionRequestBody(
+    private fun buildCompletionRequestBodyForMode(
         messages: List<UIMessage>,
         params: TextGenerationParams,
         safetyCategories: List<String>,
