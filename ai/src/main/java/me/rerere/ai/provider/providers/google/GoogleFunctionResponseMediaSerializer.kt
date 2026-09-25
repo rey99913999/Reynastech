@@ -81,6 +81,24 @@ internal object GoogleFunctionResponseMediaSerializer {
         return ModelRegistry.GEMINI_3_SERIES.match(normalized)
     }
 
+    internal fun validateMultimodalReferences(
+        response: JsonObject,
+        inlineDataDisplayNames: List<String>,
+    ): Boolean {
+        val references = response.entries
+            .filter { it.key.startsWith("nastech_media_") }
+            .map { (key, value) ->
+                key to value.jsonObject["\$ref"]?.jsonPrimitive?.content
+            }
+
+        if (references.size != inlineDataDisplayNames.size) return false
+        if (references.any { (key, ref) -> ref == null || ref != key }) return false
+        if (references.map { it.first }.distinct().size != references.size) return false
+        if (inlineDataDisplayNames.distinct().size != inlineDataDisplayNames.size) return false
+
+        return references.map { it.first } == inlineDataDisplayNames
+    }
+
     fun encode(
         artifact: ToolMediaArtifact,
         displayName: String,
