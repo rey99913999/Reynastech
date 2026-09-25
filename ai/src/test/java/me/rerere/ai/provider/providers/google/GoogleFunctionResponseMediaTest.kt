@@ -2,14 +2,26 @@ package me.rerere.ai.provider.providers.google
 
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import okhttp3.Interceptor
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.ResponseBody.Companion.toResponseBody
+import okio.Buffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -29,14 +41,33 @@ class GoogleFunctionResponseMediaTest {
     private fun invokeBuildContents(
         messages: List<UIMessage>,
         modelId: String = "gemini-3-flash",
+        mode: GoogleMediaSerializationMode =
+            GoogleMediaSerializationMode.PRIMARY_MULTIMODAL_FUNCTION_RESPONSE,
     ): JsonArray {
-        val method = GoogleProvider::class.java.getDeclaredMethod(
-            "buildContents",
-            List::class.java,
-            String::class.java,
-        )
+        val method = if (
+            mode == GoogleMediaSerializationMode.PRIMARY_MULTIMODAL_FUNCTION_RESPONSE
+        ) {
+            GoogleProvider::class.java.getDeclaredMethod(
+                "buildContents",
+                List::class.java,
+                String::class.java,
+            )
+        } else {
+            GoogleProvider::class.java.getDeclaredMethod(
+                "buildContents",
+                List::class.java,
+                String::class.java,
+                GoogleMediaSerializationMode::class.java,
+            )
+        }
         method.isAccessible = true
-        return method.invoke(provider, messages, modelId) as JsonArray
+        return if (
+            mode == GoogleMediaSerializationMode.PRIMARY_MULTIMODAL_FUNCTION_RESPONSE
+        ) {
+            method.invoke(provider, messages, modelId) as JsonArray
+        } else {
+            method.invoke(provider, messages, modelId, mode) as JsonArray
+        }
     }
 
     @Test
@@ -210,75 +241,188 @@ class GoogleFunctionResponseMediaTest {
         )
     }
 
+
     @Test
-    fun `unsupported Gemini model degrades without emitting malformed media parts`() {
+    fun `fallback moves images outside function response and preserves text and bytes`() {
         val result = invokeBuildContents(
             listOf(
                 UIMessage.user("screenshot"),
                 assistantWithTool(
-                    toolId = "call-old",
+                    toolId = "call-fallback",
                     name = "take_screenshot",
-                    output = listOf(UIMessagePart.Image("data:image/png;base64,image")),
+                    output = listOf(
+                        UIMessagePart.Text("done"),
+                        UIMessagePart.Image("data:image/png;base64,actual-image"),
+                    ),
                 ),
             ),
-            modelId = "gemini-2.5-flash",
+            mode = GoogleMediaSerializationMode.FALLBACK_INLINE_IMAGES,
         )
 
-        val response = functionResponses(result).single()
-        assertFalse(response.containsKey("parts"))
+        val functionResponse = functionResponses(result).single()
+        val responseBody = functionResponse["response"]!!.jsonObject
 
-        val body = response["response"]!!.jsonObject
-        val error = body["media_errors"]!!.jsonArray.single().jsonObject
-        assertEquals(
-            "multimodal_function_response_unsupported_for_model",
-            error["reason"]!!.jsonPrimitive.content
-        )
-        assertEquals("image/png", error["mime_type"]!!.jsonPrimitive.content)
+        assertEquals("done", responseBody["result"]!!.jsonPrimitive.content)
+        assertTrue(responseBody.keys.none { it.startsWith("nastech_media_") })
+        assertFalse(functionResponse.containsKey("parts"))
+
+        val images = result.flatMap { message ->
+            message.jsonObject["parts"]?.jsonArray.orEmpty().mapNotNull { part ->
+                part.jsonObject["inlineData"]?.jsonObject
+            }
+        }
+        assertEquals(1, images.size)
+        assertEquals("image/png", images.single()["mimeType"]!!.jsonPrimitive.content)
+        assertEquals("actual-image", images.single()["data"]!!.jsonPrimitive.content)
+        assertFalse(images.single().containsKey("displayName"))
     }
 
     @Test
-    fun `invalid media never creates a dangling ref`() {
+    fun `fallback preserves multiple images in original order`() {
         val result = invokeBuildContents(
             listOf(
-                UIMessage.user("screenshot"),
+                UIMessage.user("show two screenshots"),
                 assistantWithTool(
-                    toolId = "call-invalid",
+                    toolId = "call-fallback-multi",
                     name = "take_screenshot",
-                    output = listOf(UIMessagePart.Image("content://not-supported")),
+                    output = listOf(
+                        UIMessagePart.Image("data:image/png;base64,first"),
+                        UIMessagePart.Image("data:image/jpeg;base64,second"),
+                    ),
                 ),
-            )
+            ),
+            mode = GoogleMediaSerializationMode.FALLBACK_INLINE_IMAGES,
         )
 
-        val response = functionResponses(result).single()
-        assertFalse(response.containsKey("parts"))
+        val images = result.flatMap { message ->
+            message.jsonObject["parts"]?.jsonArray.orEmpty().mapNotNull { part ->
+                part.jsonObject["inlineData"]?.jsonObject
+            }
+        }
 
-        val body = response["response"]!!.jsonObject
-        assertTrue(body.keys.none { it.startsWith("nastech_media_") })
+        val response = functionResponses(result).single()
+        val responseBody = response["response"]!!.jsonObject
+        assertTrue(responseBody.keys.none { it.startsWith("nastech_media_") })
+        assertFalse(response.containsKey("parts"))
         assertEquals(
-            "media_encoding_failed:Unsupported URL format: content://not-supported",
-            body["media_errors"]!!.jsonArray.single().jsonObject["reason"]!!
-                .jsonPrimitive.content,
+            listOf("first", "second"),
+            images.map { it["data"]!!.jsonPrimitive.content },
+        )
+        assertEquals(
+            listOf("image/png", "image/jpeg"),
+            images.map { it["mimeType"]!!.jsonPrimitive.content },
+        )
+        assertTrue(images.all { !it.containsKey("displayName") })
+    }
+
+    @Test
+    fun `media reference validator rejects mismatched or duplicate identities`() {
+        val validResponse = buildJsonObject {
+            put(
+                "nastech_media_0",
+                buildJsonObject {
+                    put("\$ref", JsonPrimitive("nastech_media_0"))
+                },
+            )
+            put(
+                "nastech_media_1",
+                buildJsonObject {
+                    put("\$ref", JsonPrimitive("nastech_media_1"))
+                },
+            )
+        }
+
+        assertTrue(
+            GoogleFunctionResponseMediaSerializer.validateMultimodalReferences(
+                response = validResponse,
+                inlineDataDisplayNames = listOf("nastech_media_0", "nastech_media_1"),
+            )
+        )
+        assertFalse(
+            GoogleFunctionResponseMediaSerializer.validateMultimodalReferences(
+                response = validResponse,
+                inlineDataDisplayNames = listOf("nastech_media_0"),
+            )
+        )
+        assertFalse(
+            GoogleFunctionResponseMediaSerializer.validateMultimodalReferences(
+                response = validResponse,
+                inlineDataDisplayNames = listOf("nastech_media_1", "nastech_media_1"),
+            )
         )
     }
 
     @Test
-    fun `non-media tool response keeps its existing result shape`() {
-        val result = invokeBuildContents(
-            listOf(
-                UIMessage.user("calculate"),
-                assistantWithTool(
-                    toolId = "call-calc",
-                    name = "calculate",
-                    output = listOf(UIMessagePart.Text("42")),
-                ),
+    fun `known Gemini media reference mismatch is narrowly classified`() {
+        val error = """
+            INVALID_ARGUMENT: The referenced name `nastech_media_0` in
+            function_response.response does not match to a display_name in
+            function_response.parts.
+        """.trimIndent()
+
+        assertTrue(
+            GoogleFunctionResponseMediaFallback.isMediaReferenceValidationError(error)
+        )
+        assertFalse(
+            GoogleFunctionResponseMediaFallback.isMediaReferenceValidationError(
+                "400 INVALID_ARGUMENT: invalid request body"
             )
         )
+        assertFalse(
+            GoogleFunctionResponseMediaFallback.isMediaReferenceValidationError(
+                "401 Unauthorized: authentication failed"
+            )
+        )
+        assertFalse(
+            GoogleFunctionResponseMediaFallback.isMediaReferenceValidationError(
+                "429 quota exceeded for project"
+            )
+        )
+        assertFalse(
+            GoogleFunctionResponseMediaFallback.isMediaReferenceValidationError(
+                "500 internal server error"
+            )
+        )
+    }
 
-        val response = functionResponses(result).single()
-        val body = response["response"]!!.jsonObject
-        assertEquals("42", body["result"]!!.jsonPrimitive.content)
-        assertFalse(body.containsKey("media_errors"))
-        assertFalse(response.containsKey("parts"))
+    @Test
+    fun `fallback policy is one shot and never starts after meaningful output`() {
+        val primary = GoogleMediaSerializationMode.PRIMARY_MULTIMODAL_FUNCTION_RESPONSE
+        val error =
+            "function_response.response reference mismatch with display_name and reference"
+
+        assertTrue(
+            GoogleFunctionResponseMediaFallback.shouldAttemptFallback(
+                mode = primary,
+                fallbackAttempted = false,
+                meaningfulOutputDelivered = false,
+                errorText = error,
+            )
+        )
+        assertFalse(
+            GoogleFunctionResponseMediaFallback.shouldAttemptFallback(
+                mode = primary,
+                fallbackAttempted = true,
+                meaningfulOutputDelivered = false,
+                errorText = error,
+            )
+        )
+        assertFalse(
+            GoogleFunctionResponseMediaFallback.shouldAttemptFallback(
+                mode = primary,
+                fallbackAttempted = false,
+                meaningfulOutputDelivered = true,
+                errorText = error,
+            )
+        )
+        assertFalse(
+            GoogleFunctionResponseMediaFallback.shouldAttemptFallback(
+                mode = GoogleMediaSerializationMode.FALLBACK_INLINE_IMAGES,
+                fallbackAttempted = false,
+                meaningfulOutputDelivered = false,
+                errorText = error,
+            )
+        )
     }
 
     private fun functionResponses(result: JsonArray): List<JsonObject> =

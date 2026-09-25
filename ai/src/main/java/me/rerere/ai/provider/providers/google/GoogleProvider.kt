@@ -7,11 +7,13 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.onFailure
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonArrayBuilder
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -84,6 +86,8 @@ import kotlin.time.Clock
 import kotlin.uuid.Uuid
 
 private const val TAG = "GoogleProvider"
+private const val GEMINI_STREAM_PATH_SUFFIX = ":streamGenerateContent"
+private const val GEMINI_GENERATE_PATH_SUFFIX = ":generateContent"
 
 /**
  * Every category the generative-language API accepts on `safetySettings`.
@@ -146,6 +150,78 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         }
     }
 
+
+    private suspend fun buildCompletionRequest(
+        providerSetting: ProviderSetting.Google,
+        params: TextGenerationParams,
+        requestBody: JsonObject,
+        streaming: Boolean,
+    ): Request {
+        val modelPath = if (providerSetting.vertexAI) {
+            "publishers/google/models/" + params.model.modelId
+        } else {
+            "models/" + params.model.modelId
+        }
+        val operationSuffix =
+            if (streaming) GEMINI_STREAM_PATH_SUFFIX else GEMINI_GENERATE_PATH_SUFFIX
+        val url = buildUrl(
+            providerSetting = providerSetting,
+            path = modelPath + operationSuffix,
+        ).let { baseUrl ->
+            if (streaming) {
+                baseUrl.newBuilder()
+                    .addQueryParameter("alt", "sse")
+                    .build()
+            } else {
+                baseUrl
+            }
+        }
+
+        return transformRequest(
+            providerSetting = providerSetting,
+            request = Request.Builder()
+                .url(url)
+                .headers(params.customHeaders.toHeaders())
+                .post(
+                    json.encodeToString(requestBody)
+                        .toRequestBody("application/json".toMediaType())
+                )
+                .configureReferHeaders(providerSetting.baseUrl)
+                .build()
+        )
+    }
+
+    private fun redactGeminiImageDataForLogging(element: JsonElement): JsonElement = when (element) {
+        is JsonObject -> buildJsonObject {
+            element.forEach { (key, value) ->
+                if (
+                    key == "data" &&
+                    element["mimeType"]?.jsonPrimitive?.contentOrNull?.startsWith("image/") == true
+                ) {
+                    put(key, "[redacted-image-data]")
+                } else {
+                    put(key, redactGeminiImageDataForLogging(value))
+                }
+            }
+        }
+
+        is JsonArray -> buildJsonArray {
+            element.forEach { add(redactGeminiImageDataForLogging(it)) }
+        }
+
+        else -> element
+    }
+
+    private fun logStreamRequestBody(
+        requestBody: JsonObject,
+        mediaSerializationMode: GoogleMediaSerializationMode,
+    ) {
+        if (Logging.isDebugLoggingEnabled()) {
+            val safeBody = redactGeminiImageDataForLogging(redactSecrets(requestBody))
+            Log.i(TAG, "streamText[" + mediaSerializationMode + "]: " + safeBody)
+        }
+    }
+
     override suspend fun listModels(providerSetting: ProviderSetting.Google): List<Model> =
         withContext(Dispatchers.IO) {
             val url = buildUrl(providerSetting = providerSetting, path = "models?pageSize=100")
@@ -190,45 +266,76 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): TextGenerationResult = withContext(Dispatchers.IO) {
-        val requestBody = buildCompletionRequestBody(messages, params)
-
-        val url = buildUrl(
-            providerSetting = providerSetting,
-            path = if (providerSetting.vertexAI) {
-                "publishers/google/models/${params.model.modelId}:generateContent"
-            } else {
-                "models/${params.model.modelId}:generateContent"
-            }
-        )
-
-        val request = transformRequest(
-            providerSetting = providerSetting,
-            request = Request.Builder()
-                .url(url)
-                .headers(params.customHeaders.toHeaders())
-                .post(
-                    json.encodeToString(requestBody).toRequestBody("application/json".toMediaType())
-                )
-                .configureReferHeaders(providerSetting.baseUrl)
-                .build()
-        )
-
-        val response = client.newCall(request).await()
-        if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
+        fun parseResponse(response: Response): TextGenerationResult {
+            val bodyStr = response.body.string()
+            val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
+            val candidate = bodyJson["candidates"]?.jsonArray?.firstOrNull()?.jsonObject
+                ?: error("No candidates in response")
+            return TextGenerationResult(
+                id = Uuid.random().toString(),
+                model = params.model.modelId,
+                message = parseMessage(candidate),
+                finishReason = candidate["finishReason"]?.jsonPrimitive?.contentOrNull,
+                usage = parseUsageMeta(bodyJson["usageMetadata"] as? JsonObject),
+            )
         }
 
-        val bodyStr = response.body.string()
-        val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
+        suspend fun requestFor(mode: GoogleMediaSerializationMode): Request =
+            buildCompletionRequest(
+                providerSetting = providerSetting,
+                params = params,
+                requestBody = buildCompletionRequestBodyForMode(
+                    messages = messages,
+                    params = params,
+                    safetyCategories = GOOGLE_SAFETY_CATEGORIES,
+                    mediaSerializationMode = mode,
+                ),
+                streaming = false,
+            )
 
-        val candidate = bodyJson["candidates"]?.jsonArray?.firstOrNull()?.jsonObject
-            ?: error("No candidates in response")
-        TextGenerationResult(
-            id = Uuid.random().toString(),
-            model = params.model.modelId,
-            message = parseMessage(candidate),
-            finishReason = candidate["finishReason"]?.jsonPrimitive?.contentOrNull,
-            usage = parseUsageMeta(bodyJson["usageMetadata"] as? JsonObject),
+        val primaryResponse = client.newCall(
+            requestFor(
+                GoogleMediaSerializationMode.PRIMARY_MULTIMODAL_FUNCTION_RESPONSE
+            )
+        ).await()
+
+        if (primaryResponse.isSuccessful) {
+            return@withContext parseResponse(primaryResponse)
+        }
+
+        val primaryErrorBody = primaryResponse.body.stringSafe().orEmpty()
+        if (GoogleFunctionResponseMediaFallback.shouldAttemptFallback(
+                mode = GoogleMediaSerializationMode.PRIMARY_MULTIMODAL_FUNCTION_RESPONSE,
+                fallbackAttempted = false,
+                meaningfulOutputDelivered = false,
+                errorText = primaryErrorBody,
+            )
+        ) {
+            Log.w(
+                TAG,
+                "Gemini rejected the primary media-reference request; attempting fallback serialization"
+            )
+
+            val fallbackResponse = client.newCall(
+                requestFor(
+                    GoogleMediaSerializationMode.FALLBACK_INLINE_IMAGES
+                )
+            ).await()
+
+            if (!fallbackResponse.isSuccessful) {
+                val fallbackErrorBody = fallbackResponse.body.stringSafe().orEmpty()
+                throw Exception(
+                    "Failed to get response: " +
+                        fallbackResponse.code + " " + fallbackErrorBody
+                )
+            }
+
+            return@withContext parseResponse(fallbackResponse)
+        }
+
+        throw Exception(
+            "Failed to get response: " +
+                primaryResponse.code + " " + primaryErrorBody
         )
     }
 
@@ -237,116 +344,196 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): Flow<StreamChunk> = callbackFlow {
-        val requestBody = buildCompletionRequestBody(messages, params)
-
-        val url = buildUrl(
-            providerSetting = providerSetting,
-            path = if (providerSetting.vertexAI) {
-                "publishers/google/models/${params.model.modelId}:streamGenerateContent"
-            } else {
-                "models/${params.model.modelId}:streamGenerateContent"
-            }
-        ).newBuilder().addQueryParameter("alt", "sse").build()
-
-        val request = transformRequest(
-            providerSetting = providerSetting,
-            request = Request.Builder()
-                .url(url)
-                .headers(params.customHeaders.toHeaders())
-                .post(
-                    json.encodeToString(requestBody).toRequestBody("application/json".toMediaType())
-                )
-                .configureReferHeaders(providerSetting.baseUrl)
-                .build()
-        )
-
-        if (Logging.isDebugLoggingEnabled()) {
-            Log.i(TAG, "streamText: ${json.encodeToString(redactSecrets(requestBody))}")
-        }
-
         val responseId = Uuid.random().toString()
-        val decoder = GoogleStreamDecoder(responseId, params.model.modelId)
+        var activeEventSource: EventSource? = null
+        var fallbackAttempted = false
+        var meaningfulOutputDelivered = false
+        var attemptGeneration = 1
+
+        fun meaningfulChunks(chunks: Iterable<StreamChunk>): Boolean =
+            chunks.any { chunk ->
+                when (chunk) {
+                    is StreamChunk.Annotations,
+                    is StreamChunk.Usage,
+                    is StreamChunk.Finish -> false
+                    else -> true
+                }
+            }
 
         fun sendChunks(chunks: Iterable<StreamChunk>) {
             chunks.forEach { chunk ->
                 trySend(chunk).onFailure { e ->
-                    Log.w(TAG, "onEvent: chunk dropped (${e?.message})")
+                    Log.w(TAG, "onEvent: chunk dropped (" + e?.message + ")")
                 }
             }
         }
 
-        val listener = object : EventSourceListener() {
-            override fun onEvent(
-                eventSource: EventSource,
-                id: String?,
-                type: String?,
-                data: String
-            ) {
-                Log.i(TAG, "onEvent: $data")
+        fun errorTextAndException(
+            throwable: Throwable?,
+            response: Response?,
+        ): Pair<String, Throwable?> {
+            var exception = throwable
+            var errorText = throwable?.message.orEmpty()
 
-                try {
-                    val result = decoder.accept(SseEvent(id = id, event = type, data = data))
-                    sendChunks(result.chunks)
-                    if (result.completed) close()
-                } catch (e: IllegalStateException) {
-                    // Deliberate stream termination raised by the decoder itself
-                    // (e.g. a prompt-feedback block reason), not a parse failure.
-                    Log.e(TAG, "Stream terminated: $data", e)
-                    close(e)
-                } catch (e: Throwable) {
-                    // A single malformed/unparseable chunk must not escape this callback:
-                    // an uncaught exception here propagates through OkHttp's SSE reader and
-                    // aborts the whole stream instead of just skipping this one line.
-                    Log.w(TAG, "onEvent: skipping malformed chunk (${e.message})", e)
-                }
-            }
-
-            override fun onFailure(
-                eventSource: EventSource,
-                t: Throwable?,
-                response: Response?
-            ) {
-                var exception = t
-
-                Log.w(TAG, "onFailure: ${t?.message}", t)
-
-                try {
-                    if (t == null && response != null) {
-                        val bodyStr = response.body.stringSafe()
-                        if (!bodyStr.isNullOrEmpty()) {
-                            val bodyElement = json.parseToJsonElement(bodyStr)
-                            Log.d(TAG, "onFailure: error body $bodyElement")
-                            if (bodyElement is JsonObject) {
-                                exception = Exception(
-                                    bodyElement["error"]?.jsonObject?.get("message")?.jsonPrimitive?.content
-                                        ?: "unknown"
-                                )
+            try {
+                if (response != null) {
+                    val bodyStr = response.body.stringSafe().orEmpty()
+                    if (bodyStr.isNotEmpty()) {
+                        errorText = (errorText + " " + bodyStr).trim()
+                        val bodyElement = runCatching {
+                            json.parseToJsonElement(bodyStr)
+                        }.getOrNull()
+                        if (bodyElement is JsonObject) {
+                            val providerMessage =
+                                bodyElement["error"]?.jsonObject
+                                    ?.get("message")
+                                    ?.jsonPrimitive
+                                    ?.contentOrNull
+                            if (!providerMessage.isNullOrBlank()) {
+                                exception = Exception(providerMessage)
+                                errorText =
+                                    (errorText + " " + providerMessage).trim()
+                            } else {
+                                exception = Exception(bodyStr)
                             }
                         } else {
-                            exception = Exception("Unknown error: ${response.code}")
+                            exception = Exception(bodyStr)
                         }
+                    } else {
+                        exception = Exception("Unknown error: " + response.code)
+                        errorText =
+                            (errorText + " HTTP " + response.code).trim()
                     }
-                } catch (e: Throwable) {
-                    Log.w(TAG, "onFailure: failed to parse error body", e)
-                    exception = e
-                } finally {
+                }
+            } catch (e: Throwable) {
+                Log.w(TAG, "onFailure: failed to parse error body", e)
+                exception = e
+                errorText = (errorText + " " + e.message.orEmpty()).trim()
+            }
+
+            return errorText to exception
+        }
+
+        suspend fun openStream(
+            mediaSerializationMode: GoogleMediaSerializationMode,
+            generation: Int,
+        ): EventSource {
+            val requestBody = buildCompletionRequestBodyForMode(
+                messages = messages,
+                params = params,
+                safetyCategories = GOOGLE_SAFETY_CATEGORIES,
+                mediaSerializationMode = mediaSerializationMode,
+            )
+            logStreamRequestBody(requestBody, mediaSerializationMode)
+
+            val request = buildCompletionRequest(
+                providerSetting = providerSetting,
+                params = params,
+                requestBody = requestBody,
+                streaming = true,
+            )
+            val decoder = GoogleStreamDecoder(responseId, params.model.modelId)
+
+            val listener = object : EventSourceListener() {
+                override fun onEvent(
+                    eventSource: EventSource,
+                    id: String?,
+                    type: String?,
+                    data: String
+                ) {
+                    if (generation != attemptGeneration) return
+                    Log.i(TAG, "onEvent: " + data)
+
+                    try {
+                        val result = decoder.accept(
+                            SseEvent(id = id, event = type, data = data)
+                        )
+                        if (meaningfulChunks(result.chunks)) {
+                            meaningfulOutputDelivered = true
+                        }
+                        sendChunks(result.chunks)
+                        if (result.completed) {
+                            close()
+                        }
+                    } catch (e: IllegalStateException) {
+                        Log.e(TAG, "Stream terminated: " + data, e)
+                        close(e)
+                    } catch (e: Throwable) {
+                        Log.w(
+                            TAG,
+                            "onEvent: skipping malformed chunk (" + e.message + ")",
+                            e
+                        )
+                    }
+                }
+
+                override fun onFailure(
+                    eventSource: EventSource,
+                    t: Throwable?,
+                    response: Response?
+                ) {
+                    if (generation != attemptGeneration) return
+
+                    Log.w(TAG, "onFailure: " + t?.message, t)
+                    val (errorText, exception) = errorTextAndException(t, response)
+
+                    if (GoogleFunctionResponseMediaFallback.shouldAttemptFallback(
+                            mode = mediaSerializationMode,
+                            fallbackAttempted = fallbackAttempted,
+                            meaningfulOutputDelivered = meaningfulOutputDelivered,
+                            errorText = errorText,
+                        )
+                    ) {
+                        fallbackAttempted = true
+                        attemptGeneration += 1
+                        val fallbackGeneration = attemptGeneration
+
+                        Log.w(
+                            TAG,
+                            "Gemini rejected the primary media-reference stream; attempting fallback serialization"
+                        )
+
+                        eventSource.cancel()
+                        launch {
+                            try {
+                                activeEventSource = openStream(
+                                    mediaSerializationMode =
+                                        GoogleMediaSerializationMode.FALLBACK_INLINE_IMAGES,
+                                    generation = fallbackGeneration,
+                                )
+                            } catch (e: Throwable) {
+                                close(e)
+                            }
+                        }
+                        return
+                    }
+
                     close(exception ?: Exception("Stream failed"))
+                }
+
+                override fun onClosed(eventSource: EventSource) {
+                    if (generation != attemptGeneration) return
+                    sendChunks(decoder.onClosed())
+                    close()
                 }
             }
 
-            override fun onClosed(eventSource: EventSource) {
-                println("[onClosed] Connection closed")
-                sendChunks(decoder.onClosed())
-                close()
-            }
+            return EventSources.createFactory(client)
+                .newEventSource(request, listener)
         }
 
-        val eventSource = EventSources.createFactory(client)
-                .newEventSource(request, listener)
+        try {
+            activeEventSource = openStream(
+                mediaSerializationMode =
+                    GoogleMediaSerializationMode.PRIMARY_MULTIMODAL_FUNCTION_RESPONSE,
+                generation = attemptGeneration,
+            )
+        } catch (e: Throwable) {
+            close(e)
+        }
 
         awaitClose {
-            println("[awaitClose] closing eventSource")
-            eventSource.cancel()
+            activeEventSource?.cancel()
         }
         // trySend 在缓冲满时会静默丢弃 delta，导致回复中间缺字 (#1295)，因此缓冲必须无界
     }.buffer(Channel.UNLIMITED)
@@ -397,6 +584,19 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         messages: List<UIMessage>,
         params: TextGenerationParams,
         safetyCategories: List<String> = GOOGLE_SAFETY_CATEGORIES,
+    ): JsonObject = buildCompletionRequestBodyForMode(
+        messages = messages,
+        params = params,
+        safetyCategories = safetyCategories,
+        mediaSerializationMode =
+            GoogleMediaSerializationMode.PRIMARY_MULTIMODAL_FUNCTION_RESPONSE,
+    )
+
+    private fun buildCompletionRequestBodyForMode(
+        messages: List<UIMessage>,
+        params: TextGenerationParams,
+        safetyCategories: List<String>,
+        mediaSerializationMode: GoogleMediaSerializationMode,
     ): JsonObject = buildJsonObject {
         // System message if available
         val systemMessage = messages.firstOrNull { it.role == MessageRole.SYSTEM }
@@ -462,7 +662,11 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         // Contents (user messages)
         put(
             "contents",
-            buildContents(messages, params.model.modelId)
+            buildContents(
+                messages = messages,
+                modelId = params.model.modelId,
+                mediaSerializationMode = mediaSerializationMode,
+            )
         )
 
         // Tools — function tools and model built-in tools both live under the same
@@ -648,9 +852,24 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
     }
 
     private fun buildContents(messages: List<UIMessage>): JsonArray =
-        buildContents(messages, null)
+        buildContents(
+            messages,
+            null,
+            GoogleMediaSerializationMode.PRIMARY_MULTIMODAL_FUNCTION_RESPONSE,
+        )
 
-    private fun buildContents(messages: List<UIMessage>, modelId: String?): JsonArray {
+    private fun buildContents(messages: List<UIMessage>, modelId: String?): JsonArray =
+        buildContents(
+            messages,
+            modelId,
+            GoogleMediaSerializationMode.PRIMARY_MULTIMODAL_FUNCTION_RESPONSE,
+        )
+
+    private fun buildContents(
+        messages: List<UIMessage>,
+        modelId: String?,
+        mediaSerializationMode: GoogleMediaSerializationMode,
+    ): JsonArray {
         val mediaReferenceAllocator = GoogleMediaReferenceAllocator()
         val supportsMultimodalFunctionResponses =
             GoogleFunctionResponseMediaSerializer.supportsMultimodalFunctionResponses(modelId)
@@ -663,6 +882,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                             message = message,
                             mediaReferenceAllocator = mediaReferenceAllocator,
                             allowMultimodal = supportsMultimodalFunctionResponses,
+                            mediaSerializationMode = mediaSerializationMode,
                         )
                     } else {
                         addUserMessage(message)
@@ -675,6 +895,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         message: UIMessage,
         mediaReferenceAllocator: GoogleMediaReferenceAllocator,
         allowMultimodal: Boolean,
+        mediaSerializationMode: GoogleMediaSerializationMode,
     ) {
         val groups = groupPartsByToolBoundary(message.parts)
         val partsBuffer = mutableListOf<JsonObject>()
@@ -732,13 +953,14 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                     add(buildJsonObject {
                         put("role", "user")
                         putJsonArray("parts") {
-                            group.tools.forEach {
-                                add(
-                                    it.toFunctionResponsePart(
-                                        mediaReferenceAllocator = mediaReferenceAllocator,
-                                        allowMultimodal = allowMultimodal,
-                                    )
-                                )
+                            group.tools.forEach { tool ->
+                                tool.toFunctionResponseParts(
+                                    mediaReferenceAllocator = mediaReferenceAllocator,
+                                    allowMultimodal = allowMultimodal,
+                                    mediaSerializationMode = mediaSerializationMode,
+                                ).forEach { responsePart ->
+                                    add(responsePart)
+                                }
                             }
                         }
                     })
@@ -842,84 +1064,133 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         }
     }
 
-    private fun UIMessagePart.Tool.toFunctionResponsePart(
+    private fun UIMessagePart.Tool.toFunctionResponseParts(
         mediaReferenceAllocator: GoogleMediaReferenceAllocator,
         allowMultimodal: Boolean,
-    ) = buildJsonObject {
-        put("functionResponse", buildJsonObject {
-            if (toolCallId.isNotBlank()) {
-                put("id", toolCallId)
-            }
-            put("name", toolName)
+        mediaSerializationMode: GoogleMediaSerializationMode,
+    ): List<JsonObject> {
+        val textParts = output.filterIsInstance<UIMessagePart.Text>()
+        val mediaArtifacts = mediaArtifacts()
+        val encodingResults = mediaArtifacts.map { artifact ->
+            val displayName = mediaReferenceAllocator.next()
+            GoogleFunctionResponseMediaSerializer.encode(
+                artifact = artifact,
+                displayName = displayName,
+                allowMultimodal = allowMultimodal,
+            )
+        }
 
-            val textParts = output.filterIsInstance<UIMessagePart.Text>()
-            val mediaArtifacts = mediaArtifacts()
+        val successfulMedia = encodingResults.mapNotNull { result ->
+            (result as? GoogleMediaEncodingResult.Encoded)?.media
+        }
+        val mediaFailures = encodingResults.mapNotNull { result ->
+            result as? GoogleMediaEncodingResult.Skipped
+        }
 
-            val encodingResults = mediaArtifacts.map { artifact ->
-                val displayName = mediaReferenceAllocator.next()
-                GoogleFunctionResponseMediaSerializer.encode(
-                    artifact = artifact,
-                    displayName = displayName,
-                    allowMultimodal = allowMultimodal,
+        val response = buildJsonObject {
+            if (textParts.isNotEmpty()) {
+                put("result", textParts.joinToString("\n") { it.text })
+            } else if (successfulMedia.isEmpty()) {
+                put(
+                    "result",
+                    if (mediaFailures.isEmpty()) {
+                        " "
+                    } else {
+                        "Media output was not attached inline; see media_errors for details."
+                    }
                 )
             }
 
-            val successfulMedia = encodingResults.mapNotNull { result ->
-                (result as? GoogleMediaEncodingResult.Encoded)?.media
-            }
-            val mediaFailures = encodingResults.mapNotNull { result ->
-                result as? GoogleMediaEncodingResult.Skipped
-            }
-
-            val response = buildJsonObject {
-                if (textParts.isNotEmpty()) {
-                    put("result", textParts.joinToString("\n") { it.text })
-                } else if (successfulMedia.isEmpty()) {
-                    put(
-                        "result",
-                        if (mediaFailures.isEmpty()) {
-                            " "
-                        } else {
-                            "Media output was not attached inline; see media_errors for details."
-                        }
-                    )
-                }
-
+            if (
+                mediaSerializationMode ==
+                    GoogleMediaSerializationMode.PRIMARY_MULTIMODAL_FUNCTION_RESPONSE
+            ) {
                 successfulMedia.forEach { media ->
                     put(media.displayName, buildJsonObject {
                         put("\$ref", media.displayName)
                     })
                 }
-
-                if (mediaFailures.isNotEmpty()) {
-                    putJsonArray("media_errors") {
-                        mediaFailures.forEach { failure ->
-                            add(buildJsonObject {
-                                put("media_id", failure.artifact.id)
-                                put("mime_type", failure.artifact.mimeType)
-                                put("reference", failure.artifact.contentRef)
-                                put("reason", failure.reason)
-                            })
-                        }
-                    }
-                }
             }
-            put("response", response)
 
-            if (successfulMedia.isNotEmpty()) {
-                putJsonArray("parts") {
-                    successfulMedia.forEach { media ->
+            if (mediaFailures.isNotEmpty()) {
+                putJsonArray("media_errors") {
+                    mediaFailures.forEach { failure ->
                         add(buildJsonObject {
-                            put("inlineData", buildJsonObject {
-                                put("mimeType", media.mimeType)
-                                put("data", media.data)
-                                put("displayName", media.displayName)
-                            })
+                            put("media_id", failure.artifact.id)
+                            put("mime_type", failure.artifact.mimeType)
+                            put("reference", failure.artifact.contentRef)
+                            put("reason", failure.reason)
                         })
                     }
                 }
             }
-        })
+        }
+
+        val primaryInlineParts = successfulMedia.map { media ->
+            buildJsonObject {
+                put("inlineData", buildJsonObject {
+                    put("mimeType", media.mimeType)
+                    put("data", media.data)
+                    put("displayName", media.displayName)
+                })
+            }
+        }
+
+        if (
+            mediaSerializationMode ==
+                GoogleMediaSerializationMode.PRIMARY_MULTIMODAL_FUNCTION_RESPONSE
+        ) {
+            check(
+                GoogleFunctionResponseMediaSerializer.validateMultimodalReferences(
+                    response = response,
+                    inlineDataDisplayNames = successfulMedia.map { it.displayName },
+                )
+            ) {
+                "Invalid Gemini function-response media reference mapping"
+            }
+        }
+
+        val functionResponsePart = buildJsonObject {
+            put("functionResponse", buildJsonObject {
+                if (toolCallId.isNotBlank()) {
+                    put("id", toolCallId)
+                }
+                put("name", toolName)
+                put("response", response)
+
+                if (
+                    mediaSerializationMode ==
+                        GoogleMediaSerializationMode.PRIMARY_MULTIMODAL_FUNCTION_RESPONSE &&
+                    primaryInlineParts.isNotEmpty()
+                ) {
+                    putJsonArray("parts") {
+                        primaryInlineParts.forEach { add(it) }
+                    }
+                }
+            })
+        }
+
+        if (
+            mediaSerializationMode ==
+                GoogleMediaSerializationMode.PRIMARY_MULTIMODAL_FUNCTION_RESPONSE ||
+            successfulMedia.isEmpty()
+        ) {
+            return listOf(functionResponsePart)
+        }
+
+        return buildList {
+            add(functionResponsePart)
+            successfulMedia.forEach { media ->
+                add(
+                    buildJsonObject {
+                        put("inlineData", buildJsonObject {
+                            put("mimeType", media.mimeType)
+                            put("data", media.data)
+                        })
+                    }
+                )
+            }
+        }
     }
 
     private fun parseUsageMeta(jsonObject: JsonObject?): TokenUsage? {

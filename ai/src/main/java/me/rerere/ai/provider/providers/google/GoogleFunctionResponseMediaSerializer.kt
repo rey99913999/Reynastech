@@ -3,6 +3,9 @@ package me.rerere.ai.provider.providers.google
 import me.rerere.ai.provider.providers.ToolMediaArtifact
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.encodeBase64
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.registry.ModelRegistry
 
 internal class GoogleMediaReferenceAllocator {
@@ -10,6 +13,46 @@ internal class GoogleMediaReferenceAllocator {
 
     fun next(): String = "nastech_media_${nextIndex++}"
 }
+
+internal enum class GoogleMediaSerializationMode {
+    PRIMARY_MULTIMODAL_FUNCTION_RESPONSE,
+    FALLBACK_INLINE_IMAGES,
+}
+
+internal object GoogleFunctionResponseMediaFallback {
+    internal fun isMediaReferenceValidationError(errorText: String): Boolean {
+        val normalized = errorText.lowercase()
+        val hasFunctionResponsePath =
+            "function_response.response" in normalized ||
+                "functionresponse.response" in normalized
+        val hasDisplayName = "display_name" in normalized || "displayname" in normalized
+        val hasReference = "\$ref" in normalized || "reference" in normalized
+        val hasMismatch = listOf(
+            "mismatch",
+            "mismatched",
+            "does not match",
+            "doesn't match",
+            "no matching",
+            "not match",
+            "must match",
+            "must equal",
+        ).any(normalized::contains)
+
+        return hasFunctionResponsePath && hasDisplayName && hasReference && hasMismatch
+    }
+
+    internal fun shouldAttemptFallback(
+        mode: GoogleMediaSerializationMode,
+        fallbackAttempted: Boolean,
+        meaningfulOutputDelivered: Boolean,
+        errorText: String,
+    ): Boolean =
+        mode == GoogleMediaSerializationMode.PRIMARY_MULTIMODAL_FUNCTION_RESPONSE &&
+            !fallbackAttempted &&
+            !meaningfulOutputDelivered &&
+            isMediaReferenceValidationError(errorText)
+}
+
 
 internal data class GoogleFunctionResponseMedia(
     val displayName: String,
@@ -36,6 +79,24 @@ internal object GoogleFunctionResponseMediaSerializer {
     fun supportsMultimodalFunctionResponses(modelId: String?): Boolean {
         val normalized = modelId?.lowercase()?.trim() ?: return false
         return ModelRegistry.GEMINI_3_SERIES.match(normalized)
+    }
+
+    internal fun validateMultimodalReferences(
+        response: JsonObject,
+        inlineDataDisplayNames: List<String>,
+    ): Boolean {
+        val references = response.entries
+            .filter { it.key.startsWith("nastech_media_") }
+            .map { (key, value) ->
+                key to value.jsonObject["\$ref"]?.jsonPrimitive?.content
+            }
+
+        if (references.size != inlineDataDisplayNames.size) return false
+        if (references.any { (key, ref) -> ref == null || ref != key }) return false
+        if (references.map { it.first }.distinct().size != references.size) return false
+        if (inlineDataDisplayNames.distinct().size != inlineDataDisplayNames.size) return false
+
+        return references.map { it.first } == inlineDataDisplayNames
     }
 
     fun encode(
