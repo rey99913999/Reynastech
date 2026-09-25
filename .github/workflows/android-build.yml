@@ -149,7 +149,7 @@ jobs:
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
 
       - name: Upload debug APK
-        if: success()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: nastech-debug-${{ github.sha }}-${{ steps.label.outputs.label }}
