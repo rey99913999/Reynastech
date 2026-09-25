@@ -243,7 +243,7 @@ class GoogleFunctionResponseMediaTest {
 
 
     @Test
-    fun \`fallback moves images outside function response and preserves text and bytes\`() {
+    fun `fallback moves images outside function response and preserves text and bytes`() {
         val result = invokeBuildContents(
             listOf(
                 UIMessage.user("screenshot"),
@@ -279,7 +279,7 @@ class GoogleFunctionResponseMediaTest {
     }
 
     @Test
-    fun \`fallback preserves multiple images in original order\`() {
+    fun `fallback preserves multiple images in original order`() {
         val result = invokeBuildContents(
             listOf(
                 UIMessage.user("show two screenshots"),
@@ -317,7 +317,7 @@ class GoogleFunctionResponseMediaTest {
     }
 
     @Test
-    fun \`media reference validator rejects mismatched or duplicate identities\`() {
+    fun `media reference validator rejects mismatched or duplicate identities`() {
         val validResponse = buildJsonObject {
             put(
                 "nastech_media_0",
@@ -354,9 +354,9 @@ class GoogleFunctionResponseMediaTest {
     }
 
     @Test
-    fun \`known Gemini media reference mismatch is narrowly classified\`() {
+    fun `known Gemini media reference mismatch is narrowly classified`() {
         val error = """
-            INVALID_ARGUMENT: The referenced name \`nastech_media_0\` in
+            INVALID_ARGUMENT: The referenced name `nastech_media_0` in
             function_response.response does not match to a display_name in
             function_response.parts.
         """.trimIndent()
@@ -387,7 +387,7 @@ class GoogleFunctionResponseMediaTest {
     }
 
     @Test
-    fun \`fallback policy is one shot and never starts after meaningful output\`() {
+    fun `fallback policy is one shot and never starts after meaningful output`() {
         val primary = GoogleMediaSerializationMode.PRIMARY_MULTIMODAL_FUNCTION_RESPONSE
         val error =
             "function_response.response reference mismatch with display_name and reference"
@@ -427,10 +427,10 @@ class GoogleFunctionResponseMediaTest {
     }
 
     @Test
-    fun \`generateText retries exactly once with fallback serialization\`() = runBlocking {
+    fun `generateText retries exactly once with fallback serialization`() = runBlocking {
         val requests = mutableListOf<String>()
         val primaryError =
-            """{"error":{"message":"The referenced name \`nastech_media_0\` in function_response.response does not match to a display_name in the function_response.parts"}}"""
+            """{"error":{"message":"The referenced name `nastech_media_0` in function_response.response does not match to a display_name in the function_response.parts"}}"""
         val successBody =
             """{"candidates":[{"content":{"role":"model","parts":[{"text":"continued"}]},"finishReason":"STOP"}]}"""
 
@@ -518,10 +518,10 @@ class GoogleFunctionResponseMediaTest {
     }
 
     @Test
-    fun \`streamText retries once before meaningful output and emits only fallback chunks\`() = runBlocking {
+    fun `streamText retries once before meaningful output and emits only fallback chunks`() = runBlocking {
         val requestBodies = mutableListOf<String>()
         val primaryError =
-            """{"error":{"message":"The referenced name \`nastech_media_0\` in function_response.response does not match to a display_name in the function_response.parts"}}"""
+            """{"error":{"message":"The referenced name `nastech_media_0` in function_response.response does not match to a display_name in the function_response.parts"}}"""
         val streamBody =
             """data: {"candidates":[{"content":{"role":"model","parts":[{"text":"continued"}]}}]}
 
