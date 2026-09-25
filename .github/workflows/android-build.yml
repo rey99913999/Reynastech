@@ -162,7 +162,7 @@ jobs:
         run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
       - name: Upload release APK
-        if: success()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: nastech-release-${{ github.sha }}-${{ steps.label.outputs.label }}
