@@ -193,7 +193,7 @@ class GenerationDeviceExecutionGuardTest {
         val evidence = DeviceExecutionEvidenceTracker.recordToolResult(
             current = DeviceExecutionEvidence(),
             toolName = "clipboard_tool",
-            output = listOf(UIMessagePart.Text("""{"text":"copied response"}""")),
+            output = listOf(UIMessagePart.Text("""{"action":"read","text":"copied response"}""")),
             invocationStarted = true,
             json = json,
         )
