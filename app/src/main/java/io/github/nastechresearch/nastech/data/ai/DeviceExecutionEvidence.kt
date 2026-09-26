@@ -157,9 +157,10 @@ internal object DeviceCompletionGuard {
         isDeviceTask: Boolean,
         evidence: DeviceExecutionEvidence,
         retryAlreadyUsed: Boolean,
+        requiresVerifiedOutcome: Boolean = false,
     ): DeviceCompletionGuardDecision = when {
         !isDeviceTask -> DeviceCompletionGuardDecision.ALLOW
-        evidence.hasSuccessfulExecutionEvidence -> DeviceCompletionGuardDecision.ALLOW
+        evidence.canSatisfyCompletion(requiresVerifiedOutcome) -> DeviceCompletionGuardDecision.ALLOW
         !retryAlreadyUsed -> DeviceCompletionGuardDecision.RETRY
         else -> DeviceCompletionGuardDecision.REPLAN
     }
