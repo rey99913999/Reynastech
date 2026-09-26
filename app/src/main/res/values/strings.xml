@@ -2149,4 +2149,25 @@
     <string name="setting_provider_page_prompt_price">Prompt Price / Token</string>
     <string name="setting_provider_page_completion_price">Completion Price / Token</string>
     <string name="setting_provider_page_supported_parameters">Supported Parameters (comma-separated)</string>
+  <string name="assistant_page_local_tools_wait_until_title">Wait Until</string>
+  <string name="assistant_page_local_tools_wait_until_desc">Wait for a bounded device condition and re-check the screen without performing actions.</string>
+  <string name="assistant_page_local_tools_wait_until_settings">Settings</string>
+  <string name="assistant_page_local_tools_wait_until_settings_title">Wait Until settings</string>
+  <string name="assistant_page_local_tools_wait_until_max_wait">Maximum wait time (seconds)</string>
+  <string name="assistant_page_local_tools_wait_until_seconds_hint">Allowed range: 1–300 seconds.</string>
+  <string name="assistant_page_local_tools_wait_until_check_interval">Check interval (ms)</string>
+  <string name="assistant_page_local_tools_wait_until_interval_hint">Supported values: 250, 500, 1000, 2000, and 5000 ms.</string>
+  <string name="assistant_page_local_tools_wait_until_default_condition">Default condition</string>
+  <string name="assistant_page_local_tools_wait_until_max_checks">Maximum consecutive waits/checks</string>
+  <string name="assistant_page_local_tools_wait_until_accessibility">Accessibility / UI Tree</string>
+  <string name="assistant_page_local_tools_wait_until_ocr">OCR</string>
+  <string name="assistant_page_local_tools_wait_until_screen_state">Screen-state / fingerprint</string>
+  <string name="assistant_page_local_tools_wait_until_vision_fallback">Vision fallback</string>
+  <string name="assistant_page_local_tools_wait_until_condition_screen_change">Screen change</string>
+  <string name="assistant_page_local_tools_wait_until_condition_text_appears">Text appears</string>
+  <string name="assistant_page_local_tools_wait_until_condition_ui_element_appears">UI element appears</string>
+  <string name="assistant_page_local_tools_wait_until_condition_fixed_delay">Fixed delay</string>
+  <string name="assistant_page_local_tools_wait_until_condition_text_disappears">Text disappears</string>
+  <string name="assistant_page_local_tools_wait_until_condition_screen_stable">Screen stable</string>
+  <string name="assistant_page_local_tools_wait_until_save">Save</string>
 </resources>
