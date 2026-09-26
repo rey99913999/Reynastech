@@ -48,4 +48,16 @@ class AgentModelsTest {
         assertNotEquals(first.conversationId, second.conversationId)
         assertTrue(first.copy(instructions = "A").instructions != second.instructions)
     }
+    @Test
+    fun executorAndVerifierInstructionsTeachAsyncCompletion() {
+        val agents = defaultAgentDefinitions()
+        val executor = agents.first { it.role == AgentRole.EXECUTOR }
+        val verifier = agents.first { it.role == AgentRole.VERIFIER }
+
+        assertTrue(executor.systemInstructions.contains("wait_until"))
+        assertTrue(executor.systemInstructions.contains("copy-to-clipboard"))
+        assertTrue(verifier.systemInstructions.contains("condition_not_met"))
+        assertTrue(verifier.systemInstructions.contains("clipboard"))
+    }
+
 }
