@@ -103,7 +103,7 @@ private fun error(code: String, detail: String? = null): UIMessagePart.Text =
     )
 
 private fun parseSelector(input: JsonObject): DeviceAccessibilitySelector? {
-    val selector = args["selector"] as? JsonObject ?: return null
+    val selector = input["selector"] as? JsonObject ?: return null
     val by = selector["by"]?.jsonPrimitive?.contentOrNull ?: when {
         selector["text"] != null -> "text"
         selector["content_description"] != null -> "content_description"
@@ -116,7 +116,7 @@ private fun parseSelector(input: JsonObject): DeviceAccessibilitySelector? {
         ?: return null
     val nth = selector["nth"]?.jsonPrimitive?.intOrNull ?: 0
     if (nth < 0) return null
-    val packageName = args["package_name"]?.jsonPrimitive?.contentOrNull
+    val packageName = input["package_name"]?.jsonPrimitive?.contentOrNull
         ?: selector["package_name"]?.jsonPrimitive?.contentOrNull
     return DeviceAccessibilitySelector(by = by, value = value, nth = nth, packageName = packageName)
 }
@@ -185,11 +185,7 @@ fun waitUntilTool(
                     put("properties", buildJsonObject {
                         put("by", buildJsonObject {
                             put("type", "string")
-                            put("enum", kotlinx.serialization.json.buildJsonArray {
-                                add("text")
-                                add("content_description")
-                                add("view_id_resource_name")
-                            })
+                            put("description", "Selector dimension: text, content_description, or view_id_resource_name")
                         })
                         put("value", buildJsonObject { put("type", "string") })
                         put("nth", buildJsonObject { put("type", "integer") })
