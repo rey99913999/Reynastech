@@ -19,7 +19,13 @@ internal data class DeviceExecutionEvidence(
     val deviceToolExecutedThisTurn: Boolean = false,
     val deviceToolSucceededThisTurn: Boolean = false,
     val devicePlanExecutedThisTurn: Boolean = false,
+    val verifiedOutcomeEvidenceThisTurn: Boolean = false,
 ) {
+    val hasVerifiedOutcomeEvidence: Boolean
+        get() = verifiedOutcomeEvidenceThisTurn
+
+    fun canSatisfyCompletion(requiresVerifiedOutcome: Boolean): Boolean =
+        if (requiresVerifiedOutcome) hasVerifiedOutcomeEvidence else hasSuccessfulExecutionEvidence
     val hasSuccessfulExecutionEvidence: Boolean
         get() = deviceToolSucceededThisTurn || devicePlanExecutedThisTurn
 }
@@ -37,7 +43,15 @@ internal object DeviceExecutionEvidenceTracker {
         if (toolName == "execute_structured_plan") {
             val result = decodePlanResult(output, json)
             return if (result != null && result.completedCount > 0) {
-                current.copy(devicePlanExecutedThisTurn = true)
+                val verified = result.results.any {
+                    it.status == io.github.nastechresearch.nastech.data.execution.ExecutionStepStatus.SUCCESS &&
+                        it.lifecycle == io.github.nastechresearch.nastech.data.execution.DeviceActionLifecycle.VERIFIED
+                }
+                current.copy(
+                    devicePlanExecutedThisTurn = true,
+                    verifiedOutcomeEvidenceThisTurn =
+                        current.verifiedOutcomeEvidenceThisTurn || verified,
+                )
             } else {
                 current
             }
@@ -46,10 +60,15 @@ internal object DeviceExecutionEvidenceTracker {
         if (!ExecutionToolRegistry.isCoreDeviceTool(toolName)) return current
 
         val failed = outputIndicatesFailure(output, json)
+        val verifiedOutcome =
+            outputContainsExplicitVerification(output, json) ||
+                (toolName == "clipboard_tool" && clipboardReadContainsText(output, json))
         return current.copy(
             deviceToolExecutedThisTurn = true,
             deviceToolSucceededThisTurn =
                 current.deviceToolSucceededThisTurn || !failed,
+            verifiedOutcomeEvidenceThisTurn =
+                current.verifiedOutcomeEvidenceThisTurn || (!failed && verifiedOutcome),
         )
     }
 
@@ -77,6 +96,36 @@ internal object DeviceExecutionEvidenceTracker {
                 }.getOrNull()
             }
             .firstOrNull()
+
+    private fun outputContainsExplicitVerification(
+        output: List<UIMessagePart>,
+        json: Json,
+    ): Boolean =
+        output
+            .filterIsInstance<UIMessagePart.Text>()
+            .any { part ->
+                runCatching {
+                    val obj = json.parseToJsonElement(part.text).jsonObject
+                    val verified = (obj["verified"] as? JsonPrimitive)?.booleanOrNull == true
+                    val status = (obj["status"] as? JsonPrimitive)?.contentOrNull?.uppercase()
+                    verified || status == "VERIFIED"
+                }.getOrDefault(false)
+            }
+
+    private fun clipboardReadContainsText(
+        output: List<UIMessagePart>,
+        json: Json,
+    ): Boolean =
+        output
+            .filterIsInstance<UIMessagePart.Text>()
+            .any { part ->
+                runCatching {
+                    val obj = json.parseToJsonElement(part.text).jsonObject
+                    val action = (obj["action"] as? JsonPrimitive)?.contentOrNull
+                    val text = (obj["text"] as? JsonPrimitive)?.contentOrNull
+                    action == "read" && !text.isNullOrBlank()
+                }.getOrDefault(false)
+            }
 
     private fun outputIndicatesFailure(
         output: List<UIMessagePart>,
