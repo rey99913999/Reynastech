@@ -87,7 +87,7 @@ class AndroidDeviceObserver(
             }
         }.getOrDefault(emptyList())
 
-        if (selector.nth < matches.size) {
+        return if (selector.nth < matches.size) {
             DeviceAccessibilityQueryResult.Matched
         } else {
             DeviceAccessibilityQueryResult.NotFound(currentPackage)
