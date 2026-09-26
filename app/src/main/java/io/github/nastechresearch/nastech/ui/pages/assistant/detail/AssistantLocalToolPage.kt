@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.rememberScrollState
@@ -19,6 +22,9 @@ import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -30,6 +36,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -45,6 +53,8 @@ import io.github.nastechresearch.nastech.data.ai.tools.LocalToolOption
 import io.github.nastechresearch.nastech.data.ai.tools.local.PermissionHelper
 import io.github.nastechresearch.nastech.data.ai.tools.local.TermuxIntegration
 import io.github.nastechresearch.nastech.data.model.Assistant
+import io.github.nastechresearch.nastech.data.model.WaitUntilCondition
+import io.github.nastechresearch.nastech.data.model.WaitUntilSettings
 import io.github.nastechresearch.nastech.data.telegram.TelegramBotPreferences
 import io.github.nastechresearch.nastech.ui.components.nav.BackButton
 import io.github.nastechresearch.nastech.ui.components.ui.CardGroup
@@ -140,6 +150,7 @@ private fun AssistantLocalToolContent(
     var cronToastShownThisVisit by remember { mutableStateOf(false) }
     var workflowsDialogShownThisVisit by remember { mutableStateOf(false) }
     var keyboardDialogShownThisVisit by remember { mutableStateOf(false) }
+    var showWaitUntilSettingsDialog by remember { mutableStateOf(false) }
 
     val cronHintText = stringResource(R.string.assistant_page_local_tools_cron_jobs_toast_hint)
     val termuxCommand = stringResource(R.string.assistant_page_local_tools_termux_postgrant_command)
@@ -179,6 +190,17 @@ private fun AssistantLocalToolContent(
                 TextButton(onClick = { showTermuxPostGrantDialog = false }) {
                     Text(stringResource(R.string.assistant_page_local_tools_dialog_dismiss))
                 }
+            },
+        )
+    }
+
+    if (showWaitUntilSettingsDialog) {
+        WaitUntilSettingsDialog(
+            settings = assistant.waitUntilSettings.normalized(),
+            onDismiss = { showWaitUntilSettingsDialog = false },
+            onSave = { settings ->
+                onUpdateAssistant { it.copy(waitUntilSettings = settings.normalized()) }
+                showWaitUntilSettingsDialog = false
             },
         )
     }
@@ -1118,6 +1140,27 @@ private fun AssistantLocalToolContent(
             )
             item(
                 headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_wait_until_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_wait_until_desc))
+                },
+                trailingContent = {
+                    Column(horizontalAlignment = Alignment.End) {
+                        Switch(
+                            checked = assistant.localTools.contains(LocalToolOption.WaitUntil),
+                            onCheckedChange = { toggleLocalTool(LocalToolOption.WaitUntil, it) },
+                        )
+                        if (assistant.localTools.contains(LocalToolOption.WaitUntil)) {
+                            TextButton(onClick = { showWaitUntilSettingsDialog = true }) {
+                                Text(stringResource(R.string.assistant_page_local_tools_wait_until_settings))
+                            }
+                        }
+                    }
+                }
+            )
+            item(
+                headlineContent = {
                     Text(stringResource(R.string.assistant_page_local_tools_app_launcher_title))
                 },
                 supportingContent = {
@@ -1596,5 +1639,170 @@ private fun TermuxStatusRowSubtitle(enabled: Boolean) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+
+@Composable
+private fun waitUntilConditionLabel(condition: WaitUntilCondition): String = when (condition) {
+    WaitUntilCondition.SCREEN_CHANGED -> stringResource(R.string.assistant_page_local_tools_wait_until_condition_screen_change)
+    WaitUntilCondition.TEXT_APPEARS -> stringResource(R.string.assistant_page_local_tools_wait_until_condition_text_appears)
+    WaitUntilCondition.UI_ELEMENT_APPEARS -> stringResource(R.string.assistant_page_local_tools_wait_until_condition_ui_element_appears)
+    WaitUntilCondition.FIXED_DELAY -> stringResource(R.string.assistant_page_local_tools_wait_until_condition_fixed_delay)
+    WaitUntilCondition.TEXT_DISAPPEARS -> stringResource(R.string.assistant_page_local_tools_wait_until_condition_text_disappears)
+    WaitUntilCondition.SCREEN_STABLE -> stringResource(R.string.assistant_page_local_tools_wait_until_condition_screen_stable)
+}
+
+@Composable
+private fun WaitUntilSettingsDialog(
+    settings: WaitUntilSettings,
+    onDismiss: () -> Unit,
+    onSave: (WaitUntilSettings) -> Unit,
+) {
+    var maxWaitText by remember(settings.maxWaitSeconds) { mutableStateOf(settings.maxWaitSeconds.toString()) }
+    var intervalText by remember(settings.checkIntervalMs) { mutableStateOf(settings.checkIntervalMs.toString()) }
+    var maxChecksText by remember(settings.maxConsecutiveWaits) { mutableStateOf(settings.maxConsecutiveWaits.toString()) }
+    var useAccessibility by remember(settings.useAccessibility) { mutableStateOf(settings.useAccessibility) }
+    var useOcr by remember(settings.useOcr) { mutableStateOf(settings.useOcr) }
+    var useScreenState by remember(settings.useScreenState) { mutableStateOf(settings.useScreenState) }
+    var useVisionFallback by remember(settings.useVisionFallback) { mutableStateOf(settings.useVisionFallback) }
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    val defaultChoices = listOf(
+        WaitUntilCondition.SCREEN_CHANGED,
+        WaitUntilCondition.TEXT_APPEARS,
+        WaitUntilCondition.UI_ELEMENT_APPEARS,
+        WaitUntilCondition.FIXED_DELAY,
+    )
+    var defaultCondition by remember {
+        mutableStateOf(
+            settings.defaultCondition.takeIf { it in defaultChoices }
+                ?: WaitUntilCondition.SCREEN_CHANGED
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.assistant_page_local_tools_wait_until_settings_title)) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                OutlinedTextField(
+                    value = maxWaitText,
+                    onValueChange = { maxWaitText = it },
+                    label = { Text(stringResource(R.string.assistant_page_local_tools_wait_until_max_wait)) },
+                    supportingText = {
+                        Text(stringResource(R.string.assistant_page_local_tools_wait_until_seconds_hint))
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = intervalText,
+                    onValueChange = { intervalText = it },
+                    label = { Text(stringResource(R.string.assistant_page_local_tools_wait_until_check_interval)) },
+                    supportingText = {
+                        Text(stringResource(R.string.assistant_page_local_tools_wait_until_interval_hint))
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = maxChecksText,
+                    onValueChange = { maxChecksText = it },
+                    label = { Text(stringResource(R.string.assistant_page_local_tools_wait_until_max_checks)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Box {
+                    TextButton(onClick = { menuExpanded = true }) {
+                        Text(
+                            stringResource(R.string.assistant_page_local_tools_wait_until_default_condition) +
+                                ": " + waitUntilConditionLabel(defaultCondition)
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        defaultChoices.forEach { condition ->
+                            DropdownMenuItem(
+                                text = { Text(waitUntilConditionLabel(condition)) },
+                                onClick = {
+                                    defaultCondition = condition
+                                    menuExpanded = false
+                                },
+                            )
+                        }
+                    }
+                }
+                WaitUntilToggleRow(
+                    label = stringResource(R.string.assistant_page_local_tools_wait_until_accessibility),
+                    checked = useAccessibility,
+                    onCheckedChange = { useAccessibility = it },
+                )
+                WaitUntilToggleRow(
+                    label = stringResource(R.string.assistant_page_local_tools_wait_until_ocr),
+                    checked = useOcr,
+                    onCheckedChange = { useOcr = it },
+                )
+                WaitUntilToggleRow(
+                    label = stringResource(R.string.assistant_page_local_tools_wait_until_screen_state),
+                    checked = useScreenState,
+                    onCheckedChange = { useScreenState = it },
+                )
+                WaitUntilToggleRow(
+                    label = stringResource(R.string.assistant_page_local_tools_wait_until_vision_fallback),
+                    checked = useVisionFallback,
+                    onCheckedChange = { useVisionFallback = it },
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onSave(
+                        WaitUntilSettings(
+                            maxWaitSeconds = maxWaitText.toIntOrNull() ?: settings.maxWaitSeconds,
+                            checkIntervalMs = intervalText.toLongOrNull() ?: settings.checkIntervalMs,
+                            defaultCondition = defaultCondition,
+                            maxConsecutiveWaits = maxChecksText.toIntOrNull() ?: settings.maxConsecutiveWaits,
+                            useAccessibility = useAccessibility,
+                            useOcr = useOcr,
+                            useScreenState = useScreenState,
+                            useVisionFallback = useVisionFallback,
+                        )
+                    )
+                }
+            ) {
+                Text(stringResource(R.string.assistant_page_local_tools_wait_until_save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.assistant_page_local_tools_dialog_dismiss))
+            }
+        },
+    )
+}
+
+@Composable
+private fun WaitUntilToggleRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label)
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
