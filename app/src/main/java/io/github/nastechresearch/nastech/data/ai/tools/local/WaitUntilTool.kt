@@ -4,7 +4,6 @@ import android.content.Context
 import io.github.nastechresearch.nastech.data.ai.tools.ToolInvocationContext
 import io.github.nastechresearch.nastech.data.execution.DevicePostcondition
 import io.github.nastechresearch.nastech.data.execution.DevicePostconditionType
-import io.github.nastechresearch.nastech.data.execution.DeviceTextSource
 import io.github.nastechresearch.nastech.data.execution.DeviceStateWaiter
 import io.github.nastechresearch.nastech.data.execution.DeviceAccessibilitySelector
 import io.github.nastechresearch.nastech.data.execution.DeviceObserver
@@ -271,12 +270,6 @@ fun waitUntilTool(
                         value = expected,
                         timeoutMs = timeoutMs,
                         captureOcr = settings.useOcr,
-                        textSource = when {
-                            settings.useAccessibility && settings.useOcr -> DeviceTextSource.BOTH
-                            settings.useAccessibility -> DeviceTextSource.ACCESSIBILITY
-                            settings.useOcr -> DeviceTextSource.OCR
-                            else -> DeviceTextSource.BOTH
-                        },
                     ),
                     before = null,
                     maxWaitMs = configuredMaxWaitMs,
