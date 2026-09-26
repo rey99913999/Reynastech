@@ -3,37 +3,38 @@ package io.github.nastechresearch.nastech.data.execution
 import kotlinx.serialization.Serializable
 
 @Serializable
-enum class ExecutionLevel {
-    LOCAL_DETERMINISTIC,
-    LOCAL_RULES,
-    VISION,
-    LLM,
+enum class DeviceCapabilityStatus {
+    AVAILABLE,
+    UNAVAILABLE,
+    SERVICE_UNAVAILABLE,
+    AUTHORIZATION_REQUIRED,
+    AUTHORIZATION_DENIED,
 }
 
 @Serializable
-enum class ExecutionStepKind {
-    TOOL,
-    VERIFY,
-    RETURN,
-    DECIDE,
-    RECOVER,
-}
+data class DeviceCapability(
+    val name: String,
+    val status: DeviceCapabilityStatus,
+    val reason: String? = null,
+)
 
 @Serializable
-enum class ExecutionStepStatus {
-    SUCCESS,
-    FAILED,
-    SKIPPED,
-    APPROVAL_REQUIRED,
-    REPLAN_REQUIRED,
-}
+data class DeviceCapabilityContract(
+    val capabilities: List<DeviceCapability> = emptyList(),
+    val requiredCapabilities: Set<String> = emptySet(),
+    val requiredConstraints: Set<String> = emptySet(),
+) {
+    fun capability(name: String): DeviceCapability? = capabilities.firstOrNull { it.name == name }
 
-@Serializable
-enum class ExecutionAgentRole {
-    PLANNER,
-    VISION,
-    RECOVERY,
-    VERIFIER,
+    fun requiredCapabilityFailure(): DeviceCapability? =
+        requiredCapabilities.firstNotNullOfOrNull { name ->
+            capability(name)?.takeIf { it.status != DeviceCapabilityStatus.AVAILABLE }
+                ?: DeviceCapability(
+                    name = name,
+                    status = DeviceCapabilityStatus.UNAVAILABLE,
+                    reason = "required_capability_not_registered",
+                )
+        }
 }
 
 @Serializable
@@ -41,31 +42,13 @@ enum class DevicePostconditionType {
     APP_FOREGROUND,
     NODE_PRESENT,
     TEXT_PRESENT,
-    TEXT_ABSENT,
-    UI_ELEMENT_PRESENT,
     KEYBOARD_VISIBLE,
     SCREEN_CHANGED,
     SCREEN_FINGERPRINT_CHANGED,
-    SCREEN_STABLE,
     CLIPBOARD_NON_EMPTY,
     RESPONSE_TEXT_NON_EMPTY,
     TARGET_PROPERTY_TRUE,
 }
-
-@Serializable
-enum class DeviceTextSource {
-    ACCESSIBILITY,
-    OCR,
-    BOTH,
-}
-
-@Serializable
-data class DeviceAccessibilitySelector(
-    val by: String,
-    val value: String,
-    val nth: Int = 0,
-    val packageName: String? = null,
-)
 
 @Serializable
 data class DevicePostcondition(
@@ -73,8 +56,6 @@ data class DevicePostcondition(
     val value: String? = null,
     val expected: Boolean = true,
     val timeoutMs: Long = 5_000L,
-    val selector: DeviceAccessibilitySelector? = null,
-    val textSource: DeviceTextSource = DeviceTextSource.BOTH,
 )
 
 @Serializable
@@ -142,8 +123,6 @@ data class DeviceObservation(
     val foregroundPackage: String = "",
     val windowTitle: String = "",
     val visibleText: List<String> = emptyList(),
-    val accessibilityText: List<String> = emptyList(),
-    val ocrText: List<String> = emptyList(),
     val focusedText: String? = null,
     val keyboardVisible: Boolean = false,
     val screenFingerprint: String = "",
@@ -158,11 +137,10 @@ data class DeviceIntentPreflight(
     val confidence: Float = 0f,
     val requiredCapabilities: Set<String> = emptySet(),
     val requiredConstraints: Set<String> = emptySet(),
-    val requiresVerifiedOutcome: Boolean = false,
 )
 
 internal fun normalizeDeviceText(value: String): String =
-    value.trim().replace(Regex("\s+"), " ").lowercase()
+    value.trim().replace(Regex("\\s+"), " ").lowercase()
 
 internal fun analyzeDeviceIntent(text: String): DeviceIntentPreflight {
     val normalized = normalizeDeviceText(text)
@@ -194,12 +172,6 @@ internal fun analyzeDeviceIntent(text: String): DeviceIntentPreflight {
         listOf("clipboard", "copy the response", "on my phone", "on the device", "الحافظة", "انسخ")
             .any(normalized::contains)
 
-    val requiresVerifiedOutcome =
-        listOf(
-            "response", "response content", "copy the response", "clipboard",
-            "نسخ الرد", "الحافظة", "النتيجة",
-        ).any(normalized::contains)
-
     val requiredCapabilities = buildSet {
         if (appCue) add("app_launch")
         if (actionCue) add("device_control")
@@ -210,19 +182,18 @@ internal fun analyzeDeviceIntent(text: String): DeviceIntentPreflight {
 
     val requiredConstraints = buildSet {
         if (keyboardCue) add("use_keyboard")
-        if (screenshotCue) add("capture_visual")
+        if ("screenshot tool" in normalized) add("use_screenshot_tool")
     }
 
     return DeviceIntentPreflight(
         isDeviceTask = phoneCue,
         confidence = when {
-            appCue || keyboardCue -> 0.96f
-            actionCue -> 0.91f
-            phoneCue -> 0.87f
-            else -> 0f
+            !phoneCue -> 0f
+            keyboardCue && appCue -> 0.98f
+            appCue || actionCue -> 0.94f
+            else -> 0.90f
         },
         requiredCapabilities = requiredCapabilities,
         requiredConstraints = requiredConstraints,
-        requiresVerifiedOutcome = requiresVerifiedOutcome,
     )
 }
