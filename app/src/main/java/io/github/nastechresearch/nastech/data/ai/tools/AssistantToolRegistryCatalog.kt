@@ -51,6 +51,7 @@ class AssistantToolRegistryCatalog(
                 callerConversationId = conversationId.toString(),
                 isHeadless = false,
                 modelCanSeeImages = model?.let { Modality.IMAGE in it.inputModalities } == true,
+                waitUntilSettings = assistant.waitUntilSettings.normalized(),
             )
             addAll(
                 localTools.getTools(
