@@ -12,6 +12,7 @@ fun interface DeviceStateWaiter {
         before: DeviceObservation?,
         maxWaitMs: Long = postcondition.timeoutMs,
         pollMs: Long = 250L,
+        maxChecks: Int = Int.MAX_VALUE,
     ): DeviceVerificationResult
 }
 
@@ -26,6 +27,7 @@ class BoundedDeviceStateWaiter(
         before: DeviceObservation?,
         maxWaitMs: Long = postcondition.timeoutMs,
         pollMs: Long = this.pollMs,
+        maxChecks: Int = Int.MAX_VALUE,
     ): DeviceVerificationResult {
         val timeoutMs = postcondition.timeoutMs
             .coerceAtMost(maxWaitMs)
@@ -33,8 +35,12 @@ class BoundedDeviceStateWaiter(
         val effectivePollMs = pollMs.coerceIn(50L, 5_000L)
         val deadline = System.currentTimeMillis() + timeoutMs
         var last = DeviceVerificationResult(false, "wait_timeout")
+        var checks = 0
 
-        while (System.currentTimeMillis() < deadline) {
+        while (checks < maxChecks.coerceAtLeast(1) &&
+            System.currentTimeMillis() < deadline
+        ) {
+            checks++
             currentCoroutineContext().ensureActive()
             last = verifier.verify(postcondition, before)
             if (last.verified) return last
