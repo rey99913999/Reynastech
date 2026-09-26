@@ -95,7 +95,7 @@ class WaitUntilToolTest {
         val text = execute(
             condition = WaitUntilCondition.FIXED_DELAY,
             waiter = waiter,
-        )
+        ) { put("timeout_ms", 40) }
         assertTrue(text.contains(""""status":"completed""""))
         assertTrue(text.contains(""""matched_by":"fixed_delay""""))
     }
@@ -166,6 +166,34 @@ class WaitUntilToolTest {
         }
         assertTrue(text.contains(""""status":"timeout""""))
         assertTrue(text.contains(""""reason":"condition_not_met""""))
+    }
+
+    @Test
+    fun accessibilityUnavailableReturnsStructuredError() = runBlocking {
+        val unavailable = object : DeviceObserver {
+            override val isAvailable: Boolean = false
+
+            override suspend fun observe(
+                captureScreenshot: Boolean,
+                captureOcr: Boolean,
+            ): DeviceObservation = DeviceObservation()
+
+            override suspend fun findAccessibilityNode(
+                selector: DeviceAccessibilitySelector,
+            ): DeviceAccessibilityQueryResult = DeviceAccessibilityQueryResult.Unavailable
+        }
+        val result = waitUntilTool(
+            context = null,
+            observer = unavailable,
+            waiter = FakeWaiter(DeviceVerificationResult(true, "unused")),
+            invocationContext = ToolInvocationContext(),
+        ).execute(
+            buildJsonObject {
+                put("condition", "screen_changes")
+            }
+        )
+        val text = (result.single() as me.rerere.ai.ui.UIMessagePart.Text).text
+        assertTrue(text.contains(""""error":"accessibility_unavailable""""))
     }
 
     @Test
