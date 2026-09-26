@@ -1,9 +1,10 @@
 package io.github.nastechresearch.nastech.workflow.model
 
-import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Test
 
 class LearnedWorkflowJsonTest {
 
@@ -31,8 +32,8 @@ class LearnedWorkflowJsonTest {
         val encoded = WorkflowJson.encode(definition)
         val parsed = WorkflowJson.parseStored(encoded)
 
-        requireNotNull(parsed)
-        assertEquals("recording-1", parsed.sourceRecordingId)
+        assertNotNull(parsed)
+        assertEquals("recording-1", parsed!!.sourceRecordingId)
         assertEquals(null, parsed.approvedAtMs)
         assertEquals("learned_action", parsed.actions.single().tool)
     }
@@ -54,8 +55,8 @@ class LearnedWorkflowJsonTest {
         )
 
         val parsed = WorkflowJson.parseStored(WorkflowJson.encode(definition))
-        requireNotNull(parsed)
-        assertEquals("recording-2", parsed.sourceRecordingId)
+        assertNotNull(parsed)
+        assertEquals("recording-2", parsed!!.sourceRecordingId)
         assertEquals(1234L, parsed.approvedAtMs)
     }
 }
