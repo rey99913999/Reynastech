@@ -10,10 +10,15 @@ fun interface DeviceStateWaiter {
     suspend fun waitFor(
         postcondition: DevicePostcondition,
         before: DeviceObservation?,
-        maxWaitMs: Long = postcondition.timeoutMs,
-        pollMs: Long = 250L,
-        maxChecks: Int = Int.MAX_VALUE,
     ): DeviceVerificationResult
+
+    suspend fun waitFor(
+        postcondition: DevicePostcondition,
+        before: DeviceObservation?,
+        maxWaitMs: Long,
+        pollMs: Long,
+        maxChecks: Int,
+    ): DeviceVerificationResult = waitFor(postcondition, before)
 }
 
 class BoundedDeviceStateWaiter(
@@ -25,9 +30,21 @@ class BoundedDeviceStateWaiter(
     override suspend fun waitFor(
         postcondition: DevicePostcondition,
         before: DeviceObservation?,
-        maxWaitMs: Long = postcondition.timeoutMs,
-        pollMs: Long = this.pollMs,
-        maxChecks: Int = Int.MAX_VALUE,
+    ): DeviceVerificationResult =
+        waitFor(
+            postcondition = postcondition,
+            before = before,
+            maxWaitMs = postcondition.timeoutMs,
+            pollMs = pollMs,
+            maxChecks = Int.MAX_VALUE,
+        )
+
+    override suspend fun waitFor(
+        postcondition: DevicePostcondition,
+        before: DeviceObservation?,
+        maxWaitMs: Long,
+        pollMs: Long,
+        maxChecks: Int,
     ): DeviceVerificationResult {
         val timeoutMs = postcondition.timeoutMs
             .coerceAtMost(maxWaitMs)
