@@ -667,6 +667,7 @@ class ChatService(
                 callerAssistantId = assistant.id.toString(),
                 callerConversationId = conversationId.toString(),
                 isHeadless = false,  // gated above
+                waitUntilSettings = assistant.waitUntilSettings.normalized(),
             ),
         )
         val tool = tools.firstOrNull { it.name == match.toolName } ?: run {
@@ -1069,6 +1070,7 @@ class ChatService(
                         // show_image keys its result envelope off this — a text-only model
                         // gets told it cannot see the image instead of confabulating one.
                         modelCanSeeImages = Modality.IMAGE in model.inputModalities,
+                        waitUntilSettings = assistant.waitUntilSettings.normalized(),
                     )
                     addAll(
                         localTools.getTools(
