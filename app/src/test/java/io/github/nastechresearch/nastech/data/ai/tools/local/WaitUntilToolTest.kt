@@ -50,6 +50,12 @@ class WaitUntilToolTest {
         override suspend fun waitFor(
             postcondition: DevicePostcondition,
             before: DeviceObservation?,
+        ): DeviceVerificationResult =
+            result
+
+        override suspend fun waitFor(
+            postcondition: DevicePostcondition,
+            before: DeviceObservation?,
             maxWaitMs: Long,
             pollMs: Long,
             maxChecks: Int,
