@@ -54,7 +54,6 @@ enum class DevicePostconditionType {
 }
 
 @Serializable
-@Serializable
 data class DeviceAccessibilitySelector(
     val by: String,
     val value: String,
