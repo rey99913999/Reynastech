@@ -37,7 +37,7 @@ class AgentModelsTest {
         )
         val normalized = config.normalizedWorkflow()
         assertEquals(defaultWorkflow(agents).size, normalized.size)
-        assertTrue(normalized.all { edge -> agents.any { it.id == edge.fromAgentId } && agents.any { it.id == edge.toAgentId } })
+        assertTrue(normalized.all { edge -> config.agents.any { it.id == edge.fromAgentId } && config.agents.any { it.id == edge.toAgentId } })
     }
 
     @Test
