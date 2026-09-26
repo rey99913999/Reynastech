@@ -33,7 +33,7 @@ class AgentToolPermissionTest {
     }
 
     @Test
-    fun `wildcard grants currently available tools` {
+    fun `wildcard grants currently available tools`() {
         val agent = AgentDefinition(
             name = "Reviewer",
             role = AgentRole.REVIEWER,
