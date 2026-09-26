@@ -46,10 +46,14 @@ internal object DeviceExecutionEvidenceTracker {
         if (!ExecutionToolRegistry.isCoreDeviceTool(toolName)) return current
 
         val failed = outputIndicatesFailure(output, json)
+        val verifiedOutcome = outputContainsExplicitVerification(output, json) ||
+            (toolName == "clipboard_tool" && clipboardReadContainsText(output, json))
         return current.copy(
             deviceToolExecutedThisTurn = true,
             deviceToolSucceededThisTurn =
                 current.deviceToolSucceededThisTurn || !failed,
+            verifiedOutcomeEvidenceThisTurn =
+                current.verifiedOutcomeEvidenceThisTurn || (!failed && verifiedOutcome),
         )
     }
 
@@ -77,6 +81,35 @@ internal object DeviceExecutionEvidenceTracker {
                 }.getOrNull()
             }
             .firstOrNull()
+
+    private fun outputContainsExplicitVerification(
+        output: List<UIMessagePart>,
+        json: Json,
+    ): Boolean =
+        output
+            .filterIsInstance<UIMessagePart.Text>()
+            .any { part ->
+                runCatching {
+                    val obj = json.parseToJsonElement(part.text).jsonObject
+                    val verified = (obj["verified"] as? JsonPrimitive)?.booleanOrNull == true
+                    val status = (obj["status"] as? JsonPrimitive)?.contentOrNull?.uppercase()
+                    verified || status == "VERIFIED"
+                }.getOrDefault(false)
+            }
+
+    private fun clipboardReadContainsText(
+        output: List<UIMessagePart>,
+        json: Json,
+    ): Boolean =
+        output
+            .filterIsInstance<UIMessagePart.Text>()
+            .any { part ->
+                runCatching {
+                    val obj = json.parseToJsonElement(part.text).jsonObject
+                    val text = (obj["text"] as? JsonPrimitive)?.contentOrNull
+                    !text.isNullOrBlank()
+                }.getOrDefault(false)
+            }
 
     private fun outputIndicatesFailure(
         output: List<UIMessagePart>,
@@ -108,9 +141,10 @@ internal object DeviceCompletionGuard {
         isDeviceTask: Boolean,
         evidence: DeviceExecutionEvidence,
         retryAlreadyUsed: Boolean,
+        requiresVerifiedOutcome: Boolean = false,
     ): DeviceCompletionGuardDecision = when {
         !isDeviceTask -> DeviceCompletionGuardDecision.ALLOW
-        evidence.hasSuccessfulExecutionEvidence -> DeviceCompletionGuardDecision.ALLOW
+        evidence.canSatisfyCompletion(requiresVerifiedOutcome) -> DeviceCompletionGuardDecision.ALLOW
         !retryAlreadyUsed -> DeviceCompletionGuardDecision.RETRY
         else -> DeviceCompletionGuardDecision.REPLAN
     }
