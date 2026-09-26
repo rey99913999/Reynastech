@@ -14,6 +14,42 @@ import java.util.concurrent.TimeUnit
 import kotlin.uuid.Uuid
 
 @Serializable
+enum class WaitUntilCondition {
+    @SerialName("fixed_delay") FIXED_DELAY,
+    @SerialName("text_appears") TEXT_APPEARS,
+    @SerialName("text_disappears") TEXT_DISAPPEARS,
+    @SerialName("ui_element_appears") UI_ELEMENT_APPEARS,
+    @SerialName("screen_changes") SCREEN_CHANGED,
+    @SerialName("screen_stable") SCREEN_STABLE,
+}
+
+@Serializable
+data class WaitUntilSettings(
+    val maxWaitSeconds: Int = 60,
+    val checkIntervalMs: Long = 1_000L,
+    val defaultCondition: WaitUntilCondition = WaitUntilCondition.SCREEN_CHANGED,
+    val maxConsecutiveWaits: Int = 10,
+    val useAccessibility: Boolean = true,
+    val useOcr: Boolean = true,
+    val useScreenState: Boolean = true,
+    val useVisionFallback: Boolean = true,
+) {
+    fun normalized(): WaitUntilSettings {
+        val safeInterval = checkIntervalMs.coerceIn(250L, 5_000L)
+        val nearestInterval = SUPPORTED_INTERVALS.minBy { kotlin.math.abs(it - safeInterval) }
+        return copy(
+            maxWaitSeconds = maxWaitSeconds.coerceIn(1, 300),
+            checkIntervalMs = nearestInterval,
+            maxConsecutiveWaits = maxConsecutiveWaits.coerceIn(1, 1_200),
+        )
+    }
+
+    companion object {
+        val SUPPORTED_INTERVALS = listOf(250L, 500L, 1_000L, 2_000L, 5_000L)
+    }
+}
+
+@Serializable
 data class Assistant(
     val id: Uuid = Uuid.random(),
     val chatModelId: Uuid? = null, // 如果为null, 使用全局默认模型
@@ -41,6 +77,7 @@ data class Assistant(
     val mcpServers: Set<Uuid> = emptySet(),
     @Serializable(with = LenientLocalToolListSerializer::class)
     val localTools: List<LocalToolOption> = listOf(LocalToolOption.TimeInfo),
+    val waitUntilSettings: WaitUntilSettings = WaitUntilSettings(),
     val enableWebSearch: Boolean = false, // 网络搜索开关(每个助手独立)
     val workspaceId: Uuid? = null,
     val background: String? = null, // 聊天页背景图地址(本地文件 URI 或网络 URL), 为 null 时无背景
