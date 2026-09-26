@@ -55,6 +55,13 @@ enum class DevicePostconditionType {
 
 @Serializable
 @Serializable
+@Serializable
+enum class DeviceTextSource {
+    ACCESSIBILITY,
+    OCR,
+    BOTH,
+}
+
 data class DeviceAccessibilitySelector(
     val by: String,
     val value: String,
@@ -69,6 +76,7 @@ data class DevicePostcondition(
     val expected: Boolean = true,
     val timeoutMs: Long = 5_000L,
     val selector: DeviceAccessibilitySelector? = null,
+    val textSource: DeviceTextSource = DeviceTextSource.BOTH,
 )
 
 @Serializable
@@ -136,6 +144,8 @@ data class DeviceObservation(
     val foregroundPackage: String = "",
     val windowTitle: String = "",
     val visibleText: List<String> = emptyList(),
+    val accessibilityText: List<String> = emptyList(),
+    val ocrText: List<String> = emptyList(),
     val focusedText: String? = null,
     val keyboardVisible: Boolean = false,
     val screenFingerprint: String = "",
