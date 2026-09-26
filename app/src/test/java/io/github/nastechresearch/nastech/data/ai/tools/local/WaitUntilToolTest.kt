@@ -69,7 +69,7 @@ class WaitUntilToolTest {
         observer: FakeObserver = FakeObserver(),
         settings: WaitUntilSettings = WaitUntilSettings(maxConsecutiveWaits = 3),
     ) = waitUntilTool(
-        context = org.robolectric.RuntimeEnvironment.getApplication(),
+        context = null,
         observer = observer,
         waiter = waiter,
         invocationContext = ToolInvocationContext(waitUntilSettings = settings),
