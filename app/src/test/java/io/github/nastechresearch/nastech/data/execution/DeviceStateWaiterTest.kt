@@ -44,14 +44,15 @@ class DeviceStateWaiterTest {
         val waiter = BoundedDeviceStateWaiter(verifier, maxTotalWaitMs = 300_000L, pollMs = 250L)
 
         val result = waiter.waitFor(
-            postcondition = DevicePostcondition(
+            DevicePostcondition(
                 DevicePostconditionType.TEXT_PRESENT,
                 value = "done",
                 timeoutMs = 10_000L,
             ),
-            before = null,
-            maxWaitMs = 450L,
-            pollMs = 250L,
+            null,
+            450L,
+            250L,
+            Int.MAX_VALUE,
         )
 
         assertTrue(!result.verified)
@@ -72,8 +73,9 @@ class DeviceStateWaiterTest {
             waiter.waitFor(
                 DevicePostcondition(DevicePostconditionType.TEXT_PRESENT, "done", timeoutMs = 30_000L),
                 null,
-                maxWaitMs = 30_000L,
-                pollMs = 250L,
+                30_000L,
+                250L,
+                Int.MAX_VALUE,
             )
         }
         delay(50L)
