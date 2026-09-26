@@ -121,7 +121,7 @@ private fun parseSelector(input: JsonObject): DeviceAccessibilitySelector? {
 }
 
 private suspend fun visionFallback(
-    context: Context,
+    context: Context?,
     invocationContext: ToolInvocationContext,
     target: String,
     timeoutMs: Long,
@@ -129,6 +129,7 @@ private suspend fun visionFallback(
     if (timeoutMs <= 0L) return null
     return try {
         val text = withTimeoutOrNull(timeoutMs) {
+            if (context == null) return@withTimeoutOrNull null
             uiFindVisualTargetTool(context, invocationContext)
                 .execute(buildJsonObject { put("target", target) })
                 .filterIsInstance<UIMessagePart.Text>()
