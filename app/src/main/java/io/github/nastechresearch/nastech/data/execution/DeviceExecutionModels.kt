@@ -69,6 +69,7 @@ data class DevicePostcondition(
     val expected: Boolean = true,
     val timeoutMs: Long = 5_000L,
     val selector: DeviceAccessibilitySelector? = null,
+    val captureOcr: Boolean = true,
 )
 
 @Serializable
