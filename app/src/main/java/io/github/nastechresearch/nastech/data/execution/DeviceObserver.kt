@@ -23,6 +23,9 @@ sealed interface DeviceAccessibilityQueryResult {
 }
 
 interface DeviceObserver {
+    val isAvailable: Boolean
+        get() = false
+
     suspend fun observe(
         captureScreenshot: Boolean = false,
         captureOcr: Boolean = false,
@@ -39,6 +42,9 @@ class AndroidDeviceObserver(
 ) : DeviceObserver {
 
     private val maxScreenshotBytes = 6L * 1024L * 1024L
+
+    override val isAvailable: Boolean
+        get() = RikkaAccessibilityService.instance != null
 
     override suspend fun findAccessibilityNode(
         selector: DeviceAccessibilitySelector,
