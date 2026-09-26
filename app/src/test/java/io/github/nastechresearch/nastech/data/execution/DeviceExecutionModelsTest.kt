@@ -35,4 +35,12 @@ class DeviceExecutionModelsTest {
         assertEquals(null, decoded.steps.single().deviceAction)
         assertTrue(decoded.steps.single().preconditions.isEmpty())
     }
+    @Test
+    fun responseAndClipboardGoalsRequireVerifiedOutcomeEvidence() {
+        assertTrue(analyzeDeviceIntent("Open Gemini and copy the response").requiresVerifiedOutcome)
+        assertTrue(analyzeDeviceIntent("افتح Gemini وانسخ الرد").requiresVerifiedOutcome)
+        assertTrue(!analyzeDeviceIntent("Open Gemini").requiresVerifiedOutcome)
+    }
+
+
 }
