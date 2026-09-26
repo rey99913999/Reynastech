@@ -156,24 +156,37 @@ class ConversationAgentRuntime(
             taskManager.beginStep(taskId, step.id)
 
             val prompt = buildString {
-                append("Original user goal:\n")
+                append("Original user goal:
+")
                 append(goal.trim())
-                append("\n\n")
+                append("
+
+")
                 if (config.instructions.isNotBlank()) {
-                    append("Conversation Agent instructions:\n")
+                    append("Conversation Agent instructions:
+")
                     append(config.instructions.trim())
-                    append("\n\n")
+                    append("
+
+")
                 }
                 if (previousResults.isNotEmpty()) {
-                    append("Previous Agent results:\n")
-                    append(previousResults.takeLast(3).joinToString("\n\n"))
-                    append("\n\n")
+                    append("Previous Agent results:
+")
+                    append(previousResults.takeLast(3).joinToString("
+
+"))
+                    append("
+
+")
                 }
                 append("Your role: ")
                 append(agent.role.name)
-                append("\nComplete only this role's responsibility and return a concise result for the next Agent.")
+                append("
+Complete only this role's responsibility and return a concise result for the next Agent.")
                 if (agent.outputType == AgentOutputType.STRUCTURED) {
-                    append("\nReturn valid JSON only. Do not wrap the JSON in markdown fences. Use fields appropriate to your role and keep the object machine-readable.")
+                    append("
+Return valid JSON only. Do not wrap the JSON in markdown fences. Use fields appropriate to your role and keep the object machine-readable.")
                 }
             }
 
@@ -292,9 +305,6 @@ class ConversationAgentRuntime(
             if (activated) {
                 ordered += agent
             }
-            // A conditionally inactive Agent must not sever the workflow path.
-            // This lets Planner -> Vision -> Executor behave as Planner -> Executor
-            // when Vision is not needed.
             nextById[agent.id].orEmpty().forEach { edge ->
                 enabled.firstOrNull { it.id == edge.toAgentId }?.let(queue::add)
             }
@@ -316,6 +326,23 @@ class ConversationAgentRuntime(
 
     private fun resolveTools(agent: AgentDefinition, availableTools: List<String>, conversationId: String): List<String> =
         resolveAgentTools(agent, availableTools, pluginManager, conversationId)
+
+    companion object {
+        /** Compatibility classification used by agent-permission tests and diagnostics. */
+        fun isSensitiveTool(toolName: String): Boolean = when (toolName.trim().lowercase()) {
+            "shell", "send_sms", "send_email", "contacts_write", "calendar_write", "file_write" -> true
+            else -> false
+        }
+    }
+
+    internal fun encodeAgentInstruction(agent: AgentDefinition): String =
+        "AGENT_ID=" + agent.id + "
+AGENT_ROLE=" + agent.role.name + "
+AGENT_NAME=" + agent.name
+
+    internal fun decodeAgentId(step: TaskStepEntity): String? =
+        Regex("AGENT_ID=([^\n]+)").find(step.executionInstruction)?.groupValues?.getOrNull(1)
+}
 
 internal fun resolveAgentTools(
     agent: AgentDefinition,
@@ -348,12 +375,4 @@ internal fun resolveAgentTools(
             deniedName == "*" || deniedName.equals(tool, ignoreCase = true)
         }
     }
-}
-
-    private fun encodeAgentInstruction(agent: AgentDefinition): String =
-        "AGENT_ID=" + agent.id + "\nAGENT_ROLE=" + agent.role.name + "\nAGENT_NAME=" + agent.name
-
-    private fun decodeAgentId(step: TaskStepEntity): String? =
-        Regex("AGENT_ID=([^\\n]+)").find(step.executionInstruction)?.groupValues?.getOrNull(1)
-
 }
