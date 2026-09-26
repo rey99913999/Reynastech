@@ -82,10 +82,12 @@ class AndroidDeviceStateVerifier(
             captureScreenshot = postcondition.type == DevicePostconditionType.SCREEN_CHANGED ||
                 postcondition.type == DevicePostconditionType.SCREEN_FINGERPRINT_CHANGED ||
                 postcondition.type == DevicePostconditionType.SCREEN_STABLE,
-            captureOcr = postcondition.type == DevicePostconditionType.TEXT_PRESENT ||
-                postcondition.type == DevicePostconditionType.TEXT_ABSENT ||
-                postcondition.type == DevicePostconditionType.NODE_PRESENT ||
-                postcondition.type == DevicePostconditionType.RESPONSE_TEXT_NON_EMPTY,
+            captureOcr = postcondition.captureOcr && (
+                postcondition.type == DevicePostconditionType.TEXT_PRESENT ||
+                    postcondition.type == DevicePostconditionType.TEXT_ABSENT ||
+                    postcondition.type == DevicePostconditionType.NODE_PRESENT ||
+                    postcondition.type == DevicePostconditionType.RESPONSE_TEXT_NON_EMPTY
+                ),
         )
 
         if (postcondition.type == DevicePostconditionType.UI_ELEMENT_PRESENT) {
