@@ -17,6 +17,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -102,7 +103,7 @@ private fun error(code: String, detail: String? = null): UIMessagePart.Text =
     )
 
 private fun parseSelector(input: JsonObject): DeviceAccessibilitySelector? {
-    val selector = input["selector"] as? JsonObject ?: return null
+    val selector = args["selector"] as? JsonObject ?: return null
     val by = selector["by"]?.jsonPrimitive?.contentOrNull ?: when {
         selector["text"] != null -> "text"
         selector["content_description"] != null -> "content_description"
@@ -115,7 +116,7 @@ private fun parseSelector(input: JsonObject): DeviceAccessibilitySelector? {
         ?: return null
     val nth = selector["nth"]?.jsonPrimitive?.intOrNull ?: 0
     if (nth < 0) return null
-    val packageName = input["package_name"]?.jsonPrimitive?.contentOrNull
+    val packageName = args["package_name"]?.jsonPrimitive?.contentOrNull
         ?: selector["package_name"]?.jsonPrimitive?.contentOrNull
     return DeviceAccessibilitySelector(by = by, value = value, nth = nth, packageName = packageName)
 }
@@ -207,13 +208,14 @@ fun waitUntilTool(
     },
     execute = { input ->
         currentCoroutineContext().ensureActive()
+        val args = input.jsonObject
         val settings = invocationContext.waitUntilSettings.normalized()
         val condition = parseWaitUntilCondition(
-            raw = input["condition"]?.jsonPrimitive?.contentOrNull,
+            raw = args["condition"]?.jsonPrimitive?.contentOrNull,
             defaultCondition = settings.defaultCondition,
         ) ?: return@Tool listOf(error("invalid_condition"))
 
-        val requestedTimeout = input["timeout_ms"]?.jsonPrimitive?.contentOrNull?.toLongOrNull()
+        val requestedTimeout = args["timeout_ms"]?.jsonPrimitive?.contentOrNull?.toLongOrNull()
         if (requestedTimeout != null && requestedTimeout <= 0L) {
             return@Tool listOf(error("invalid_timeout", "timeout_ms must be greater than zero"))
         }
@@ -223,10 +225,10 @@ fun waitUntilTool(
             .coerceAtMost(configuredMaxWaitMs)
             .coerceAtMost(HARD_MAX_WAIT_MS)
         val intervalMs = normalizeWaitUntilIntervalMs(
-            input["interval_ms"]?.jsonPrimitive?.contentOrNull?.toLongOrNull()
+            args["interval_ms"]?.jsonPrimitive?.contentOrNull?.toLongOrNull()
                 ?: settings.checkIntervalMs
         )
-        val packageName = input["package_name"]?.jsonPrimitive?.contentOrNull
+        val packageName = args["package_name"]?.jsonPrimitive?.contentOrNull
 
         if (condition != WaitUntilCondition.FIXED_DELAY && !observer.isAvailable) {
             return@Tool listOf(
@@ -248,7 +250,7 @@ fun waitUntilTool(
 
             WaitUntilCondition.TEXT_APPEARS,
             WaitUntilCondition.TEXT_DISAPPEARS -> {
-                val expected = input["expected_text"]?.jsonPrimitive?.contentOrNull?.trim()
+                val expected = args["expected_text"]?.jsonPrimitive?.contentOrNull?.trim()
                 if (expected.isNullOrBlank()) {
                     return@Tool listOf(error("expected_text_required"))
                 }
@@ -299,7 +301,7 @@ fun waitUntilTool(
             }
 
             WaitUntilCondition.UI_ELEMENT_APPEARS -> {
-                val selector = parseSelector(input)
+                val selector = parseSelector(args)
                     ?: return@Tool listOf(
                         error(
                             "selector_required",
