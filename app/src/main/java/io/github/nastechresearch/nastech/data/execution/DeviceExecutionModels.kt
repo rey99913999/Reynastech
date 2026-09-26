@@ -3,38 +3,37 @@ package io.github.nastechresearch.nastech.data.execution
 import kotlinx.serialization.Serializable
 
 @Serializable
-enum class DeviceCapabilityStatus {
-    AVAILABLE,
-    UNAVAILABLE,
-    SERVICE_UNAVAILABLE,
-    AUTHORIZATION_REQUIRED,
-    AUTHORIZATION_DENIED,
+enum class ExecutionLevel {
+    LOCAL_DETERMINISTIC,
+    LOCAL_RULES,
+    VISION,
+    LLM,
 }
 
 @Serializable
-data class DeviceCapability(
-    val name: String,
-    val status: DeviceCapabilityStatus,
-    val reason: String? = null,
-)
+enum class ExecutionStepKind {
+    TOOL,
+    VERIFY,
+    RETURN,
+    DECIDE,
+    RECOVER,
+}
 
 @Serializable
-data class DeviceCapabilityContract(
-    val capabilities: List<DeviceCapability> = emptyList(),
-    val requiredCapabilities: Set<String> = emptySet(),
-    val requiredConstraints: Set<String> = emptySet(),
-) {
-    fun capability(name: String): DeviceCapability? = capabilities.firstOrNull { it.name == name }
+enum class ExecutionStepStatus {
+    SUCCESS,
+    FAILED,
+    SKIPPED,
+    APPROVAL_REQUIRED,
+    REPLAN_REQUIRED,
+}
 
-    fun requiredCapabilityFailure(): DeviceCapability? =
-        requiredCapabilities.firstNotNullOfOrNull { name ->
-            capability(name)?.takeIf { it.status != DeviceCapabilityStatus.AVAILABLE }
-                ?: DeviceCapability(
-                    name = name,
-                    status = DeviceCapabilityStatus.UNAVAILABLE,
-                    reason = "required_capability_not_registered",
-                )
-        }
+@Serializable
+enum class ExecutionAgentRole {
+    PLANNER,
+    VISION,
+    RECOVERY,
+    VERIFIER,
 }
 
 @Serializable
@@ -54,8 +53,6 @@ enum class DevicePostconditionType {
 }
 
 @Serializable
-@Serializable
-@Serializable
 enum class DeviceTextSource {
     ACCESSIBILITY,
     OCR,
@@ -63,8 +60,6 @@ enum class DeviceTextSource {
 }
 
 @Serializable
-enum class DeviceTextSource { ACCESSIBILITY, OCR, BOTH }
-
 data class DeviceAccessibilitySelector(
     val by: String,
     val value: String,
@@ -79,7 +74,6 @@ data class DevicePostcondition(
     val expected: Boolean = true,
     val timeoutMs: Long = 5_000L,
     val selector: DeviceAccessibilitySelector? = null,
-    val textSource: DeviceTextSource = DeviceTextSource.BOTH,
     val textSource: DeviceTextSource = DeviceTextSource.BOTH,
 )
 
@@ -150,8 +144,6 @@ data class DeviceObservation(
     val visibleText: List<String> = emptyList(),
     val accessibilityText: List<String> = emptyList(),
     val ocrText: List<String> = emptyList(),
-    val accessibilityText: List<String> = emptyList(),
-    val ocrText: List<String> = emptyList(),
     val focusedText: String? = null,
     val keyboardVisible: Boolean = false,
     val screenFingerprint: String = "",
@@ -170,7 +162,7 @@ data class DeviceIntentPreflight(
 )
 
 internal fun normalizeDeviceText(value: String): String =
-    value.trim().replace(Regex("\\s+"), " ").lowercase()
+    value.trim().replace(Regex("\s+"), " ").lowercase()
 
 internal fun analyzeDeviceIntent(text: String): DeviceIntentPreflight {
     val normalized = normalizeDeviceText(text)
@@ -218,16 +210,16 @@ internal fun analyzeDeviceIntent(text: String): DeviceIntentPreflight {
 
     val requiredConstraints = buildSet {
         if (keyboardCue) add("use_keyboard")
-        if ("screenshot tool" in normalized) add("use_screenshot_tool")
+        if (screenshotCue) add("capture_visual")
     }
 
     return DeviceIntentPreflight(
         isDeviceTask = phoneCue,
         confidence = when {
-            !phoneCue -> 0f
-            keyboardCue && appCue -> 0.98f
-            appCue || actionCue -> 0.94f
-            else -> 0.90f
+            appCue || keyboardCue -> 0.96f
+            actionCue -> 0.91f
+            phoneCue -> 0.87f
+            else -> 0f
         },
         requiredCapabilities = requiredCapabilities,
         requiredConstraints = requiredConstraints,
