@@ -45,4 +45,18 @@ class AgentToolPermissionTest {
             resolveAgentTools(agent, listOf("read_window_tree", "shell", "wait_until")),
         )
     }
+    @Test
+    fun explicitAllowListCanGrantWaitUntil() {
+        val agent = AgentDefinition(
+            name = "Executor",
+            role = AgentRole.EXECUTOR,
+            autonomyLevel = AgentAutonomyLevel.SAFE_AUTO,
+            allowedTools = listOf("wait_until"),
+        )
+        assertEquals(
+            listOf("wait_until"),
+            resolveAgentTools(agent, listOf("read_window_tree", "wait_until")),
+        )
+    }
+
 }
