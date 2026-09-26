@@ -361,6 +361,15 @@ private fun AgentDefinitionEditor(
                 minLines = 2,
             )
 
+            TextButton(
+                enabled = "wait_until" !in agent.allowedTools,
+                onClick = {
+                    onChange(agent.copy(allowedTools = (agent.allowedTools + "wait_until").distinct()))
+                },
+            ) {
+                Text("Add wait_until")
+            }
+
             OutlinedTextField(
                 value = agent.deniedTools.joinToString(", "),
                 onValueChange = { onChange(agent.copy(deniedTools = it.split(",").map(String::trim).filter(String::isNotBlank))) },
