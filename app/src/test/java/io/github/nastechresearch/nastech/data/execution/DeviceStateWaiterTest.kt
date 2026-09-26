@@ -1,6 +1,10 @@
 package io.github.nastechresearch.nastech.data.execution
 
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.atomic.AtomicInteger
@@ -30,4 +34,52 @@ class DeviceStateWaiterTest {
         assertTrue(result.verified)
         assertTrue(attempts.get() >= 2)
     }
+    @Test
+    fun waitHonorsCustomPollAndMaxTimeoutBounds() = runBlocking {
+        val attempts = AtomicInteger(0)
+        val verifier = DevicePostconditionVerifier { _, _ ->
+            attempts.incrementAndGet()
+            DeviceVerificationResult(false, "not_yet")
+        }
+        val waiter = BoundedDeviceStateWaiter(verifier, maxTotalWaitMs = 300_000L, pollMs = 250L)
+
+        val result = waiter.waitFor(
+            postcondition = DevicePostcondition(
+                DevicePostconditionType.TEXT_PRESENT,
+                value = "done",
+                timeoutMs = 10_000L,
+            ),
+            before = null,
+            maxWaitMs = 450L,
+            pollMs = 250L,
+        )
+
+        assertTrue(!result.verified)
+        assertTrue(attempts.get() >= 1)
+        assertTrue(attempts.get() <= 3)
+    }
+
+    @Test
+    fun cancellationStopsPollingImmediately() = runBlocking {
+        val attempts = AtomicInteger(0)
+        val verifier = DevicePostconditionVerifier { _, _ ->
+            attempts.incrementAndGet()
+            DeviceVerificationResult(false, "not_yet")
+        }
+        val waiter = BoundedDeviceStateWaiter(verifier, pollMs = 250L)
+
+        val job: Job = launch {
+            waiter.waitFor(
+                DevicePostcondition(DevicePostconditionType.TEXT_PRESENT, "done", timeoutMs = 30_000L),
+                null,
+                maxWaitMs = 30_000L,
+                pollMs = 250L,
+            )
+        }
+        delay(50L)
+        job.cancel()
+        withTimeout(1_000L) { job.join() }
+        assertTrue(attempts.get() >= 1)
+    }
+
 }
