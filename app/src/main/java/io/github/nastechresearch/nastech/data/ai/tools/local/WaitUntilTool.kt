@@ -270,6 +270,7 @@ fun waitUntilTool(
                         type = type,
                         value = expected,
                         timeoutMs = timeoutMs,
+                        captureOcr = settings.useOcr,
                         textSource = when {
                             settings.useAccessibility && settings.useOcr -> DeviceTextSource.BOTH
                             settings.useAccessibility -> DeviceTextSource.ACCESSIBILITY
