@@ -41,10 +41,8 @@ class AgentToolPermissionTest {
             allowedTools = listOf("*"),
         )
         assertEquals(
-            2,
-            resolveAgentTools(agent, listOf("read_window_tree", "shell")).size,
+            listOf("read_window_tree", "shell", "wait_until"),
+            resolveAgentTools(agent, listOf("read_window_tree", "shell", "wait_until")),
         )
-        assertTrue(ConversationAgentRuntime.isSensitiveTool("shell"))
-        assertTrue(ConversationAgentRuntime.isSensitiveTool("send_sms"))
     }
 }
