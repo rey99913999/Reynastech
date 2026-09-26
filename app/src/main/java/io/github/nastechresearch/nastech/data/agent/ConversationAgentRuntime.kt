@@ -152,22 +152,6 @@ class ConversationAgentRuntime(
                 }
 
             val permittedTools = resolveTools(agent, availableTools, conversationId)
-            if (permittedTools.any(::isSensitiveTool)) {
-                taskManager.recordStepFailure(
-                    taskId = taskId,
-                    stepId = step.id,
-                    error = "Sensitive tools were withheld by the Agent Runtime policy.",
-                    category = TaskFailureCategory.PERMISSION,
-                    recovery = TaskRecoveryAction.ASK_USER,
-                )
-                return AgentRuntimeResult(
-                    status = "WAITING_FOR_USER",
-                    taskId = taskId,
-                    summary = "Sensitive tools are blocked. Review the Executor permissions, then Resume from Task State.",
-                    completedAgents = completedAgents,
-                    waitingForApproval = true,
-                )
-            }
 
             taskManager.beginStep(taskId, step.id)
 
@@ -372,14 +356,4 @@ internal fun resolveAgentTools(
     private fun decodeAgentId(step: TaskStepEntity): String? =
         Regex("AGENT_ID=([^\\n]+)").find(step.executionInstruction)?.groupValues?.getOrNull(1)
 
-    companion object {
-        fun isSensitiveTool(toolName: String): Boolean {
-            val value = toolName.lowercase()
-            return listOf(
-                "delete", "send_message", "send_sms", "call", "payment", "purchase",
-                "transfer", "shell", "adb", "termux", "shizuku", "write_file",
-                "edit_file", "create_file", "move_file", "rename_file",
-            ).any(value::contains)
-        }
-    }
 }
