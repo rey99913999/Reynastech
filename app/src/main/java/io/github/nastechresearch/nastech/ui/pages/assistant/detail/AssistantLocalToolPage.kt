@@ -1668,12 +1668,7 @@ private fun WaitUntilSettingsDialog(
     var useVisionFallback by remember(settings.useVisionFallback) { mutableStateOf(settings.useVisionFallback) }
     var menuExpanded by remember { mutableStateOf(false) }
 
-    val defaultChoices = listOf(
-        WaitUntilCondition.SCREEN_CHANGED,
-        WaitUntilCondition.TEXT_APPEARS,
-        WaitUntilCondition.UI_ELEMENT_APPEARS,
-        WaitUntilCondition.FIXED_DELAY,
-    )
+    val defaultChoices = WaitUntilCondition.entries
     var defaultCondition by remember {
         mutableStateOf(
             settings.defaultCondition.takeIf { it in defaultChoices }
