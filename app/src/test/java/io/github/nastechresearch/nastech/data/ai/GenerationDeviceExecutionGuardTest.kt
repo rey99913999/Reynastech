@@ -168,4 +168,46 @@ class GenerationDeviceExecutionGuardTest {
             ) == DeviceCompletionGuardDecision.ALLOW
         )
     }
+    @Test
+    fun successfulIntermediateActionDoesNotSatisfyCopyOutcomeRequirement() {
+        val evidence = DeviceExecutionEvidenceTracker.recordToolResult(
+            current = DeviceExecutionEvidence(),
+            toolName = "open_app",
+            output = listOf(UIMessagePart.Text("""{"dispatch_succeeded":true,"success":true}""")),
+            invocationStarted = true,
+            json = json,
+        )
+
+        assertTrue(
+            DeviceCompletionGuard.evaluate(
+                isDeviceTask = true,
+                evidence = evidence,
+                retryAlreadyUsed = false,
+                requiresVerifiedOutcome = true,
+            ) == DeviceCompletionGuardDecision.RETRY
+        )
+    }
+
+    @Test
+    fun nonEmptyClipboardReadSatisfiesVerifiedOutcomeRequirement() {
+        val evidence = DeviceExecutionEvidenceTracker.recordToolResult(
+            current = DeviceExecutionEvidence(),
+            toolName = "clipboard_tool",
+            output = listOf(UIMessagePart.Text("""{"text":"copied response"}""")),
+            invocationStarted = true,
+            json = json,
+        )
+
+        assertTrue(evidence.hasVerifiedOutcomeEvidence)
+        assertTrue(
+            DeviceCompletionGuard.evaluate(
+                isDeviceTask = true,
+                evidence = evidence,
+                retryAlreadyUsed = false,
+                requiresVerifiedOutcome = true,
+            ) == DeviceCompletionGuardDecision.ALLOW
+        )
+    }
+
+
 }
