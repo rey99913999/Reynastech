@@ -741,7 +741,6 @@ class GenerationHandler(
                             isDeviceTask = devicePreflight.isDeviceTask,
                             evidence = deviceExecutionEvidence,
                             retryAlreadyUsed = deviceCompletionGuardRetried,
-                            requiresVerifiedOutcome = devicePreflight.requiresVerifiedOutcome,
                         )
                     ) {
                         DeviceCompletionGuardDecision.ALLOW -> Unit
