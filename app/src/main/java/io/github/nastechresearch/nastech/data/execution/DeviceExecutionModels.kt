@@ -150,6 +150,7 @@ data class DeviceIntentPreflight(
     val confidence: Float = 0f,
     val requiredCapabilities: Set<String> = emptySet(),
     val requiredConstraints: Set<String> = emptySet(),
+    val requiresVerifiedOutcome: Boolean = false,
 )
 
 internal fun normalizeDeviceText(value: String): String =
@@ -185,6 +186,12 @@ internal fun analyzeDeviceIntent(text: String): DeviceIntentPreflight {
         listOf("clipboard", "copy the response", "on my phone", "on the device", "الحافظة", "انسخ")
             .any(normalized::contains)
 
+    val requiresVerifiedOutcome =
+        listOf(
+            "response", "response content", "copy the response", "clipboard",
+            "نسخ الرد", "الحافظة", "النتيجة",
+        ).any(normalized::contains)
+
     val requiredCapabilities = buildSet {
         if (appCue) add("app_launch")
         if (actionCue) add("device_control")
@@ -208,5 +215,6 @@ internal fun analyzeDeviceIntent(text: String): DeviceIntentPreflight {
         },
         requiredCapabilities = requiredCapabilities,
         requiredConstraints = requiredConstraints,
+        requiresVerifiedOutcome = requiresVerifiedOutcome,
     )
 }
