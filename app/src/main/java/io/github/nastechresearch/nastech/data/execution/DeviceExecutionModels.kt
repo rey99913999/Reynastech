@@ -42,13 +42,25 @@ enum class DevicePostconditionType {
     APP_FOREGROUND,
     NODE_PRESENT,
     TEXT_PRESENT,
+    TEXT_ABSENT,
+    UI_ELEMENT_PRESENT,
     KEYBOARD_VISIBLE,
     SCREEN_CHANGED,
     SCREEN_FINGERPRINT_CHANGED,
+    SCREEN_STABLE,
     CLIPBOARD_NON_EMPTY,
     RESPONSE_TEXT_NON_EMPTY,
     TARGET_PROPERTY_TRUE,
 }
+
+@Serializable
+@Serializable
+data class DeviceAccessibilitySelector(
+    val by: String,
+    val value: String,
+    val nth: Int = 0,
+    val packageName: String? = null,
+)
 
 @Serializable
 data class DevicePostcondition(
@@ -56,6 +68,7 @@ data class DevicePostcondition(
     val value: String? = null,
     val expected: Boolean = true,
     val timeoutMs: Long = 5_000L,
+    val selector: DeviceAccessibilitySelector? = null,
 )
 
 @Serializable
@@ -123,6 +136,8 @@ data class DeviceObservation(
     val foregroundPackage: String = "",
     val windowTitle: String = "",
     val visibleText: List<String> = emptyList(),
+    val accessibilityText: List<String> = emptyList(),
+    val ocrText: List<String> = emptyList(),
     val focusedText: String? = null,
     val keyboardVisible: Boolean = false,
     val screenFingerprint: String = "",
