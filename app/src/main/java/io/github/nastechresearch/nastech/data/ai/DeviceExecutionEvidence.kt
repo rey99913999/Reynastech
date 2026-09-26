@@ -106,8 +106,9 @@ internal object DeviceExecutionEvidenceTracker {
             .any { part ->
                 runCatching {
                     val obj = json.parseToJsonElement(part.text).jsonObject
+                    val action = (obj["action"] as? JsonPrimitive)?.contentOrNull
                     val text = (obj["text"] as? JsonPrimitive)?.contentOrNull
-                    !text.isNullOrBlank()
+                    action == "read" && !text.isNullOrBlank()
                 }.getOrDefault(false)
             }
 
