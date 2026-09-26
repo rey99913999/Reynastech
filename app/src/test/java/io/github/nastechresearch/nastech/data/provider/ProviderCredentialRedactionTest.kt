@@ -1,4 +1,3 @@
-
 package io.github.nastechresearch.nastech.data.provider
 
 import io.github.nastechresearch.nastech.utils.JsonInstant
@@ -28,7 +27,7 @@ class ProviderCredentialRedactionTest {
         assertFalse(json.contains(apiKey))
         assertFalse(json.contains(privateKey))
         assertFalse(json.contains("service@example.invalid"))
-        assertFalse(json.contains(""apiKey""))
-        assertTrue(json.contains(""credentialRef""))
+        assertFalse(json.contains("\"apiKey\""))
+        assertTrue(json.contains("\"credentialRef\""))
     }
 }

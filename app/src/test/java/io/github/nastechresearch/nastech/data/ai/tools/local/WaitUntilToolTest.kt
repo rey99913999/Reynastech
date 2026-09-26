@@ -117,7 +117,7 @@ class WaitUntilToolTest {
                 checkIntervalMs = 1_000L,
                 maxConsecutiveWaits = 7,
             ),
-        )
+        ) { put("expected_text", "ready") }
         assertEquals(DevicePostconditionType.TEXT_PRESENT, waiter.lastPostcondition?.type)
         assertEquals(12_000L, waiter.lastMaxWaitMs)
         assertEquals(1_000L, waiter.lastPollMs)
