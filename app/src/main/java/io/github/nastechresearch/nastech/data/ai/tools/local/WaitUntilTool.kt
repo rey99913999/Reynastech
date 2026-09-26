@@ -152,7 +152,7 @@ private suspend fun visionFallback(
 }
 
 fun waitUntilTool(
-    context: Context,
+    context: Context?,
     observer: DeviceObserver,
     waiter: DeviceStateWaiter,
     invocationContext: ToolInvocationContext,
