@@ -10,7 +10,6 @@ import io.github.nastechresearch.nastech.data.execution.DeviceObservation
 import io.github.nastechresearch.nastech.data.execution.DeviceObserver
 import io.github.nastechresearch.nastech.data.model.WaitUntilCondition
 import io.github.nastechresearch.nastech.data.model.WaitUntilSettings
-import io.github.nastechresearch.nastech.service.RikkaAccessibilityService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
