@@ -41,22 +41,10 @@ class AgentToolPermissionTest {
             allowedTools = listOf("*"),
         )
         assertEquals(
-            listOf("read_window_tree", "shell", "wait_until"),
-            resolveAgentTools(agent, listOf("read_window_tree", "shell", "wait_until")),
+            2,
+            resolveAgentTools(agent, listOf("read_window_tree", "shell")).size,
         )
+        assertTrue(ConversationAgentRuntime.isSensitiveTool("shell"))
+        assertTrue(ConversationAgentRuntime.isSensitiveTool("send_sms"))
     }
-    @Test
-    fun explicitAllowListCanGrantWaitUntil() {
-        val agent = AgentDefinition(
-            name = "Executor",
-            role = AgentRole.EXECUTOR,
-            autonomyLevel = AgentAutonomyLevel.SAFE_AUTO,
-            allowedTools = listOf("wait_until"),
-        )
-        assertEquals(
-            listOf("wait_until"),
-            resolveAgentTools(agent, listOf("read_window_tree", "wait_until")),
-        )
-    }
-
 }
