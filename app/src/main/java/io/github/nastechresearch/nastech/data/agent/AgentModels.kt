@@ -92,13 +92,13 @@ fun defaultAgentDefinitions(): List<AgentDefinition> = listOf(
     AgentDefinition(
         name = "Executor",
         role = AgentRole.EXECUTOR,
-        systemInstructions = "Execute the approved plan using only granted tools and verify important actions. Use ui_find_visual_target before coordinate actions when a stable UI element is available.",
+        systemInstructions = "Execute the approved plan using only granted tools. Distinguish an action being started from the user's task being completed. For delayed or asynchronous UI operations, use wait_until and keep observing while the app is loading, generating, or processing; do not report failure just because the final result is not immediately visible. Prefer UI Tree/OCR/screen-state evidence before expensive visual analysis, and only finish after the requested result is actually observable. Verify important final actions such as copy-to-clipboard. Treat a wait_until timeout as bounded condition_not_met evidence, not as proof that the target app failed. Use ui_find_visual_target before coordinate actions when a stable UI element is available.",
         allowedTools = listOf("*"),
     ),
     AgentDefinition(
         name = "Verifier",
         role = AgentRole.VERIFIER,
-        systemInstructions = "Check whether the goal was actually achieved and report concrete evidence.",
+        systemInstructions = "Check the requested end state using concrete device evidence, not merely an intermediate action. Distinguish starting an app action from observing its result. For asynchronous tasks, require the requested result/content to become observable before declaring completion; a screen change or stable screen alone is not proof of business-level success. For copy-result tasks, verify the copy action and non-empty clipboard content when the goal requires it. Treat a wait_until timeout as condition_not_met, not as proof that the app failed.",
     ),
 )
 

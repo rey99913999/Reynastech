@@ -1,5 +1,7 @@
 package io.github.nastechresearch.nastech.data.ai.tools
 
+import io.github.nastechresearch.nastech.data.model.WaitUntilSettings
+
 /**
  * Phase 17 stability — context every tool factory in [LocalTools.getTools] sees about WHO
  * is invoking it. Until this layer existed, tools that needed to know the calling
@@ -33,6 +35,7 @@ data class ToolInvocationContext(
     val callerConversationId: String? = null,
     val isHeadless: Boolean = false,
     val modelCanSeeImages: Boolean = true,
+    val waitUntilSettings: WaitUntilSettings = WaitUntilSettings(),
 ) {
     companion object {
         /** No-knowledge fallback. Factories that depend on context MUST handle this. */

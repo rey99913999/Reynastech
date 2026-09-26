@@ -68,4 +68,36 @@ class DeviceStateVerifierTest {
         assertTrue(response.verified)
         assertFalse(clipboard.verified)
     }
+    @Test
+    fun textAbsenceAndScreenStabilityAreStructuredChecks() {
+        val absent = DeviceObservationVerification.verify(
+            postcondition = DevicePostcondition(DevicePostconditionType.TEXT_ABSENT, "loading"),
+            current = after,
+            before = before,
+        )
+        val stable = DeviceObservationVerification.verify(
+            postcondition = DevicePostcondition(DevicePostconditionType.SCREEN_STABLE),
+            current = DeviceObservation(
+                foregroundPackage = after.foregroundPackage,
+                visibleText = after.visibleText,
+                screenFingerprint = after.screenFingerprint,
+                keyboardVisible = after.keyboardVisible,
+            ),
+            before = after,
+        )
+
+        assertTrue(absent.verified)
+        assertTrue(stable.verified)
+    }
+
+    @Test
+    fun screenStabilityRequiresTwoObservations() {
+        val single = DeviceObservationVerification.verify(
+            postcondition = DevicePostcondition(DevicePostconditionType.SCREEN_STABLE),
+            current = before,
+            before = null,
+        )
+        assertFalse(single.verified)
+    }
+
 }

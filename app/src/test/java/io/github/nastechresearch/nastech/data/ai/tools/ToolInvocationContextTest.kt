@@ -18,6 +18,8 @@ class ToolInvocationContextTest {
         assertNull(ToolInvocationContext.EMPTY.callerAssistantId)
         assertNull(ToolInvocationContext.EMPTY.callerConversationId)
         assertFalse(ToolInvocationContext.EMPTY.isHeadless)
+        assertEquals(60, ToolInvocationContext.EMPTY.waitUntilSettings.maxWaitSeconds)
+        assertEquals(1_000L, ToolInvocationContext.EMPTY.waitUntilSettings.checkIntervalMs)
     }
 
     @Test fun `default constructor matches EMPTY`() {

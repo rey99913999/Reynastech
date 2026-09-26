@@ -2139,4 +2139,25 @@
     <string name="setting_provider_page_prompt_price">سعر الإدخال / رمز</string>
     <string name="setting_provider_page_completion_price">سعر الإخراج / رمز</string>
     <string name="setting_provider_page_supported_parameters">المعاملات المدعومة (مفصولة بفواصل)</string>
+  <string name="assistant_page_local_tools_wait_until_title">انتظر حتى</string>
+  <string name="assistant_page_local_tools_wait_until_desc">انتظار حالة محددة على الجهاز ضمن حد زمني مع إعادة فحص الشاشة دون تنفيذ إجراءات.</string>
+  <string name="assistant_page_local_tools_wait_until_settings">الإعدادات</string>
+  <string name="assistant_page_local_tools_wait_until_settings_title">إعدادات انتظر حتى</string>
+  <string name="assistant_page_local_tools_wait_until_max_wait">الحد الأقصى للانتظار (بالثواني)</string>
+  <string name="assistant_page_local_tools_wait_until_seconds_hint">النطاق المسموح: من 1 إلى 300 ثانية.</string>
+  <string name="assistant_page_local_tools_wait_until_check_interval">فترة إعادة الفحص (مللي ثانية)</string>
+  <string name="assistant_page_local_tools_wait_until_interval_hint">القيم المدعومة: 250 و500 و1000 و2000 و5000 مللي ثانية.</string>
+  <string name="assistant_page_local_tools_wait_until_default_condition">الحالة الافتراضية</string>
+  <string name="assistant_page_local_tools_wait_until_max_checks">الحد الأقصى للانتظارات/الفحوصات المتتالية</string>
+  <string name="assistant_page_local_tools_wait_until_accessibility">خدمة Accessibility / شجرة الواجهة</string>
+  <string name="assistant_page_local_tools_wait_until_ocr">OCR</string>
+  <string name="assistant_page_local_tools_wait_until_screen_state">حالة الشاشة / البصمة</string>
+  <string name="assistant_page_local_tools_wait_until_vision_fallback">البديل المرئي</string>
+  <string name="assistant_page_local_tools_wait_until_condition_screen_change">تغير الشاشة</string>
+  <string name="assistant_page_local_tools_wait_until_condition_text_appears">ظهور النص</string>
+  <string name="assistant_page_local_tools_wait_until_condition_ui_element_appears">ظهور عنصر واجهة</string>
+  <string name="assistant_page_local_tools_wait_until_condition_fixed_delay">تأخير ثابت</string>
+  <string name="assistant_page_local_tools_wait_until_condition_text_disappears">اختفاء النص</string>
+  <string name="assistant_page_local_tools_wait_until_condition_screen_stable">استقرار الشاشة</string>
+  <string name="assistant_page_local_tools_wait_until_save">حفظ</string>
 </resources>

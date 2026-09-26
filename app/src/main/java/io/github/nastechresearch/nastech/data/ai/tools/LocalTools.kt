@@ -101,6 +101,7 @@ import io.github.nastechresearch.nastech.data.ai.tools.local.visionCaptureTool
 import io.github.nastechresearch.nastech.data.ai.tools.local.visionVerifyStateTool
 import io.github.nastechresearch.nastech.data.ai.tools.local.ocrExtractTool
 import io.github.nastechresearch.nastech.data.ai.tools.local.uiFindVisualTargetTool
+import io.github.nastechresearch.nastech.data.ai.tools.local.waitUntilTool
 import io.github.nastechresearch.nastech.data.ai.tools.local.showImageTool
 import io.github.nastechresearch.nastech.data.ai.tools.local.openFileTool
 import io.github.nastechresearch.nastech.data.ai.tools.local.listFilesTool
@@ -123,6 +124,8 @@ import io.github.nastechresearch.nastech.data.ai.tools.local.batchMoveTool
 import io.github.nastechresearch.nastech.data.ai.tools.local.batchDeleteTool
 import io.github.nastechresearch.nastech.data.ai.tools.local.webFetchTool
 import io.github.nastechresearch.nastech.data.ai.tools.local.webExtractTool
+import io.github.nastechresearch.nastech.data.execution.DeviceObserver
+import io.github.nastechresearch.nastech.data.execution.DeviceStateWaiter
 import io.github.nastechresearch.nastech.data.execution.ToolCategory
 import io.github.nastechresearch.nastech.data.execution.ToolRiskLevel
 import io.github.nastechresearch.nastech.data.execution.ToolSourceHint
@@ -187,6 +190,7 @@ sealed class LocalToolOption {
     @Serializable @SerialName("shizuku")         data object Shizuku        : LocalToolOption()
     @Serializable @SerialName("telegram_bot")    data object TelegramBot    : LocalToolOption()
     @Serializable @SerialName("screen_automation") data object ScreenAutomation : LocalToolOption()
+    @Serializable @SerialName("wait_until") data object WaitUntil : LocalToolOption()
     @Serializable @SerialName("app_launcher")      data object AppLauncher       : LocalToolOption()
     @Serializable @SerialName("termux")            data object Termux            : LocalToolOption()
     @Serializable @SerialName("notification_listener") data object NotificationListener : LocalToolOption()
@@ -374,6 +378,8 @@ class LocalTools(
     // Post-action screenshot streamer for headless mode (Telegram bot / cron / sub-agent).
     // Injected rather than Koin-resolved inside each factory so JVM tests can pass a mock.
     private val interactiveToolStreamer: InteractiveToolStreamer,
+    private val deviceObserver: DeviceObserver,
+    private val deviceStateWaiter: DeviceStateWaiter,
     // Phase 25 — NFC / SAF Activity-bridge buffers + the SAF tree-grant store.
     private val nfcResultBuffer: io.github.nastechresearch.nastech.data.ai.tools.local.NfcResultBuffer,
     private val safPickerResultBuffer: io.github.nastechresearch.nastech.data.ai.tools.local.SafPickerResultBuffer,
@@ -576,6 +582,7 @@ class LocalTools(
                         val hits = io.github.nastechresearch.nastech.data.ai.tools.local
                             .SensitiveContentDetector.scan(text)
                         val payload = buildJsonObject {
+                            put("action", "read")
                             put("text", text)
                             if (hits.isNotEmpty()) {
                                 put("sensitive_content_detected", true)
@@ -596,6 +603,7 @@ class LocalTools(
                         val text = params["text"]?.jsonPrimitive?.contentOrNull ?: error("text is required")
                         context.writeClipboardText(text)
                         val payload = buildJsonObject {
+                            put("action", "write")
                             put("success", true)
                             put("text", text)
                         }
@@ -863,6 +871,9 @@ class LocalTools(
             tools.add(io.github.nastechresearch.nastech.data.ai.tools.local.resumeJobTool(scheduledJobRepository, cronJobScheduler))
             tools.add(io.github.nastechresearch.nastech.data.ai.tools.local.triggerJobNowTool(scheduledJobRepository, cronJobScheduler))
             tools.add(io.github.nastechresearch.nastech.data.ai.tools.local.getJobHistoryTool(scheduledJobRepository, scheduledJobRunRepository))
+        }
+        if (options.contains(LocalToolOption.WaitUntil)) {
+            tools.add(waitUntilTool(context, deviceObserver, deviceStateWaiter, invocationContext))
         }
         if (options.contains(LocalToolOption.ScreenAutomation)) {
             tools.add(tapTool(invocationContext, interactiveToolStreamer))
