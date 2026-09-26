@@ -1,4 +1,3 @@
-
 package io.github.nastechresearch.nastech.data.provider
 
 import io.github.nastechresearch.nastech.utils.JsonInstant
