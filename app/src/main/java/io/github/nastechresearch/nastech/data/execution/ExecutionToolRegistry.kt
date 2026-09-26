@@ -589,7 +589,7 @@ class ExecutionToolRegistry(
             listOf("web_", "http", "download", "ssh", "dns").any(text::contains) -> ToolCategory.NETWORK
             listOf("workflow", "job", "task", "automation", "schedule").any(text::contains) -> ToolCategory.AUTOMATION
             listOf("search", "translate").any(text::contains) -> ToolCategory.SEARCH
-            listOf("tap", "click", "swipe", "scroll", "accessibility", "shizuku", "termux", "keyboard", "launch_app", "global_action", "brightness", "volume", "torch", "vibrate", "wallpaper", "keystore", "nfc", "permission").any(text::contains) -> ToolCategory.SYSTEM_DEVICE
+            listOf("tap", "click", "swipe", "scroll", "accessibility", "wait_until", "shizuku", "termux", "keyboard", "launch_app", "global_action", "brightness", "volume", "torch", "vibrate", "wallpaper", "keystore", "nfc", "permission").any(text::contains) -> ToolCategory.SYSTEM_DEVICE
             else -> ToolCategory.OTHER
         }
     }
