@@ -17,6 +17,7 @@ object DeviceObservationVerification {
         before: DeviceObservation? = null,
         clipboardNonEmpty: Boolean = false,
         foregroundMatches: Boolean = false,
+        accessibilityNodePresent: Boolean = false,
     ): DeviceVerificationResult {
         val value = postcondition.value?.let(::normalizeDeviceText)
         val verified = when (postcondition.type) {
@@ -25,6 +26,11 @@ object DeviceObservationVerification {
             DevicePostconditionType.TEXT_PRESENT ->
                 !value.isNullOrBlank() &&
                     current.visibleText.any { normalizeDeviceText(it).contains(value) }
+            DevicePostconditionType.TEXT_ABSENT ->
+                !value.isNullOrBlank() &&
+                    current.visibleText.none { normalizeDeviceText(it).contains(value) }
+            DevicePostconditionType.UI_ELEMENT_PRESENT ->
+                accessibilityNodePresent == postcondition.expected
             DevicePostconditionType.KEYBOARD_VISIBLE ->
                 current.keyboardVisible == postcondition.expected
             DevicePostconditionType.SCREEN_CHANGED,
@@ -32,6 +38,11 @@ object DeviceObservationVerification {
                 before != null &&
                     before.screenFingerprint.isNotBlank() &&
                     current.screenFingerprint != before.screenFingerprint
+            DevicePostconditionType.SCREEN_STABLE ->
+                before != null &&
+                    before.screenFingerprint.isNotBlank() &&
+                    current.screenFingerprint.isNotBlank() &&
+                    before.screenFingerprint == current.screenFingerprint
             DevicePostconditionType.CLIPBOARD_NON_EMPTY ->
                 clipboardNonEmpty == postcondition.expected
             DevicePostconditionType.RESPONSE_TEXT_NON_EMPTY ->
@@ -71,15 +82,44 @@ class AndroidDeviceStateVerifier(
             captureScreenshot = postcondition.type == DevicePostconditionType.SCREEN_CHANGED ||
                 postcondition.type == DevicePostconditionType.SCREEN_FINGERPRINT_CHANGED,
             captureOcr = postcondition.type == DevicePostconditionType.TEXT_PRESENT ||
+                postcondition.type == DevicePostconditionType.TEXT_ABSENT ||
                 postcondition.type == DevicePostconditionType.NODE_PRESENT ||
                 postcondition.type == DevicePostconditionType.RESPONSE_TEXT_NON_EMPTY,
         )
+
+        if (postcondition.type == DevicePostconditionType.UI_ELEMENT_PRESENT) {
+            val selector = postcondition.selector
+                ?: return DeviceVerificationResult(false, "selector_required", "accessibility")
+            return when (val lookup = observer.findAccessibilityNode(selector)) {
+                DeviceAccessibilityQueryResult.Matched ->
+                    DeviceObservationVerification.verify(
+                        postcondition = postcondition,
+                        current = current,
+                        before = before,
+                        clipboardNonEmpty = context.readClipboardText().trim().isNotEmpty(),
+                        accessibilityNodePresent = true,
+                    )
+                is DeviceAccessibilityQueryResult.NotFound ->
+                    DeviceObservationVerification.verify(
+                        postcondition = postcondition,
+                        current = current,
+                        before = before,
+                        clipboardNonEmpty = context.readClipboardText().trim().isNotEmpty(),
+                        accessibilityNodePresent = false,
+                    )
+                is DeviceAccessibilityQueryResult.WrongForeground ->
+                    DeviceVerificationResult(false, "wrong_foreground_app:" + lookup.currentPackage, "accessibility")
+                DeviceAccessibilityQueryResult.Unavailable ->
+                    DeviceVerificationResult(false, "accessibility_unavailable", "accessibility")
+            }
+        }
 
         return DeviceObservationVerification.verify(
             postcondition = postcondition,
             current = current,
             before = before,
             clipboardNonEmpty = context.readClipboardText().trim().isNotEmpty(),
+            accessibilityNodePresent = false,
             foregroundMatches = if (postcondition.type == DevicePostconditionType.APP_FOREGROUND) {
                 val expected = postcondition.value.orEmpty()
                 current.foregroundPackage.equals(expected, ignoreCase = true) ||
