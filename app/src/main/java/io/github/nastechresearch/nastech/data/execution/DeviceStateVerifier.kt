@@ -11,6 +11,15 @@ fun interface DevicePostconditionVerifier {
 }
 
 object DeviceObservationVerification {
+    private fun textCandidates(
+        current: DeviceObservation,
+        source: DeviceTextSource,
+    ): List<String> = when (source) {
+        DeviceTextSource.ACCESSIBILITY -> current.accessibilityText.ifEmpty { current.visibleText }
+        DeviceTextSource.OCR -> current.ocrText
+        DeviceTextSource.BOTH -> current.visibleText
+    }
+
     fun verify(
         postcondition: DevicePostcondition,
         current: DeviceObservation,
@@ -25,10 +34,12 @@ object DeviceObservationVerification {
             DevicePostconditionType.NODE_PRESENT,
             DevicePostconditionType.TEXT_PRESENT ->
                 !value.isNullOrBlank() &&
-                    current.visibleText.any { normalizeDeviceText(it).contains(value) }
+                    textCandidates(current, postcondition.textSource)
+                        .any { normalizeDeviceText(it).contains(value) }
             DevicePostconditionType.TEXT_ABSENT ->
                 !value.isNullOrBlank() &&
-                    current.visibleText.none { normalizeDeviceText(it).contains(value) }
+                    textCandidates(current, postcondition.textSource)
+                        .none { normalizeDeviceText(it).contains(value) }
             DevicePostconditionType.UI_ELEMENT_PRESENT ->
                 accessibilityNodePresent == postcondition.expected
             DevicePostconditionType.KEYBOARD_VISIBLE ->
