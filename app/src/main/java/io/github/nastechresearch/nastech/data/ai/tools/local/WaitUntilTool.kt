@@ -6,7 +6,6 @@ import io.github.nastechresearch.nastech.data.execution.DevicePostcondition
 import io.github.nastechresearch.nastech.data.execution.DevicePostconditionType
 import io.github.nastechresearch.nastech.data.execution.DeviceStateWaiter
 import io.github.nastechresearch.nastech.data.execution.DeviceAccessibilitySelector
-import io.github.nastechresearch.nastech.data.execution.DeviceObservation
 import io.github.nastechresearch.nastech.data.execution.DeviceObserver
 import io.github.nastechresearch.nastech.data.model.WaitUntilCondition
 import io.github.nastechresearch.nastech.data.model.WaitUntilSettings
@@ -181,6 +180,22 @@ fun waitUntilTool(
                 put("selector", buildJsonObject {
                     put("type", "object")
                     put("description", "Required for ui_element_appears. Reuses find_node/click_node selector semantics.")
+                    put("properties", buildJsonObject {
+                        put("by", buildJsonObject {
+                            put("type", "string")
+                            put("enum", kotlinx.serialization.json.buildJsonArray {
+                                add("text")
+                                add("content_description")
+                                add("view_id_resource_name")
+                            })
+                        })
+                        put("value", buildJsonObject { put("type", "string") })
+                        put("nth", buildJsonObject { put("type", "integer") })
+                        put("text", buildJsonObject { put("type", "string") })
+                        put("content_description", buildJsonObject { put("type", "string") })
+                        put("view_id_resource_name", buildJsonObject { put("type", "string") })
+                        put("package_name", buildJsonObject { put("type", "string") })
+                    })
                 })
                 put("package_name", buildJsonObject {
                     put("type", "string")
