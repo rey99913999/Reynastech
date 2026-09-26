@@ -310,7 +310,8 @@ fun waitUntilTool(
                         before = null,
                         maxWaitMs = localBudget,
                         pollMs = intervalMs,
-                    maxChecks = settings.maxConsecutiveWaits,
+                        maxChecks = settings.maxConsecutiveWaits,
+
                     )
                 } else {
                     null
@@ -360,6 +361,7 @@ fun waitUntilTool(
                     before = before,
                     maxWaitMs = configuredMaxWaitMs,
                     pollMs = intervalMs,
+                    maxChecks = settings.maxConsecutiveWaits,
                 )
                 if (result.verified) {
                     listOf(
@@ -395,6 +397,7 @@ fun waitUntilTool(
                     before = before,
                     maxWaitMs = configuredMaxWaitMs,
                     pollMs = intervalMs,
+                    maxChecks = settings.maxConsecutiveWaits,
                 )
                 if (result.verified) {
                     listOf(
