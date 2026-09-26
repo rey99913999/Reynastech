@@ -582,6 +582,7 @@ class LocalTools(
                         val hits = io.github.nastechresearch.nastech.data.ai.tools.local
                             .SensitiveContentDetector.scan(text)
                         val payload = buildJsonObject {
+                            put("action", "read")
                             put("text", text)
                             if (hits.isNotEmpty()) {
                                 put("sensitive_content_detected", true)
@@ -602,6 +603,7 @@ class LocalTools(
                         val text = params["text"]?.jsonPrimitive?.contentOrNull ?: error("text is required")
                         context.writeClipboardText(text)
                         val payload = buildJsonObject {
+                            put("action", "write")
                             put("success", true)
                             put("text", text)
                         }
