@@ -1,27 +1,30 @@
 package io.github.nastechresearch.nastech.data.ai
 
+import io.github.nastechresearch.nastech.data.execution.DeviceActionLifecycle
 import io.github.nastechresearch.nastech.data.execution.ExecutionPlanResult
 import io.github.nastechresearch.nastech.data.execution.ExecutionToolRegistry
+import io.github.nastechresearch.nastech.data.execution.ExecutionStepStatus
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.ui.UIMessagePart
 
-/**
- * Turn-local evidence used by the device completion guard.
- *
- * This state is intentionally ephemeral and contains no persistence. It records actual runtime
- * execution rather than inferring device activity from the model's current tool list.
- */
 internal data class DeviceExecutionEvidence(
     val deviceToolExecutedThisTurn: Boolean = false,
     val deviceToolSucceededThisTurn: Boolean = false,
     val devicePlanExecutedThisTurn: Boolean = false,
+    val verifiedOutcomeEvidenceThisTurn: Boolean = false,
 ) {
     val hasSuccessfulExecutionEvidence: Boolean
         get() = deviceToolSucceededThisTurn || devicePlanExecutedThisTurn
+
+    val hasVerifiedOutcomeEvidence: Boolean
+        get() = verifiedOutcomeEvidenceThisTurn
+
+    fun canSatisfyCompletion(requiresVerifiedOutcome: Boolean): Boolean =
+        if (requiresVerifiedOutcome) hasVerifiedOutcomeEvidence else hasSuccessfulExecutionEvidence
 }
 
 internal object DeviceExecutionEvidenceTracker {
@@ -36,18 +39,27 @@ internal object DeviceExecutionEvidenceTracker {
 
         if (toolName == "execute_structured_plan") {
             val result = decodePlanResult(output, json)
-            return if (result != null && result.completedCount > 0) {
-                current.copy(devicePlanExecutedThisTurn = true)
-            } else {
-                current
+            if (result != null && result.completedCount > 0) {
+                val verified = result.results.any {
+                    it.status == ExecutionStepStatus.SUCCESS &&
+                        it.lifecycle == DeviceActionLifecycle.VERIFIED
+                }
+                return current.copy(
+                    devicePlanExecutedThisTurn = true,
+                    verifiedOutcomeEvidenceThisTurn =
+                        current.verifiedOutcomeEvidenceThisTurn || verified,
+                )
             }
+            return current
         }
 
         if (!ExecutionToolRegistry.isCoreDeviceTool(toolName)) return current
 
         val failed = outputIndicatesFailure(output, json)
-        val verifiedOutcome = outputContainsExplicitVerification(output, json) ||
-            (toolName == "clipboard_tool" && clipboardReadContainsText(output, json))
+        val verifiedOutcome =
+            outputContainsExplicitVerification(output, json) ||
+                (toolName == "clipboard_tool" && clipboardReadContainsText(output, json))
+
         return current.copy(
             deviceToolExecutedThisTurn = true,
             deviceToolSucceededThisTurn =
@@ -122,10 +134,13 @@ internal object DeviceExecutionEvidenceTracker {
                 runCatching {
                     val obj = json.parseToJsonElement(part.text).jsonObject
                     val errorPresent = obj["error"] != null
-                    val successExplicitlyFalse = (obj["success"] as? JsonPrimitive)?.booleanOrNull == false
-                    val dispatchExplicitlyFalse = (obj["dispatch_succeeded"] as? JsonPrimitive)?.booleanOrNull == false
+                    val successExplicitlyFalse =
+                        (obj["success"] as? JsonPrimitive)?.booleanOrNull == false
+                    val dispatchExplicitlyFalse =
+                        (obj["dispatch_succeeded"] as? JsonPrimitive)?.booleanOrNull == false
                     val status = (obj["status"] as? JsonPrimitive)?.contentOrNull?.uppercase()
-                    val failedStatus = status in setOf("FAILED", "FAILURE", "ERROR", "REJECTED")
+                    val failedStatus =
+                        status in setOf("FAILED", "FAILURE", "ERROR", "REJECTED")
                     errorPresent || successExplicitlyFalse || dispatchExplicitlyFalse || failedStatus
                 }.getOrDefault(false)
             }
