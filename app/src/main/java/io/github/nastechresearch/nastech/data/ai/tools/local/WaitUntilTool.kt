@@ -212,9 +212,7 @@ fun waitUntilTool(
         )
         val packageName = input["package_name"]?.jsonPrimitive?.contentOrNull
 
-        if (condition != WaitUntilCondition.FIXED_DELAY &&
-            RikkaAccessibilityService.instance == null
-        ) {
+        if (condition != WaitUntilCondition.FIXED_DELAY && !observer.isAvailable) {
             return@Tool listOf(
                 error(
                     "accessibility_unavailable",
@@ -262,6 +260,7 @@ fun waitUntilTool(
                     before = null,
                     maxWaitMs = configuredMaxWaitMs,
                     pollMs = intervalMs,
+                    maxChecks = settings.maxConsecutiveWaits,
                 )
 
                 if (result.verified) {
@@ -311,6 +310,7 @@ fun waitUntilTool(
                         before = null,
                         maxWaitMs = localBudget,
                         pollMs = intervalMs,
+                    maxChecks = settings.maxConsecutiveWaits,
                     )
                 } else {
                     null
