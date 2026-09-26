@@ -105,6 +105,7 @@ class AndroidDeviceObserver(
             ?: return@withContext DeviceObservation(createdAtMs = System.currentTimeMillis())
 
         val visibleText = ArrayList<String>(128)
+        val accessibilityText = ArrayList<String>(128)
         val fingerprintParts = ArrayList<String>(256)
         var focusedText: String? = null
 
@@ -113,8 +114,14 @@ class AndroidDeviceObserver(
 
             val text = node.text?.toString()?.trim().orEmpty()
             val description = node.contentDescription?.toString()?.trim().orEmpty()
-            if (text.isNotBlank()) visibleText += text
-            if (description.isNotBlank() && description != text) visibleText += description
+            if (text.isNotBlank()) {
+                visibleText += text
+                accessibilityText += text
+            }
+            if (description.isNotBlank() && description != text) {
+                visibleText += description
+                accessibilityText += description
+            }
             if (node.isFocused && text.isNotBlank()) focusedText = text
 
             val bounds = android.graphics.Rect()
@@ -204,6 +211,8 @@ class AndroidDeviceObserver(
             foregroundPackage = packageName,
             windowTitle = windowTitle,
             visibleText = (visibleText + ocrText).distinct().take(600),
+            accessibilityText = accessibilityText.distinct().take(600),
+            ocrText = ocrText.distinct().take(600),
             focusedText = focusedText,
             keyboardVisible = keyboardVisible,
             screenFingerprint = screenFingerprint,
