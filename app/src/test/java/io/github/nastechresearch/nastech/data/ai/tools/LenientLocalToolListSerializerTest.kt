@@ -70,4 +70,16 @@ class LenientLocalToolListSerializerTest {
 
         assertEquals(emptyList<LocalToolOption>(), decoded)
     }
+    @Test
+    fun decode_waitUntil_keepsNewLocalToolOption() {
+        val decoded = json.decodeFromString(
+            LenientLocalToolListSerializer,
+            """[{"type":"time_info"},{"type":"wait_until"},{"type":"ask_user"}]""",
+        )
+        assertEquals(
+            listOf(LocalToolOption.TimeInfo, LocalToolOption.WaitUntil, LocalToolOption.AskUser),
+            decoded,
+        )
+    }
+
 }
