@@ -484,7 +484,7 @@ class ExecutionToolRegistry(
             val keywords = (hint?.keywords.orEmpty() + deriveKeywords(logicalName, description)).toSet()
             val capabilities = (hint?.capabilities.orEmpty() + deriveCapabilities(logicalName, description)).toSet()
             val permissions = (hint?.permissions.orEmpty() + if (defaultRequiresApproval(tool)) setOf("tool_approval") else emptySet()).toSet()
-            val sideEffects = hint?.sideEffects.orEmpty().toSet()
+            val sideEffects = hint?.sideEffects.orEmpty().ifEmpty { inferSideEffects(logicalName, description) }.toSet()
             val schema = runCatching { tool.parameters() }.getOrNull()
             val summary = summarizeSchema(schema)
             val metadata = ToolMetadata(
@@ -559,6 +559,15 @@ class ExecutionToolRegistry(
 
     private fun sanitize(value: String): String =
         value.replace(Regex("[^A-Za-z0-9_-]"), "_")
+
+    private fun inferSideEffects(name: String, description: String): Set<String> {
+        val text = (name + " " + description).lowercase()
+        val result = mutableSetOf<String>()
+        if (listOf("delete", "remove", "erase", "write", "update", "create", "rename", "move", "send", "submit", "set ", "toggle", "install", "uninstall").any(text::contains)) {
+            result += "external_state_mutation"
+        }
+        return result
+    }
 
     private fun deriveKeywords(name: String, description: String): Set<String> =
         Regex("[A-Za-z0-9_]{3,}").findAll(name + " " + description)
