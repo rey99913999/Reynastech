@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import android.provider.OpenableColumns
+import java.io.ByteArrayOutputStream
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
@@ -83,8 +84,23 @@ fun CustomToolsPage() {
                             val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                             if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
                         } ?: "imported-script.js"
-                        val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                            ?: throw IllegalStateException(context.getString(R.string.custom_tools_file_read_error))
+                        val text = context.contentResolver.openInputStream(uri)?.use { input ->
+                            val out = ByteArrayOutputStream()
+                            val buffer = ByteArray(8 * 1024)
+                            var total = 0
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                total += count
+                                if (total > MAX_IMPORTED_FILE_BYTES) {
+                                    throw IllegalArgumentException(
+                                        context.getString(R.string.custom_tools_file_too_large)
+                                    )
+                                }
+                                out.write(buffer, 0, count)
+                            }
+                            out.toString(Charsets.UTF_8.name())
+                        } ?: throw IllegalStateException(context.getString(R.string.custom_tools_file_read_error))
                         displayName to text
                     }
                 }.onSuccess { (displayName, text) ->
