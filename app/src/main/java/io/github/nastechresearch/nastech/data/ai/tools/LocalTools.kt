@@ -29,6 +29,8 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import io.github.nastechresearch.nastech.data.ai.tools.local.BiometricResultBuffer
+import io.github.nastechresearch.nastech.data.ai.tools.local.CustomToolRuntime
+import io.github.nastechresearch.nastech.data.customtools.CustomToolRepository
 import io.github.nastechresearch.nastech.data.ai.tools.local.CameraResultBuffer
 import io.github.nastechresearch.nastech.data.ai.tools.local.InteractiveToolStreamer
 import io.github.nastechresearch.nastech.data.ai.tools.local.audioInfoTool
@@ -1102,6 +1104,33 @@ class LocalTools(
                             ToolRiskLevel.MEDIUM
                         },
                         permissions = registration.requiredPermissions,
+                    )
+                )
+            }
+        }
+        // Custom tools are read from app-private storage on each tool-surface build so changes
+        // made in the Custom tools screen take effect without restarting the process.
+        val customDefinitions = CustomToolRepository(context).tools.value.filter { it.enabled }
+        if (customDefinitions.isNotEmpty()) {
+            val registrations = CustomToolRuntime.createTools(
+                context = context,
+                definitions = customDefinitions,
+                baseTools = tools.toList(),
+                mcpManager = mcpManager,
+            )
+            registrations.forEach { registration ->
+                tools.add(registration.tool)
+                onSourceHint(
+                    ToolSourceHint(
+                        tool = registration.tool,
+                        source = ToolSourceKind.PLUGIN,
+                        sourceId = "custom-tool:" + registration.definition.id,
+                        category = ToolCategory.OTHER,
+                        risk = ToolRiskLevel.HIGH,
+                        capabilities = setOf("custom_tool", registration.definition.kind.name.lowercase()),
+                        sideEffects = setOf("executes user-reviewed custom tool"),
+                        keywords = setOf("custom", "imported", registration.definition.name.lowercase()),
+                        outputContract = "Custom tool result",
                     )
                 )
             }
