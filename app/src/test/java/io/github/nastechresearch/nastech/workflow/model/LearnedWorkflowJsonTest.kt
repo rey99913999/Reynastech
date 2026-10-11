@@ -1,12 +1,11 @@
 package io.github.nastechresearch.nastech.workflow.model
 
-import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import org.junit.Assert.assertEquals
+import org.junit.Test
 
 class LearnedWorkflowJsonTest {
-
     @Test
     fun learnedMetadataSurvivesRoundTrip() {
         val definition = WorkflowDefinition(
@@ -27,10 +26,8 @@ class LearnedWorkflowJsonTest {
             sourceRecordingId = "recording-1",
             approvedAtMs = null,
         )
-
         val encoded = WorkflowJson.encode(definition)
         val parsed = WorkflowJson.parseStored(encoded)
-
         requireNotNull(parsed)
         assertEquals("recording-1", parsed.sourceRecordingId)
         assertEquals(null, parsed.approvedAtMs)
@@ -52,7 +49,6 @@ class LearnedWorkflowJsonTest {
             sourceRecordingId = "recording-2",
             approvedAtMs = 1234L,
         )
-
         val parsed = WorkflowJson.parseStored(WorkflowJson.encode(definition))
         requireNotNull(parsed)
         assertEquals("recording-2", parsed.sourceRecordingId)
