@@ -19,6 +19,36 @@ class TaskManager(
     fun observeAudit(taskId: String): Flow<List<TaskAuditLogEntity>> =
         db.taskAuditLogDao().observeForTask(taskId)
 
+    /**
+     * Append a bounded diagnostic event to the existing task audit log.
+     *
+     * Diagnostics are best-effort: a logging failure must not prevent a device action or
+     * model request from running. Cancellation is still propagated to preserve stop-task.
+     * Messages should describe the stage, not contain prompts, credentials, or tool arguments.
+     */
+    suspend fun recordExecutionEvent(
+        taskId: String?,
+        stepId: String? = null,
+        eventType: String,
+        status: String? = null,
+        message: String? = null,
+    ) {
+        if (taskId.isNullOrBlank()) return
+        try {
+            audit(
+                taskId = taskId,
+                stepId = stepId,
+                eventType = eventType.take(80),
+                status = status?.take(80),
+                message = message?.take(1_000),
+            )
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (_: Throwable) {
+            // Monitoring must never become a new failure path for the task.
+        }
+    }
+
     fun observeExecutionUsage(taskId: String) =
         db.taskExecutionUsageDao().observe(taskId)
 
@@ -229,6 +259,7 @@ class TaskManager(
             db.taskStepDao().upsert(
                 step.copy(
                     status = TaskStepStatus.FAILED.name,
+                    completedAt = now,
                     lastError = error.take(2_000),
                     retryCount = step.retryCount + if (recovery == TaskRecoveryAction.RETRY) 1 else 0,
                 )
@@ -304,7 +335,11 @@ class TaskManager(
 
         val now = System.currentTimeMillis()
         db.taskStepDao().upsert(
-            step.copy(status = TaskStepStatus.PENDING.name, lastError = null)
+            step.copy(
+                status = TaskStepStatus.PENDING.name,
+                completedAt = null,
+                lastError = null,
+            )
         )
         db.taskDao().upsert(
             task.copy(
