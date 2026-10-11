@@ -30,11 +30,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import android.provider.OpenableColumns
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import io.github.nastechresearch.nastech.data.customtools.CustomToolDefinition
@@ -54,6 +57,7 @@ fun CustomToolsPage() {
     var jsonDraft by remember { mutableStateOf("") }
     var scriptName by remember { mutableStateOf("") }
     var scriptDescription by remember { mutableStateOf("") }
+    var inputSchemaDraft by remember { mutableStateOf("""{"type":"object","properties":{}}""") }
     var scriptKind by remember { mutableStateOf(CustomToolKind.JAVASCRIPT) }
     var scriptSource by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
@@ -67,13 +71,33 @@ fun CustomToolsPage() {
             scope.launch {
                 runCatching {
                     withContext(Dispatchers.IO) {
-                        context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                        val displayName = context.contentResolver.query(
+                            uri,
+                            arrayOf(OpenableColumns.DISPLAY_NAME),
+                            null,
+                            null,
+                            null,
+                        )?.use { cursor ->
+                            val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                            if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
+                        } ?: "imported-script.js"
+                        val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                             ?: throw IllegalStateException("Could not read the selected file.")
+                        displayName to text
                     }
-                }.onSuccess {
-                    jsonDraft = it
-                    importMode = "json"
-                    message = "File loaded. Review the JSON, then import it."
+                }.onSuccess { (displayName, text) ->
+                    if (importMode == "json") {
+                        jsonDraft = text
+                        message = "File loaded. Review the JSON, then import it."
+                    } else {
+                        val extension = displayName.substringAfterLast('.', "").lowercase()
+                        val baseName = displayName.substringBeforeLast('.', displayName)
+                        scriptName = baseName.replace(Regex("[^A-Za-z0-9_.-]+"), "_").trim('_', '.', '-')
+                        scriptDescription = "Imported script file: " + displayName
+                        scriptKind = if (extension == "py") CustomToolKind.PYTHON else CustomToolKind.JAVASCRIPT
+                        scriptSource = text
+                        message = "Script loaded. Review its contents and details before importing."
+                    }
                 }.onFailure {
                     message = it.message ?: "Could not read the selected file."
                 }
@@ -120,6 +144,15 @@ fun CustomToolsPage() {
                     minLines = 2,
                     maxLines = 3,
                 )
+                OutlinedTextField(
+                    value = inputSchemaDraft,
+                    onValueChange = { inputSchemaDraft = it },
+                    label = { Text("Input JSON Schema (object)") },
+                    supportingText = { Text("Define properties the assistant may pass in the input object.") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    maxLines = 4,
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (scriptKind == CustomToolKind.JAVASCRIPT) {
                         Button(onClick = { scriptKind = CustomToolKind.JAVASCRIPT }) { Text("JavaScript") }
@@ -127,6 +160,11 @@ fun CustomToolsPage() {
                     } else {
                         OutlinedButton(onClick = { scriptKind = CustomToolKind.JAVASCRIPT }) { Text("JavaScript") }
                         Button(onClick = { scriptKind = CustomToolKind.PYTHON }) { Text("Python / Termux") }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { filePicker.launch(arrayOf("*/*")) }) {
+                        Text("Choose .js / .py file")
                     }
                 }
                 OutlinedTextField(
@@ -145,33 +183,44 @@ fun CustomToolsPage() {
                 )
                 Button(
                     onClick = {
-                        val normalizedId = scriptName.trim().lowercase()
+                        val normalizedName = scriptName.trim()
+                            .replace(Regex("[^A-Za-z0-9_.-]+"), "_")
+                            .trim('_', '.', '-')
+                            .let { candidate ->
+                                if (candidate.firstOrNull()?.isLetter() == true) candidate else "tool_" + candidate
+                            }
+                            .take(61)
+                        val normalizedId = normalizedName.lowercase()
                             .replace(Regex("[^a-z0-9._-]+"), "-")
                             .trim('-', '.', '_')
-                            .take(64)
-                        val kindName = if (scriptKind == CustomToolKind.JAVASCRIPT) "javascript" else "python"
-                        val inputSchema = buildJsonObject {
-                            put("type", "object")
-                            put("properties", buildJsonObject { })
+                        val parsedSchema = runCatching {
+                            Json.parseToJsonElement(inputSchemaDraft) as? JsonObject
+                                ?: throw IllegalArgumentException("Input schema must be a JSON object.")
+                        }.getOrElse {
+                            message = it.message ?: "Input schema is invalid JSON."
+                            null
                         }
-                        val definitionJson = buildJsonObject {
-                            put("id", normalizedId)
-                            put("name", scriptName.trim())
-                            put("description", scriptDescription.trim())
-                            put("kind", kindName)
-                            put("inputSchema", inputSchema)
-                            put("source", scriptSource)
-                            put("enabled", false)
-                        }.toString()
-                        repository.importJson(definitionJson).fold(
-                            onSuccess = {
-                                message = "Imported '${it.name}' disabled. Review it below before enabling."
-                                scriptSource = ""
-                                scriptName = ""
-                                scriptDescription = ""
-                            },
-                            onFailure = { message = it.message ?: "Import failed." },
-                        )
+                        if (parsedSchema != null) {
+                            val kindName = if (scriptKind == CustomToolKind.JAVASCRIPT) "javascript" else "python"
+                            val definitionJson = buildJsonObject {
+                                put("id", normalizedId)
+                                put("name", normalizedName)
+                                put("description", scriptDescription.trim())
+                                put("kind", kindName)
+                                put("inputSchema", parsedSchema)
+                                put("source", scriptSource)
+                                put("enabled", false)
+                            }.toString()
+                            repository.importJson(definitionJson).fold(
+                                onSuccess = {
+                                    message = "Imported '${it.name}' disabled. Review it below before enabling."
+                                    scriptSource = ""
+                                    scriptName = ""
+                                    scriptDescription = ""
+                                },
+                                onFailure = { message = it.message ?: "Import failed." },
+                            )
+                        }
                     },
                     enabled = scriptName.isNotBlank() && scriptDescription.isNotBlank() && scriptSource.isNotBlank(),
                     modifier = Modifier.fillMaxWidth(),
