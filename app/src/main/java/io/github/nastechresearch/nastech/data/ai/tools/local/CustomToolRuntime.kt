@@ -89,7 +89,7 @@ object CustomToolRuntime {
             needsApproval = { true },
             execute = { args ->
                 val input = args as? JsonObject ?: JsonObject(emptyMap())
-                runCatching {
+                try {
                     when (definition.kind) {
                         CustomToolKind.JAVASCRIPT -> runJavaScript(definition.id, definition.source, input)
                         CustomToolKind.PYTHON -> runPython(context, definition, input)
@@ -102,7 +102,9 @@ object CustomToolRuntime {
                             callerAssistantId = callerAssistantId,
                         )
                     }
-                }.getOrElse { error ->
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (error: Throwable) {
                     listOf(
                         UIMessagePart.Text(
                             buildJsonObject {
