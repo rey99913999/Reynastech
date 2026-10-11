@@ -177,7 +177,8 @@ class LocalExecutionEngine(
                         taskManager.beginStep(plan.taskId, step.taskStepId)
                     }
 
-                    actionStartedAtMs = android.os.SystemClock.elapsedRealtime()
+                    val actionStartedAt = android.os.SystemClock.elapsedRealtime()
+                    actionStartedAtMs = actionStartedAt
                     taskManager.recordExecutionEvent(
                         taskId = plan.taskId,
                         stepId = step.taskStepId,
@@ -186,7 +187,7 @@ class LocalExecutionEngine(
                         message = "Local tool $resolvedToolName started",
                     )
                     val parts = tool.execute(step.args)
-                    val actionDurationMs = (android.os.SystemClock.elapsedRealtime() - actionStartedAtMs).coerceAtLeast(0L)
+                    val actionDurationMs = (android.os.SystemClock.elapsedRealtime() - actionStartedAt).coerceAtLeast(0L)
                     taskManager.recordExecutionEvent(
                         taskId = plan.taskId,
                         stepId = step.taskStepId,
