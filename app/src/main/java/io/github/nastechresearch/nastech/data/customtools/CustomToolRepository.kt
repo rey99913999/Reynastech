@@ -49,6 +49,12 @@ class CustomToolRepository(context: Context) {
                 require(existing == null || replaceExisting) {
                     "A custom tool with id '${imported.id}' already exists. Choose replace to overwrite it."
                 }
+                val sameName = mutableTools.value.firstOrNull {
+                    it.id != imported.id && it.name == imported.name
+                }
+                require(sameName == null) {
+                    "Another custom tool already uses the name '${imported.name}'. Choose a different name."
+                }
 
                 val now = System.currentTimeMillis()
                 val safeDefinition = imported.copy(
