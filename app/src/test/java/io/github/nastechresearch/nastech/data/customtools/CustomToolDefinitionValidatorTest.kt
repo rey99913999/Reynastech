@@ -77,7 +77,7 @@ class CustomToolDefinitionValidatorTest {
             definition(
                 kind = CustomToolKind.MCP,
                 source = "",
-                mcpServerId = "configured-server",
+                mcpServerId = "6f9619ff-8b86-d011-b42d-00cf4fc964ff",
                 remoteToolName = "remote_tool",
             )
         ))
