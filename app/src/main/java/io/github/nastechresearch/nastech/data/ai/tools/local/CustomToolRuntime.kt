@@ -7,7 +7,6 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -19,7 +18,7 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import io.github.nastechresearch.nastech.data.ai.mcp.McpManager
-import io.github.nastechresearch.nastech.data.ai.tools.DirectModeActionRunner
+import io.github.nastechresearch.nastech.service.DirectModeActionRunner
 import io.github.nastechresearch.nastech.data.customtools.CustomToolDefinition
 import io.github.nastechresearch.nastech.data.customtools.CustomToolKind
 import io.github.nastechresearch.nastech.data.customtools.CustomToolDefinitionValidator
@@ -88,7 +87,7 @@ object CustomToolRuntime {
                 val input = args as? JsonObject ?: JsonObject(emptyMap())
                 runCatching {
                     when (definition.kind) {
-                        CustomToolKind.JAVASCRIPT -> runJavaScript(definition.source, input)
+                        CustomToolKind.JAVASCRIPT -> runJavaScript(definition.id, definition.source, input)
                         CustomToolKind.PYTHON -> runPython(context, definition, input)
                         CustomToolKind.ACTION_SEQUENCE -> runActions(definition, availableTools())
                         CustomToolKind.MCP -> {
@@ -131,6 +130,7 @@ object CustomToolRuntime {
     }
 
     private suspend fun runJavaScript(
+        toolId: String,
         source: String,
         input: JsonObject,
     ): List<UIMessagePart> {
@@ -151,7 +151,7 @@ object CustomToolRuntime {
                 }
                 done.complete(
                     buildJsonObject {
-                        put("tool_id", "javascript")
+                        put("tool_id", toolId)
                         put("result", output.take(CUSTOM_OUTPUT_LIMIT_CHARS))
                     }.toString()
                 )
