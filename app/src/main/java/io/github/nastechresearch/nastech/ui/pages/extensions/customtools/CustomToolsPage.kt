@@ -330,6 +330,39 @@ fun CustomToolsPage() {
                                     importMode = "json"
                                     message = context.getString(R.string.custom_tools_editing_status, tool.name)
                                 }) { Text(stringResource(R.string.custom_tools_edit)) }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = {
+                                    val existingIds = tools.map { it.id }.toSet()
+                                    var idSuffixNumber = 1
+                                    var candidateId: String
+                                    do {
+                                        val suffix = if (idSuffixNumber == 1) "copy" else "copy$idSuffixNumber"
+                                        candidateId = tool.id.take(64 - suffix.length - 1) + "-" + suffix
+                                        idSuffixNumber++
+                                    } while (candidateId in existingIds)
+
+                                    var nameSuffixNumber = 1
+                                    var candidateName: String
+                                    do {
+                                        val suffix = if (nameSuffixNumber == 1) "_copy" else "_copy$nameSuffixNumber"
+                                        candidateName = tool.name.take(61 - suffix.length) + suffix
+                                        nameSuffixNumber++
+                                    } while (tools.any { it.name == candidateName })
+
+                                    jsonDraft = Json.encodeToString(
+                                        tool.copy(
+                                            id = candidateId,
+                                            name = candidateName,
+                                            enabled = false,
+                                            createdAtMs = 0L,
+                                            updatedAtMs = 0L,
+                                        )
+                                    )
+                                    editingToolId = null
+                                    importMode = "json"
+                                    message = context.getString(R.string.custom_tools_duplicate_draft_status, candidateName)
+                                }) { Text(stringResource(R.string.custom_tools_duplicate)) }
                                 TextButton(onClick = { deleteTarget = tool }) { Text(stringResource(R.string.custom_tools_delete)) }
                             }
                         }
