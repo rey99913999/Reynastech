@@ -145,13 +145,17 @@ fun CustomToolsPage() {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(stringResource(R.string.custom_tools_intro))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (importMode == "script") {
-                    Button(onClick = { importMode = "script" }) { Text(stringResource(R.string.custom_tools_script_mode)) }
-                    OutlinedButton(onClick = { importMode = "json" }) { Text(stringResource(R.string.custom_tools_json_mode)) }
-                } else {
-                    OutlinedButton(onClick = { importMode = "script" }) { Text(stringResource(R.string.custom_tools_script_mode)) }
-                    Button(onClick = { importMode = "json" }) { Text(stringResource(R.string.custom_tools_json_mode)) }
+            if (editingToolId != null) {
+                Text(stringResource(R.string.custom_tools_editing_mode))
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (importMode == "script") {
+                        Button(onClick = { importMode = "script" }) { Text(stringResource(R.string.custom_tools_script_mode)) }
+                        OutlinedButton(onClick = { importMode = "json" }) { Text(stringResource(R.string.custom_tools_json_mode)) }
+                    } else {
+                        OutlinedButton(onClick = { importMode = "script" }) { Text(stringResource(R.string.custom_tools_script_mode)) }
+                        Button(onClick = { importMode = "json" }) { Text(stringResource(R.string.custom_tools_json_mode)) }
+                    }
                 }
             }
 
