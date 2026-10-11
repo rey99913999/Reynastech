@@ -112,7 +112,7 @@ object CustomToolRuntime {
         definition: CustomToolDefinition,
         tools: List<Tool>,
     ): List<UIMessagePart> {
-        val result = DirectModeActionRunner(Json).run(
+        val result = DirectModeActionRunner(Json.Default).run(
             actions = definition.actions.map { DirectModeActionRunner.Action(it.tool, it.args) },
             availableTools = tools,
         )
