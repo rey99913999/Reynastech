@@ -1,4 +1,3 @@
-
 package io.github.nastechresearch.nastech.data.provider
 
 import io.github.nastechresearch.nastech.utils.JsonInstant
@@ -10,8 +9,8 @@ import org.junit.Test
 class ProviderCredentialRedactionTest {
     @Test
     fun serializedProviderSettingsNeverContainRawSecrets() {
-        val apiKey = "super-secret-api-key"
-        val privateKey = "-----BEGIN PRIVATE KEY-----secret-----END PRIVATE KEY-----"
+        val apiKey = "test-api-key-redaction-fixture"
+        val privateKey = "-----BEGIN PRIVATE KEY-----test-fixture-----END PRIVATE KEY-----"
         val providers = listOf(
             ProviderSetting.OpenAI(apiKey = apiKey),
             ProviderSetting.Google(
@@ -28,7 +27,7 @@ class ProviderCredentialRedactionTest {
         assertFalse(json.contains(apiKey))
         assertFalse(json.contains(privateKey))
         assertFalse(json.contains("service@example.invalid"))
-        assertFalse(json.contains(""apiKey""))
-        assertTrue(json.contains(""credentialRef""))
+        assertFalse(json.contains("\"apiKey\""))
+        assertTrue(json.contains("\"credentialRef\""))
     }
 }
