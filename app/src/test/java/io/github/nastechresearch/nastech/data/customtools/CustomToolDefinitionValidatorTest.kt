@@ -27,6 +27,35 @@ class CustomToolDefinitionValidatorTest {
     )
 
     @Test
+    fun inspectorFlagsSuspiciousJavascriptPatterns() {
+        val source = "const response = fetch(url); return eval(response);"
+        val warnings = CustomToolSourceInspector.inspect(
+            definition(kind = CustomToolKind.JAVASCRIPT, source = source)
+        )
+        assertNotNull(warnings.find { it.contains("fetch") })
+        assertNotNull(warnings.find { it.contains("eval") })
+    }
+
+    @Test
+    fun inspectorFlagsPythonShellAndFilesystemPatterns() {
+        val source = "import os, shutil\\nos.system('echo test')\\nshutil.rmtree(path)"
+        val warnings = CustomToolSourceInspector.inspect(
+            definition(kind = CustomToolKind.PYTHON, source = source)
+        )
+        assertNotNull(warnings.find { it.contains("os.system") })
+        assertNotNull(warnings.find { it.contains("filesystem deletion") })
+    }
+
+    @Test
+    fun inspectorDoesNotWarnForSimpleCalculation() {
+        assertNull(
+            CustomToolSourceInspector.inspect(
+                definition(kind = CustomToolKind.JAVASCRIPT, source = "return input.left + input.right;")
+            ).firstOrNull()
+        )
+    }
+
+    @Test
     fun acceptsJavascriptDefinition() {
         assertNull(CustomToolDefinitionValidator.validate(definition()))
     }
