@@ -21,6 +21,7 @@
     <string name="custom_tools_installed_count">الأدوات المحفوظة (%1$d)</string>
     <string name="custom_tools_review">مراجعة</string>
     <string name="custom_tools_edit">تعديل</string>
+    <string name="custom_tools_editing_mode">يجري تعديل التعريف المحفوظ بصيغة JSON. ألغِ التعديل أو احفظه للإنهاء.</string>
     <string name="custom_tools_save_edit">حفظ التعديلات (معطّلة)</string>
     <string name="custom_tools_cancel_edit">إلغاء التعديل</string>
     <string name="custom_tools_editing_status">يجري تعديل «%1$s». احفظ لاستبدال التعريف المحفوظ.</string>
