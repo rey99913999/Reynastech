@@ -52,4 +52,5 @@
     <string name="custom_tools_imported_from">ملف سكربت مستورد: %1$s</string>
     <string name="custom_tools_action_sequence">تسلسل إجراءات</string>
     <string name="custom_tools_mcp">MCP</string>
+    <string name="custom_tools_file_too_large">حجم الملف يتجاوز الحد المسموح للاستيراد (1 ميبيبايت).</string>
 </resources>
