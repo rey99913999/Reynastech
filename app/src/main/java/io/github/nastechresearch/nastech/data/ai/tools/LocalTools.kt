@@ -31,6 +31,7 @@ import me.rerere.ai.ui.UIMessagePart
 import io.github.nastechresearch.nastech.data.ai.tools.local.BiometricResultBuffer
 import io.github.nastechresearch.nastech.data.ai.tools.local.CustomToolRuntime
 import io.github.nastechresearch.nastech.data.customtools.CustomToolRepository
+import io.github.nastechresearch.nastech.data.customtools.CustomToolKind
 import io.github.nastechresearch.nastech.data.ai.tools.local.CameraResultBuffer
 import io.github.nastechresearch.nastech.data.ai.tools.local.InteractiveToolStreamer
 import io.github.nastechresearch.nastech.data.ai.tools.local.audioInfoTool
@@ -1110,7 +1111,14 @@ class LocalTools(
         }
         // Custom tools are read from app-private storage on each tool-surface build so changes
         // made in the Custom tools screen take effect without restarting the process.
-        val customDefinitions = CustomToolRepository(context).tools.value.filter { it.enabled }
+        val customDefinitions = CustomToolRepository(context).tools.value.filter { definition ->
+            definition.enabled && when (definition.kind) {
+                CustomToolKind.JAVASCRIPT -> options.contains(LocalToolOption.JavascriptEngine)
+                CustomToolKind.PYTHON -> options.contains(LocalToolOption.Termux)
+                CustomToolKind.MCP -> options.contains(LocalToolOption.McpControl)
+                CustomToolKind.ACTION_SEQUENCE -> true
+            }
+        }
         if (customDefinitions.isNotEmpty()) {
             val registrations = CustomToolRuntime.createTools(
                 context = context,
