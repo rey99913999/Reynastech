@@ -30,6 +30,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import android.provider.OpenableColumns
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -43,6 +44,7 @@ import kotlinx.serialization.json.put
 import io.github.nastechresearch.nastech.data.customtools.CustomToolDefinition
 import io.github.nastechresearch.nastech.data.customtools.CustomToolKind
 import io.github.nastechresearch.nastech.data.customtools.CustomToolRepository
+import io.github.nastechresearch.nastech.R
 import io.github.nastechresearch.nastech.ui.components.nav.BackButton
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -88,18 +90,18 @@ fun CustomToolsPage() {
                 }.onSuccess { (displayName, text) ->
                     if (importMode == "json") {
                         jsonDraft = text
-                        message = "File loaded. Review the JSON, then import it."
+                        message = context.getString(R.string.custom_tools_file_loaded_json)
                     } else {
                         val extension = displayName.substringAfterLast('.', "").lowercase()
                         val baseName = displayName.substringBeforeLast('.', displayName)
                         scriptName = baseName.replace(Regex("[^A-Za-z0-9_.-]+"), "_").trim('_', '.', '-')
-                        scriptDescription = "Imported script file: " + displayName
+                        scriptDescription = context.getString(R.string.custom_tools_imported_from, displayName)
                         scriptKind = if (extension == "py") CustomToolKind.PYTHON else CustomToolKind.JAVASCRIPT
                         scriptSource = text
-                        message = "Script loaded. Review its contents and details before importing."
+                        message = context.getString(R.string.custom_tools_file_loaded_script)
                     }
                 }.onFailure {
-                    message = it.message ?: "Could not read the selected file."
+                    message = it.message ?: context.getString(R.string.custom_tools_file_read_error)
                 }
             }
         }
@@ -108,7 +110,7 @@ fun CustomToolsPage() {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Custom tools") },
+                title = { Text(stringResource(R.string.custom_tools_title)) },
                 navigationIcon = { BackButton() },
             )
         },
@@ -117,14 +119,14 @@ fun CustomToolsPage() {
             modifier = Modifier.fillMaxSize().padding(insets).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Import tools generated in your external AI app. Nothing is activated automatically.")
+            Text(stringResource(R.string.custom_tools_intro))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (importMode == "script") {
-                    Button(onClick = { importMode = "script" }) { Text("JavaScript / Python") }
-                    OutlinedButton(onClick = { importMode = "json" }) { Text("JSON definition") }
+                    Button(onClick = { importMode = "script" }) { Text(stringResource(R.string.custom_tools_script_mode)) }
+                    OutlinedButton(onClick = { importMode = "json" }) { Text(stringResource(R.string.custom_tools_json_mode)) }
                 } else {
-                    OutlinedButton(onClick = { importMode = "script" }) { Text("JavaScript / Python") }
-                    Button(onClick = { importMode = "json" }) { Text("JSON definition") }
+                    OutlinedButton(onClick = { importMode = "script" }) { Text(stringResource(R.string.custom_tools_script_mode)) }
+                    Button(onClick = { importMode = "json" }) { Text(stringResource(R.string.custom_tools_json_mode)) }
                 }
             }
 
@@ -132,14 +134,14 @@ fun CustomToolsPage() {
                 OutlinedTextField(
                     value = scriptName,
                     onValueChange = { scriptName = it },
-                    label = { Text("Tool name (example: format_text)") },
+                    label = { Text(stringResource(R.string.custom_tools_name_label)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                 )
                 OutlinedTextField(
                     value = scriptDescription,
                     onValueChange = { scriptDescription = it },
-                    label = { Text("Description") },
+                    label = { Text(stringResource(R.string.custom_tools_description_label)) },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2,
                     maxLines = 3,
@@ -147,39 +149,39 @@ fun CustomToolsPage() {
                 OutlinedTextField(
                     value = inputSchemaDraft,
                     onValueChange = { inputSchemaDraft = it },
-                    label = { Text("Input JSON Schema (object)") },
-                    supportingText = { Text("Define properties the assistant may pass in the input object.") },
+                    label = { Text(stringResource(R.string.custom_tools_schema_label)) },
+                    supportingText = { Text(stringResource(R.string.custom_tools_schema_support)) },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2,
                     maxLines = 4,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (scriptKind == CustomToolKind.JAVASCRIPT) {
-                        Button(onClick = { scriptKind = CustomToolKind.JAVASCRIPT }) { Text("JavaScript") }
-                        OutlinedButton(onClick = { scriptKind = CustomToolKind.PYTHON }) { Text("Python / Termux") }
+                        Button(onClick = { scriptKind = CustomToolKind.JAVASCRIPT }) { Text(stringResource(R.string.custom_tools_javascript)) }
+                        OutlinedButton(onClick = { scriptKind = CustomToolKind.PYTHON }) { Text(stringResource(R.string.custom_tools_python)) }
                     } else {
-                        OutlinedButton(onClick = { scriptKind = CustomToolKind.JAVASCRIPT }) { Text("JavaScript") }
-                        Button(onClick = { scriptKind = CustomToolKind.PYTHON }) { Text("Python / Termux") }
+                        OutlinedButton(onClick = { scriptKind = CustomToolKind.JAVASCRIPT }) { Text(stringResource(R.string.custom_tools_javascript)) }
+                        Button(onClick = { scriptKind = CustomToolKind.PYTHON }) { Text(stringResource(R.string.custom_tools_python)) }
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { filePicker.launch(arrayOf("*/*")) }) {
-                        Text("Choose .js / .py file")
+                        Text(stringResource(R.string.custom_tools_choose_script))
                     }
                 }
                 OutlinedTextField(
                     value = scriptSource,
                     onValueChange = { scriptSource = it },
-                    label = { Text("Paste script source") },
+                    label = { Text(stringResource(R.string.custom_tools_paste_script)) },
                     modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
                     minLines = 5,
                     maxLines = 12,
                 )
                 Text(
                     if (scriptKind == CustomToolKind.PYTHON)
-                        "Python runs through Termux. Arguments are available as an input dictionary; print output to return a result."
+                        stringResource(R.string.custom_tools_python_help)
                     else
-                        "JavaScript runs in the local engine without DOM or Node.js APIs. Use the input object for arguments and return a result."
+                        stringResource(R.string.custom_tools_javascript_help)
                 )
                 Button(
                     onClick = {
@@ -197,7 +199,7 @@ fun CustomToolsPage() {
                             Json.parseToJsonElement(inputSchemaDraft) as? JsonObject
                                 ?: throw IllegalArgumentException("Input schema must be a JSON object.")
                         }.getOrElse {
-                            message = it.message ?: "Input schema is invalid JSON."
+                            message = it.message ?: context.getString(R.string.custom_tools_schema_invalid_error)
                             null
                         }
                         if (parsedSchema != null) {
@@ -213,7 +215,7 @@ fun CustomToolsPage() {
                             }.toString()
                             repository.importJson(definitionJson).fold(
                                 onSuccess = {
-                                    message = "Imported '${it.name}' disabled. Review it below before enabling."
+                                    message = context.getString(R.string.custom_tools_imported_disabled_status, it.name)
                                     scriptSource = ""
                                     scriptName = ""
                                     scriptDescription = ""
@@ -225,38 +227,38 @@ fun CustomToolsPage() {
                     enabled = scriptName.isNotBlank() && scriptDescription.isNotBlank() && scriptSource.isNotBlank(),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Import script (disabled)")
+                    Text(stringResource(R.string.custom_tools_import_script))
                 }
             } else {
                 OutlinedTextField(
                     value = jsonDraft,
                     onValueChange = { jsonDraft = it },
-                    label = { Text("Paste JSON tool definition") },
+                    label = { Text(stringResource(R.string.custom_tools_paste_json)) },
                     modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
                     minLines = 6,
                     maxLines = 14,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { filePicker.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }) {
-                        Text("Choose JSON file")
+                        Text(stringResource(R.string.custom_tools_choose_json))
                     }
                     Button(
                         onClick = {
                             repository.importJson(jsonDraft).fold(
                                 onSuccess = {
-                                    message = "Imported '${it.name}' disabled. Review it below before enabling."
+                                    message = context.getString(R.string.custom_tools_imported_disabled_status, it.name)
                                     jsonDraft = ""
                                 },
                                 onFailure = { message = it.message ?: "Import failed." },
                             )
                         },
                         enabled = jsonDraft.isNotBlank(),
-                    ) { Text("Import JSON (disabled)") }
+                    ) { Text(stringResource(R.string.custom_tools_import_json)) }
                 }
             }
 
             message?.let { Text(it) }
-            Text("Installed tools (${tools.size})")
+            Text(stringResource(R.string.custom_tools_installed_count, tools.size))
             Column(
                 modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -269,10 +271,10 @@ fun CustomToolsPage() {
                         ) {
                             Text(tool.name)
                             Text(tool.description)
-                            Text("Type: ${tool.kind.name.lowercase()} · ${if (tool.enabled) "Enabled" else "Disabled"}")
+                            Text(stringResource(R.string.custom_tools_status, stringResource(when (tool.kind) { CustomToolKind.JAVASCRIPT -> R.string.custom_tools_javascript; CustomToolKind.PYTHON -> R.string.custom_tools_python; CustomToolKind.ACTION_SEQUENCE -> R.string.custom_tools_action_sequence; CustomToolKind.MCP -> R.string.custom_tools_mcp }), stringResource(if (tool.enabled) R.string.custom_tools_enabled else R.string.custom_tools_disabled)))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(onClick = { reviewedTool = tool }) { Text("Review") }
-                                TextButton(onClick = { deleteTarget = tool }) { Text("Delete") }
+                                OutlinedButton(onClick = { reviewedTool = tool }) { Text(stringResource(R.string.custom_tools_review)) }
+                                TextButton(onClick = { deleteTarget = tool }) { Text(stringResource(R.string.custom_tools_delete)) }
                             }
                         }
                     }
@@ -284,53 +286,53 @@ fun CustomToolsPage() {
     reviewedTool?.let { tool ->
         AlertDialog(
             onDismissRequest = { reviewedTool = null },
-            title = { Text("Review: ${tool.name}") },
+            title = { Text(stringResource(R.string.custom_tools_review_title, tool.name)) },
             text = {
                 Column(
                     modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(tool.description)
-                    Text("Tool id: ${tool.id}")
-                    Text("Assistant-callable name: ct_${tool.name}")
-                    Text("Type: ${tool.kind.name.lowercase()}")
-                    Text("Input schema: ${tool.inputSchema}")
+                    Text(stringResource(R.string.custom_tools_id, tool.id))
+                    Text(stringResource(R.string.custom_tools_callable_name, tool.name))
+                    Text(stringResource(R.string.custom_tools_type, stringResource(when (tool.kind) { CustomToolKind.JAVASCRIPT -> R.string.custom_tools_javascript; CustomToolKind.PYTHON -> R.string.custom_tools_python; CustomToolKind.ACTION_SEQUENCE -> R.string.custom_tools_action_sequence; CustomToolKind.MCP -> R.string.custom_tools_mcp })))
+                    Text(stringResource(R.string.custom_tools_input_schema, tool.inputSchema.toString()))
                     when (tool.kind) {
                         CustomToolKind.JAVASCRIPT -> {
-                            Text("Runs in the local JavaScript engine. Review the complete source:")
+                            Text(stringResource(R.string.custom_tools_js_review))
                             Text(tool.source)
                         }
                         CustomToolKind.PYTHON -> {
-                            Text("Runs in Termux and can access its installed packages and files. Review the complete source:")
+                            Text(stringResource(R.string.custom_tools_python_review))
                             Text(tool.source)
                         }
                         CustomToolKind.ACTION_SEQUENCE -> {
-                            Text("Calls these existing Nastech tools in sequence:")
+                            Text(stringResource(R.string.custom_tools_actions_review))
                             tool.actions.forEachIndexed { index, action ->
                                 Text("${index + 1}. ${action.tool}(${action.args})")
                             }
                         }
                         CustomToolKind.MCP -> {
                             Text("Calls the configured MCP server id: ${tool.mcpServerId}")
-                            Text("Remote tool: ${tool.remoteToolName}")
+                            Text(stringResource(R.string.custom_tools_mcp_remote, tool.remoteToolName))
                         }
                     }
-                    Text("Custom scripts and action sequences require approval when called.")
+                    Text(stringResource(R.string.custom_tools_approval_note))
                 }
             },
             confirmButton = {
                 Button(onClick = {
                     repository.setEnabled(tool.id, !tool.enabled).fold(
                         onSuccess = {
-                            message = if (it.enabled) "Enabled '${it.name}'." else "Disabled '${it.name}'."
+                            message = context.getString(if (it.enabled) R.string.custom_tools_import_enabled else R.string.custom_tools_import_disabled, it.name)
                         },
                         onFailure = { message = it.message ?: "Could not change tool state." },
                     )
                     reviewedTool = null
-                }) { Text(if (tool.enabled) "Disable" else "I reviewed this — enable") }
+                }) { Text(stringResource(if (tool.enabled) R.string.custom_tools_disable_button else R.string.custom_tools_enable_reviewed)) }
             },
             dismissButton = {
-                TextButton(onClick = { reviewedTool = null }) { Text("Cancel") }
+                TextButton(onClick = { reviewedTool = null }) { Text(stringResource(R.string.custom_tools_cancel)) }
             },
         )
     }
@@ -338,18 +340,18 @@ fun CustomToolsPage() {
     deleteTarget?.let { tool ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text("Delete ${tool.name}?") },
-            text = { Text("This removes the saved definition from Nastech.") },
+            title = { Text(stringResource(R.string.custom_tools_delete_title, tool.name)) },
+            text = { Text(stringResource(R.string.custom_tools_delete_description)) },
             confirmButton = {
                 Button(onClick = {
                     repository.remove(tool.id).fold(
-                        onSuccess = { message = "Deleted '${tool.name}'." },
+                        onSuccess = { message = context.getString(R.string.custom_tools_deleted_status, tool.name) },
                         onFailure = { message = it.message ?: "Delete failed." },
                     )
                     deleteTarget = null
-                }) { Text("Delete") }
+                }) { Text(stringResource(R.string.custom_tools_delete)) }
             },
-            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Cancel") }
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text(stringResource(R.string.custom_tools_cancel)) }
             },
         )
     }
