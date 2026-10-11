@@ -317,7 +317,7 @@ class ConversationAgentRuntime(
     private fun resolveTools(agent: AgentDefinition, availableTools: List<String>, conversationId: String): List<String> =
         resolveAgentTools(agent, availableTools, pluginManager, conversationId)
 
-internal fun resolveAgentTools(
+fun resolveAgentTools(
     agent: AgentDefinition,
     availableTools: List<String>,
 ): List<String> = resolveAgentTools(agent, availableTools, null, null)
