@@ -83,6 +83,7 @@ class ExecutionToolRegistryTest {
                     sourceId = "builtin",
                     category = ToolCategory.FILES,
                     risk = ToolRiskLevel.HIGH,
+                    sideEffects = setOf("external_state_mutation"),
                 )
             )
         )
