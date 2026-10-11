@@ -53,4 +53,8 @@
     <string name="custom_tools_action_sequence">تسلسل إجراءات</string>
     <string name="custom_tools_mcp">MCP</string>
     <string name="custom_tools_file_too_large">حجم الملف يتجاوز الحد المسموح للاستيراد (1 ميبيبايت).</string>
+    <string name="custom_tools_static_warnings_heading">تحذيرات فحص المصدر</string>
+    <string name="custom_tools_static_warnings_none">لم تُكتشف أنماط تحذير معروفة، لكن ذلك لا يثبت أن السكربت آمن.</string>
+    <string name="custom_tools_static_warnings_disclaimer">قد تكون المطابقات التحذيرية خاطئة وقد يفوت الفحص بعض الأكواد الخطرة. راجع المصدر كاملًا؛ فهذا الفحص ليس بيئة عزل.</string>
+    <string name="custom_tools_unsupported_file_type">اختر ملف JavaScript بامتداد .js أو Python بامتداد .py.</string>
 </resources>
