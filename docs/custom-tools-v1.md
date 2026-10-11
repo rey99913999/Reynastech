@@ -1,6 +1,6 @@
 # Custom tools: v1 definition format
 
-This is the portable data contract for the custom-tool import work. It does not execute code by itself.
+This is the portable data contract for custom-tool import. The UI imports definitions disabled, and the runtime exposes only reviewed/enabled definitions as assistant-callable tools.
 
 ## Import behavior
 
@@ -8,7 +8,7 @@ This is the portable data contract for the custom-tool import work. It does not 
 - An import is validated and always saved as disabled, even if the incoming JSON contains `"enabled": true`.
 - Reusing an existing `id` requires explicit replacement.
 - IDs and exported tool names are constrained to safe identifier characters; script source and JSON size are bounded.
-- This repository is a foundation only: the import screen, permission review, runtime dispatch, and assistant-tool registration must be connected before imported tools become callable.
+- Imported tools are exposed to assistants as `ct_<name>` so they do not collide with built-in tool names. The UI shows the complete source/actions and requires an explicit review action before enabling.
 
 ## Definition shape
 
@@ -32,10 +32,10 @@ This is the portable data contract for the custom-tool import work. It does not 
 
 Supported `kind` values:
 
-- `actions`: fixed sequence of existing Nastech tool names and JSON arguments, up to 32 steps.
-- `javascript`: source intended for the existing JavaScript runtime.
-- `python`: source intended to run through the existing Termux integration.
-- `mcp`: wrapper for `mcpServerId` and `remoteToolName` referencing an already configured server.
+- `actions`: fixed sequence of existing Nastech tool names and JSON arguments, up to 32 steps. v1 has no inter-step templating; every step uses the args embedded in the definition.
+- `javascript`: source runs inside a bounded QuickJS context. Use the `input` object for arguments and `return` a result.
+- `python`: source runs through the existing Termux RUN_COMMAND bridge. Arguments are exposed as an `input` dict; print output to return a result.
+- `mcp`: wrapper for `mcpServerId` (UUID of a configured server) and `remoteToolName`.
 
 ## Execution safety requirements
 
