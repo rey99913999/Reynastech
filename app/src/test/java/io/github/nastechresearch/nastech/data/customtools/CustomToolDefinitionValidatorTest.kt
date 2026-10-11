@@ -69,9 +69,28 @@ class CustomToolDefinitionValidatorTest {
     }
 
     @Test
+    fun rejectsNestedCustomToolActions() {
+        assertNotNull(CustomToolDefinitionValidator.validate(
+            definition(
+                kind = CustomToolKind.ACTION_SEQUENCE,
+                source = "",
+                actions = listOf(CustomToolAction(tool = "ct_other_tool")),
+            )
+        ))
+    }
+
+    @Test
     fun requiresMcpServerAndRemoteTool() {
         assertNotNull(CustomToolDefinitionValidator.validate(
             definition(kind = CustomToolKind.MCP, source = "", mcpServerId = "", remoteToolName = "")
+        ))
+        assertNotNull(CustomToolDefinitionValidator.validate(
+            definition(
+                kind = CustomToolKind.MCP,
+                source = "",
+                mcpServerId = "not-a-uuid",
+                remoteToolName = "remote_tool",
+            )
         ))
         assertNull(CustomToolDefinitionValidator.validate(
             definition(
