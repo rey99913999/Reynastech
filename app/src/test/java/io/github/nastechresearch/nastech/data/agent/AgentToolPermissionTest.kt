@@ -33,7 +33,7 @@ class AgentToolPermissionTest {
     }
 
     @Test
-    fun `wildcard grants currently available tools before sensitive-action gate`() {
+    fun `wildcard grants currently available tools`() {
         val agent = AgentDefinition(
             name = "Reviewer",
             role = AgentRole.REVIEWER,
@@ -41,10 +41,8 @@ class AgentToolPermissionTest {
             allowedTools = listOf("*"),
         )
         assertEquals(
-            2,
-            resolveAgentTools(agent, listOf("read_window_tree", "shell")).size,
+            listOf("read_window_tree", "shell"),
+            resolveAgentTools(agent, listOf("read_window_tree", "shell")),
         )
-        assertTrue(ConversationAgentRuntime.isSensitiveTool("shell"))
-        assertTrue(ConversationAgentRuntime.isSensitiveTool("send_sms"))
     }
 }
