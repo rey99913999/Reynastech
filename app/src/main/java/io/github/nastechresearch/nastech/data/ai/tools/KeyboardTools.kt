@@ -196,7 +196,7 @@ fun keyboardTypeTool(client: KeyboardApiClient): Tool = Tool(
         "button exposed by Nastech Accessibility in the lower-right part of the active app; no " +
         "screenshot or AI detection is used. If no confidently labelled button is found, fall back " +
         "to Enter for terminals and search fields. Reports which submit path was used. Fails if " +
-        "no field is focused or the field is a password field. Example: keyboard_type(text=\\"Hello\\", submit=true).",
+        "no field is focused or the field is a password field. Example: keyboard_type(text=\"Hello\", submit=true).",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
