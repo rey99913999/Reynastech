@@ -40,12 +40,12 @@
     <string name="custom_tools_cancel">Cancel</string>
     <string name="custom_tools_delete_title">Delete %1$s?</string>
     <string name="custom_tools_delete_description">This removes the saved definition from Nastech.</string>
-    <string name="custom_tools_imported_disabled_status">Imported '%1$s' disabled. Review it below before enabling.</string>
+    <string name="custom_tools_imported_disabled_status">Imported "%1$s" disabled. Review it below before enabling.</string>
     <string name="custom_tools_file_loaded_json">File loaded. Review the JSON, then import it.</string>
     <string name="custom_tools_file_loaded_script">Script loaded. Review its contents and details before importing.</string>
-    <string name="custom_tools_import_enabled">Enabled '%1$s'.</string>
-    <string name="custom_tools_import_disabled">Disabled '%1$s'.</string>
-    <string name="custom_tools_deleted_status">Deleted '%1$s'.</string>
+    <string name="custom_tools_import_enabled">Enabled "%1$s".</string>
+    <string name="custom_tools_import_disabled">Disabled "%1$s".</string>
+    <string name="custom_tools_deleted_status">Deleted "%1$s".</string>
     <string name="custom_tools_file_read_error">Could not read the selected file.</string>
     <string name="custom_tools_schema_json_error">Input schema must be a JSON object.</string>
     <string name="custom_tools_schema_invalid_error">Input schema is invalid JSON.</string>
