@@ -101,23 +101,23 @@ object CustomToolSourceInspector {
     private data class PatternHint(val regex: Regex, val label: String)
 
     private val javascriptHints = listOf(
-        PatternHint(Regex("""\\beval\\s*\\(""", RegexOption.IGNORE_CASE), "eval(...)"),
-        PatternHint(Regex("""\\bnew\\s+Function\\b""", RegexOption.IGNORE_CASE), "new Function(...)"),
-        PatternHint(Regex("""\\bfetch\\s*\\(""", RegexOption.IGNORE_CASE), "fetch(...) network requests"),
+        PatternHint(Regex("""\beval\s*\(""", RegexOption.IGNORE_CASE), "eval(...)"),
+        PatternHint(Regex("""\bnew\s+Function\b""", RegexOption.IGNORE_CASE), "new Function(...)"),
+        PatternHint(Regex("""\bfetch\s*\(""", RegexOption.IGNORE_CASE), "fetch(...) network requests"),
         PatternHint(Regex("""XMLHttpRequest|WebSocket""", RegexOption.IGNORE_CASE), "XHR / WebSocket network access"),
-        PatternHint(Regex("""\\b(globalThis|process|require)\\b"""), "global/process/module access"),
-        PatternHint(Regex("""\\bwhile\\s*\\(\\s*true\\s*\\)|for\\s*\\(\\s*;\\s*;\\s*\\)"""), "possible infinite loop"),
+        PatternHint(Regex("""\b(globalThis|process|require)\b"""), "global/process/module access"),
+        PatternHint(Regex("""\bwhile\s*\(\s*true\s*\)|for\s*\(\s*;\s*;\s*\)"""), "possible infinite loop"),
     )
 
     private val pythonHints = listOf(
-        PatternHint(Regex("""\\bos\\s*\\.\\s*system\\s*\\(""", RegexOption.IGNORE_CASE), "os.system(...) shell execution"),
-        PatternHint(Regex("""\\bsubprocess\\b""", RegexOption.IGNORE_CASE), "subprocess command execution"),
-        PatternHint(Regex("""\\b(socket|requests|urllib)\\b""", RegexOption.IGNORE_CASE), "network access libraries"),
-        PatternHint(Regex("""\\b(eval|exec)\\s*\\(""", RegexOption.IGNORE_CASE), "eval(...) / exec(...) dynamic code"),
-        PatternHint(Regex("""\\bopen\\s*\\(""", RegexOption.IGNORE_CASE), "open(...) filesystem access"),
-        PatternHint(Regex("""shutil\\s*\\.\\s*rmtree|os\\s*\\.\\s*(remove|unlink)\\s*\\(""", RegexOption.IGNORE_CASE), "filesystem deletion"),
-        PatternHint(Regex("""\\bwhile\\s+True\\s*:"""), "possible infinite loop"),
-        PatternHint(Regex("""\\bctypes\\b""", RegexOption.IGNORE_CASE), "ctypes native-library access"),
+        PatternHint(Regex("""\bos\s*\.\s*system\s*\(""", RegexOption.IGNORE_CASE), "os.system(...) shell execution"),
+        PatternHint(Regex("""\bsubprocess\b""", RegexOption.IGNORE_CASE), "subprocess command execution"),
+        PatternHint(Regex("""\b(socket|requests|urllib)\b""", RegexOption.IGNORE_CASE), "network access libraries"),
+        PatternHint(Regex("""\b(eval|exec)\s*\(""", RegexOption.IGNORE_CASE), "eval(...) / exec(...) dynamic code"),
+        PatternHint(Regex("""\bopen\s*\(""", RegexOption.IGNORE_CASE), "open(...) filesystem access"),
+        PatternHint(Regex("""shutil\s*\.\s*rmtree|os\s*\.\s*(remove|unlink)\s*\(""", RegexOption.IGNORE_CASE), "filesystem deletion"),
+        PatternHint(Regex("""\bwhile\s+True\s*:"""), "possible infinite loop"),
+        PatternHint(Regex("""\bctypes\b""", RegexOption.IGNORE_CASE), "ctypes native-library access"),
     )
 
     fun inspect(definition: CustomToolDefinition): List<String> {
