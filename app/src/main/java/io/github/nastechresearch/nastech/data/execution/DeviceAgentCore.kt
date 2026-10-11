@@ -359,13 +359,41 @@ class DeviceAgentCore(
             for (predicate in postconditions) {
                 verificationAttempts++
                 val started = System.currentTimeMillis()
-                val result = when (predicate.type) {
-                    DevicePostconditionType.SCREEN_CHANGED,
-                    DevicePostconditionType.SCREEN_FINGERPRINT_CHANGED ->
-                        verifier.verify(predicate, before)
-                    else ->
-                        waiter.waitFor(predicate, before)
+                val verificationStartedAtMs = android.os.SystemClock.elapsedRealtime()
+                taskManager.recordExecutionEvent(
+                    taskId = plan.taskId,
+                    stepId = step.taskStepId,
+                    eventType = "VERIFICATION_STARTED",
+                    status = "RUNNING",
+                    message = "Verifying device state (${predicate.type.name})",
+                )
+                val result = try {
+                    when (predicate.type) {
+                        DevicePostconditionType.SCREEN_CHANGED,
+                        DevicePostconditionType.SCREEN_FINGERPRINT_CHANGED ->
+                            verifier.verify(predicate, before)
+                        else ->
+                            waiter.waitFor(predicate, before)
+                    }
+                } catch (t: Throwable) {
+                    val durationMs = (android.os.SystemClock.elapsedRealtime() - verificationStartedAtMs).coerceAtLeast(0L)
+                    taskManager.recordExecutionEvent(
+                        taskId = plan.taskId,
+                        stepId = step.taskStepId,
+                        eventType = "VERIFICATION_COMPLETED",
+                        status = "FAILED",
+                        message = "Device state verification failed after ${durationMs}ms (${t.javaClass.simpleName})",
+                    )
+                    throw t
                 }
+                val verificationDurationMs = (android.os.SystemClock.elapsedRealtime() - verificationStartedAtMs).coerceAtLeast(0L)
+                taskManager.recordExecutionEvent(
+                    taskId = plan.taskId,
+                    stepId = step.taskStepId,
+                    eventType = "VERIFICATION_COMPLETED",
+                    status = if (result.verified) "SUCCESS" else "FAILED",
+                    message = "Device state verification finished in ${verificationDurationMs}ms",
+                )
                 localWaitMs += System.currentTimeMillis() - started
                 verificationSource = result.observationSource
                 if (!result.verified) {
