@@ -84,7 +84,7 @@ fun CustomToolsPage() {
                             if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
                         } ?: "imported-script.js"
                         val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                            ?: throw IllegalStateException("Could not read the selected file.")
+                            ?: throw IllegalStateException(context.getString(R.string.custom_tools_file_read_error))
                         displayName to text
                     }
                 }.onSuccess { (displayName, text) ->
@@ -197,7 +197,7 @@ fun CustomToolsPage() {
                             .trim('-', '.', '_')
                         val parsedSchema = runCatching {
                             Json.parseToJsonElement(inputSchemaDraft) as? JsonObject
-                                ?: throw IllegalArgumentException("Input schema must be a JSON object.")
+                                ?: throw IllegalArgumentException(context.getString(R.string.custom_tools_schema_json_error))
                         }.getOrElse {
                             message = it.message ?: context.getString(R.string.custom_tools_schema_invalid_error)
                             null
@@ -313,7 +313,7 @@ fun CustomToolsPage() {
                             }
                         }
                         CustomToolKind.MCP -> {
-                            Text("Calls the configured MCP server id: ${tool.mcpServerId}")
+                            Text(stringResource(R.string.custom_tools_mcp_server, tool.mcpServerId))
                             Text(stringResource(R.string.custom_tools_mcp_remote, tool.remoteToolName))
                         }
                     }
