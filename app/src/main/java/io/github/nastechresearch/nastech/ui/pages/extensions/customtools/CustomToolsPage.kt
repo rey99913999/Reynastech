@@ -45,6 +45,7 @@ import kotlinx.serialization.json.put
 import io.github.nastechresearch.nastech.data.customtools.CustomToolDefinition
 import io.github.nastechresearch.nastech.data.customtools.CustomToolKind
 import io.github.nastechresearch.nastech.data.customtools.CustomToolRepository
+import io.github.nastechresearch.nastech.data.customtools.CustomToolSourceInspector
 import io.github.nastechresearch.nastech.R
 import io.github.nastechresearch.nastech.ui.components.nav.BackButton
 
@@ -111,12 +112,16 @@ fun CustomToolsPage() {
                         message = context.getString(R.string.custom_tools_file_loaded_json)
                     } else {
                         val extension = displayName.substringAfterLast('.', "").lowercase()
-                        val baseName = displayName.substringBeforeLast('.', displayName)
-                        scriptName = baseName.replace(Regex("[^A-Za-z0-9_.-]+"), "_").trim('_', '.', '-')
-                        scriptDescription = context.getString(R.string.custom_tools_imported_from, displayName)
-                        scriptKind = if (extension == "py") CustomToolKind.PYTHON else CustomToolKind.JAVASCRIPT
-                        scriptSource = text
-                        message = context.getString(R.string.custom_tools_file_loaded_script)
+                        if (extension !in setOf("js", "py")) {
+                            message = context.getString(R.string.custom_tools_unsupported_file_type)
+                        } else {
+                            val baseName = displayName.substringBeforeLast('.', displayName)
+                            scriptName = baseName.replace(Regex("[^A-Za-z0-9_.-]+"), "_").trim('_', '.', '-')
+                            scriptDescription = context.getString(R.string.custom_tools_imported_from, displayName)
+                            scriptKind = if (extension == "py") CustomToolKind.PYTHON else CustomToolKind.JAVASCRIPT
+                            scriptSource = text
+                            message = context.getString(R.string.custom_tools_file_loaded_script)
+                        }
                     }
                 }.onFailure {
                     message = it.message ?: context.getString(R.string.custom_tools_file_read_error)
@@ -315,6 +320,16 @@ fun CustomToolsPage() {
                     Text(stringResource(R.string.custom_tools_callable_name, tool.name))
                     Text(stringResource(R.string.custom_tools_type, stringResource(when (tool.kind) { CustomToolKind.JAVASCRIPT -> R.string.custom_tools_javascript; CustomToolKind.PYTHON -> R.string.custom_tools_python; CustomToolKind.ACTION_SEQUENCE -> R.string.custom_tools_action_sequence; CustomToolKind.MCP -> R.string.custom_tools_mcp })))
                     Text(stringResource(R.string.custom_tools_input_schema, tool.inputSchema.toString()))
+                    if (tool.kind == CustomToolKind.JAVASCRIPT || tool.kind == CustomToolKind.PYTHON) {
+                        val warnings = CustomToolSourceInspector.inspect(tool)
+                        if (warnings.isEmpty()) {
+                            Text(stringResource(R.string.custom_tools_static_warnings_none))
+                        } else {
+                            Text(stringResource(R.string.custom_tools_static_warnings_heading))
+                            Text(stringResource(R.string.custom_tools_static_warnings_disclaimer))
+                            warnings.forEach { warning -> Text("• " + warning) }
+                        }
+                    }
                     when (tool.kind) {
                         CustomToolKind.JAVASCRIPT -> {
                             Text(stringResource(R.string.custom_tools_js_review))
