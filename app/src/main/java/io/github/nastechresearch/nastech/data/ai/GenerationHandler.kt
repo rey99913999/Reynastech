@@ -643,11 +643,19 @@ class GenerationHandler(
 
             // Skip generation if we have approved/denied tool calls to handle
             if (pendingTools.isEmpty()) {
+                var modelRequestStartedAtMs: Long? = null
                 try {
                     onBeforeModelRequest()
                     if (devicePreflight.isDeviceTask) {
                         executionTelemetry.recordGeneralDeviceModelRequest(taskId)
                     }
+                    modelRequestStartedAtMs = android.os.SystemClock.elapsedRealtime()
+                    executionTelemetry.recordTaskStageEvent(
+                        taskId = taskId,
+                        eventType = "MODEL_REQUEST_STARTED",
+                        status = "RUNNING",
+                        message = "Model request started (${model.id})",
+                    )
                     generateInternal(
                         assistant = assistant,
                         settings = settings,
@@ -686,7 +694,27 @@ class GenerationHandler(
                         conversationLorebookIds = conversationLorebookIds,
                         workspaceCwd = workspaceCwd,
                     )
+                    modelRequestStartedAtMs?.let { startedAt ->
+                        val durationMs = (android.os.SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(0L)
+                        executionTelemetry.recordTaskStageEvent(
+                            taskId = taskId,
+                            eventType = "MODEL_RESPONSE_RECEIVED",
+                            status = "SUCCESS",
+                            message = "Model response received in ${durationMs}ms",
+                        )
+                    }
+                    modelRequestStartedAtMs = null
                 } catch (t: Throwable) {
+                    modelRequestStartedAtMs?.let { startedAt ->
+                        val durationMs = (android.os.SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(0L)
+                        val cancelled = t is CancellationException
+                        executionTelemetry.recordTaskStageEvent(
+                            taskId = taskId,
+                            eventType = if (cancelled) "MODEL_REQUEST_CANCELLED" else "MODEL_REQUEST_FAILED",
+                            status = if (cancelled) "CANCELLED" else "FAILED",
+                            message = "Model request ${if (cancelled) "cancelled" else "failed"} after ${durationMs}ms (${t.javaClass.simpleName})",
+                        )
+                    }
                     // CancellationException is honoured verbatim — stopGeneration has its
                     // own cancelToolByUser path that marks tools cancelled. We only need
                     // to handle non-cancel failures here.
