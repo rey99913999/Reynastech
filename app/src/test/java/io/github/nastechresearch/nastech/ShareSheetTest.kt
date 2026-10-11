@@ -1,5 +1,6 @@
 package io.github.nastechresearch.nastech
 
+import kotlin.io.encoding.Base64
 import me.rerere.ai.provider.BalanceOption
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
@@ -11,8 +12,11 @@ import org.junit.Test
 import kotlin.uuid.Uuid
 
 class ShareSheetTest {
+    private fun sharedJson(encoded: String): String =
+        Base64.decode(encoded.removePrefix("ai-provider:v1:")).decodeToString()
+
     @Test
-    fun `decode should restore OpenAI provider correctly`() {
+    fun `decode should restore OpenAI provider configuration without exporting raw secret`() {
         val originalId = Uuid.random()
         val original = ProviderSetting.OpenAI(
             id = originalId,
@@ -38,12 +42,11 @@ class ShareSheetTest {
         val decodedOpenAI = decoded as ProviderSetting.OpenAI
         assertEquals(originalId, decodedOpenAI.id)
         assertEquals("Test OpenAI", decodedOpenAI.name)
-        assertEquals("sk-test-key", decodedOpenAI.apiKey)
+        assertTrue(decodedOpenAI.apiKey.isEmpty())
+        assertEquals(original.credentialRef, decodedOpenAI.credentialRef)
+        assertTrue("Raw API keys must not be exported", !sharedJson(encoded).contains("sk-test-key"))
         assertEquals("https://api.openai.com/v1", decodedOpenAI.baseUrl)
-        // encodeForShare INTENTIONALLY strips the models list — share semantics are
-        // "credentials only, not the curated model list". See ShareSheet.encodeForShare:93
-        // (`copyProvider(models = emptyList())`). The decoded receiver discovers / pins
-        // their own models on import.
+        // Sharing strips the models list; credentials stay in the local encrypted vault.
         assertTrue(
             "models must be stripped on share — got ${decodedOpenAI.models.size}",
             decodedOpenAI.models.isEmpty(),
@@ -51,7 +54,7 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `decode should restore Google provider correctly`() {
+    fun `decode should restore Google provider configuration without exporting raw secret`() {
         val originalId = Uuid.random()
         val original = ProviderSetting.Google(
             id = originalId,
@@ -70,12 +73,14 @@ class ShareSheetTest {
         val decodedGoogle = decoded as ProviderSetting.Google
         assertEquals(originalId, decodedGoogle.id)
         assertEquals("Test Google", decodedGoogle.name)
-        assertEquals("test-google-key", decodedGoogle.apiKey)
+        assertTrue(decodedGoogle.apiKey.isEmpty())
+        assertEquals(original.credentialRef, decodedGoogle.credentialRef)
+        assertTrue("Raw API keys must not be exported", !sharedJson(encoded).contains("test-google-key"))
         assertEquals(false, decodedGoogle.vertexAI)
     }
 
     @Test
-    fun `decode should restore Claude provider correctly`() {
+    fun `decode should restore Claude provider configuration without exporting raw secret`() {
         val originalId = Uuid.random()
         val original = ProviderSetting.Claude(
             id = originalId,
@@ -93,7 +98,9 @@ class ShareSheetTest {
         val decodedClaude = decoded as ProviderSetting.Claude
         assertEquals(originalId, decodedClaude.id)
         assertEquals("Test Claude", decodedClaude.name)
-        assertEquals("test-claude-key", decodedClaude.apiKey)
+        assertTrue(decodedClaude.apiKey.isEmpty())
+        assertEquals(original.credentialRef, decodedClaude.credentialRef)
+        assertTrue("Raw API keys must not be exported", !sharedJson(encoded).contains("test-claude-key"))
         assertEquals(false, decodedClaude.enabled)
     }
 
@@ -137,7 +144,7 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `encode and decode should be reversible`() {
+    fun `encode and decode should be reversible for non-secret configuration`() {
         val providers = listOf(
             ProviderSetting.OpenAI(
                 name = "OpenAI Test",
@@ -163,6 +170,15 @@ class ShareSheetTest {
             assertEquals(original.id, decoded.id)
             assertEquals(original.name, decoded.name)
             assertEquals(original.enabled, decoded.enabled)
+            assertTrue(decodedJsonHasNoApiKey(encoded))
         }
+    }
+
+    private fun decodedJsonHasNoApiKey(encoded: String): Boolean {
+        val json = sharedJson(encoded)
+        return !json.contains("\"apiKey\"") &&
+            !json.contains("key1") &&
+            !json.contains("key2") &&
+            !json.contains("key3")
     }
 }

@@ -21,11 +21,11 @@ import java.io.File
 class ToolSchemaArrayItemsTest {
 
     private val toolDirs: List<String> = listOf(
-        "src/main/java/me/rerere/nastech/data/ai/tools/local",
-        "src/main/java/me/rerere/nastech/data/ai/tools",
-        "src/main/java/me/rerere/nastech/data/ai/mcp/control",
-        "src/main/java/me/rerere/nastech/subagent",
-        "src/main/java/me/rerere/nastech/workflow",
+        "src/main/java/io/github/nastechresearch/nastech/data/ai/tools/local",
+        "src/main/java/io/github/nastechresearch/nastech/data/ai/tools",
+        "src/main/java/io/github/nastechresearch/nastech/data/ai/mcp/control",
+        "src/main/java/io/github/nastechresearch/nastech/subagent",
+        "src/main/java/io/github/nastechresearch/nastech/workflow",
     )
 
     private fun resolveModuleRoot(): File {

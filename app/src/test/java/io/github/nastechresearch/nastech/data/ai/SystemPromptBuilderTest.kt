@@ -19,7 +19,7 @@ class SystemPromptBuilderTest {
         )
 
         assertTrue(prompt.startsWith("Assistant prompt"))
-        assertTrue(prompt.contains("Tool cost guidance: prefer low-cost text tools"))
+        assertTrue(prompt.contains("Tool cost guidance: prefer deterministic/local tools first"))
         assertTrue(prompt.endsWith("Surface addendum"))
 
         // Stable-first: assistant + tools precede the volatile memory/recent-chats sections.

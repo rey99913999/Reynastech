@@ -171,16 +171,58 @@ class LocalExecutionEngine(
 
             while (attempt <= maxRetries) {
                 attempt++
+                var actionStartedAtMs: Long? = null
                 try {
                     if (plan.taskId != null && step.taskStepId != null) {
                         taskManager.beginStep(plan.taskId, step.taskStepId)
                     }
 
+                    val actionStartedAt = android.os.SystemClock.elapsedRealtime()
+                    actionStartedAtMs = actionStartedAt
+                    taskManager.recordExecutionEvent(
+                        taskId = plan.taskId,
+                        stepId = step.taskStepId,
+                        eventType = "ACTION_STARTED",
+                        status = "RUNNING",
+                        message = "Local tool $resolvedToolName started",
+                    )
                     val parts = tool.execute(step.args)
+                    val actionDurationMs = (android.os.SystemClock.elapsedRealtime() - actionStartedAt).coerceAtLeast(0L)
+                    taskManager.recordExecutionEvent(
+                        taskId = plan.taskId,
+                        stepId = step.taskStepId,
+                        eventType = "ACTION_COMPLETED",
+                        status = "SUCCESS",
+                        message = "Local tool $resolvedToolName returned in ${actionDurationMs}ms",
+                    )
+                    actionStartedAtMs = null
                     val rawOutput = parts.extractText()
                     val processed = ToolOutputPreprocessor.preprocess(rawOutput)
                     val expected = step.expectedResult?.trim().orEmpty()
+                    val verificationStartedAtMs = if (step.requiresVerification) {
+                        android.os.SystemClock.elapsedRealtime().also {
+                            taskManager.recordExecutionEvent(
+                                taskId = plan.taskId,
+                                stepId = step.taskStepId,
+                                eventType = "VERIFICATION_STARTED",
+                                status = "RUNNING",
+                                message = "Checking the expected result for local tool $resolvedToolName",
+                            )
+                        }
+                    } else {
+                        null
+                    }
                     val verified = expected.isBlank() || processed.contains(expected, ignoreCase = true)
+                    verificationStartedAtMs?.let { startedAt ->
+                        val verificationDurationMs = (android.os.SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(0L)
+                        taskManager.recordExecutionEvent(
+                            taskId = plan.taskId,
+                            stepId = step.taskStepId,
+                            eventType = "VERIFICATION_COMPLETED",
+                            status = if (verified) "SUCCESS" else "FAILED",
+                            message = "Result check for $resolvedToolName finished in ${verificationDurationMs}ms",
+                        )
+                    }
 
                     if (step.requiresVerification && !verified) {
                         throw IllegalStateException(
@@ -227,6 +269,16 @@ class LocalExecutionEngine(
                     )
                     break
                 } catch (t: Throwable) {
+                    actionStartedAtMs?.let { startedAt ->
+                        val durationMs = (android.os.SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(0L)
+                        taskManager.recordExecutionEvent(
+                            taskId = plan.taskId,
+                            stepId = step.taskStepId,
+                            eventType = "ACTION_FAILED",
+                            status = "FAILED",
+                            message = "Local tool $resolvedToolName failed after ${durationMs}ms (${t.javaClass.simpleName})",
+                        )
+                    }
                     lastError = (t.message ?: t.javaClass.simpleName).take(500)
                     if (attempt <= maxRetries) {
                         telemetry.recordToolExecution(

@@ -317,7 +317,14 @@ class ConversationAgentRuntime(
     private fun resolveTools(agent: AgentDefinition, availableTools: List<String>, conversationId: String): List<String> =
         resolveAgentTools(agent, availableTools, pluginManager, conversationId)
 
-internal fun resolveAgentTools(
+    private fun encodeAgentInstruction(agent: AgentDefinition): String =
+        "AGENT_ID=" + agent.id + "\nAGENT_ROLE=" + agent.role.name + "\nAGENT_NAME=" + agent.name
+
+    private fun decodeAgentId(step: TaskStepEntity): String? =
+        Regex("AGENT_ID=([^\\n]+)").find(step.executionInstruction)?.groupValues?.getOrNull(1)
+}
+
+fun resolveAgentTools(
     agent: AgentDefinition,
     availableTools: List<String>,
 ): List<String> = resolveAgentTools(agent, availableTools, null, null)
@@ -348,12 +355,4 @@ internal fun resolveAgentTools(
             deniedName == "*" || deniedName.equals(tool, ignoreCase = true)
         }
     }
-}
-
-    private fun encodeAgentInstruction(agent: AgentDefinition): String =
-        "AGENT_ID=" + agent.id + "\nAGENT_ROLE=" + agent.role.name + "\nAGENT_NAME=" + agent.name
-
-    private fun decodeAgentId(step: TaskStepEntity): String? =
-        Regex("AGENT_ID=([^\\n]+)").find(step.executionInstruction)?.groupValues?.getOrNull(1)
-
 }

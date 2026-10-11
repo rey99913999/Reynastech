@@ -88,10 +88,11 @@ fun humanReadableExecutionError(error: String?): String {
     return when {
         "permission" in normalized || "denied" in normalized ->
             "Permission was denied while executing the step."
-        "timeout" in normalized || "exceeded" in normalized ->
-            "The step exceeded its allowed time."
+        // Check network-specific errors before the general timeout case.
         "network" in normalized || "connection" in normalized ->
             "A network connection failed or timed out."
+        "timeout" in normalized || "exceeded" in normalized ->
+            "The step exceeded its allowed time."
         "vision" in normalized || ("target" in normalized && "found" in normalized) ->
             "The requested visual target could not be found."
         "unknown_tool" in normalized ->

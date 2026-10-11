@@ -6,6 +6,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.rerere.ai.core.MessageRole
@@ -17,6 +19,10 @@ import io.github.nastechresearch.nastech.data.datastore.SettingsStore
 import io.github.nastechresearch.nastech.data.model.Conversation
 import io.github.nastechresearch.nastech.data.model.MessageNode
 import io.github.nastechresearch.nastech.data.repository.ConversationRepository
+import io.github.nastechresearch.nastech.data.task.TaskExecutionMonitor
+import io.github.nastechresearch.nastech.data.task.TaskExecutionSnapshot
+import io.github.nastechresearch.nastech.data.task.TaskEntity
+import io.github.nastechresearch.nastech.data.task.TaskManager
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
@@ -26,7 +32,33 @@ import kotlin.uuid.Uuid
 class DebugVM(
     private val settingsStore: SettingsStore,
     private val conversationRepository: ConversationRepository,
+    private val taskManager: TaskManager,
 ) : ViewModel() {
+    private val taskExecutionMonitor = TaskExecutionMonitor(taskManager)
+
+    val recentTasks: StateFlow<List<TaskEntity>> = taskManager.observeTasks()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val selectedTaskId = MutableStateFlow<String?>(null)
+
+    val selectedTaskSnapshot: StateFlow<TaskExecutionSnapshot?> = selectedTaskId
+        .flatMapLatest { taskId ->
+            if (taskId.isNullOrBlank()) {
+                flowOf<TaskExecutionSnapshot?>(null)
+            } else {
+                taskExecutionMonitor.observe(taskId)
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun selectTaskForMonitoring(taskId: String) {
+        selectedTaskId.value = taskId
+    }
+
+    fun clearMonitoredTask() {
+        selectedTaskId.value = null
+    }
+
     val settings: StateFlow<Settings> = settingsStore.settingsFlow
         .stateIn(viewModelScope, SharingStarted.Lazily, Settings.dummy())
 

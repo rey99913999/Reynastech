@@ -63,7 +63,7 @@ class ExecutionToolRegistryTest {
         assertEquals(ToolCategory.FILES, metadata.category)
         assertEquals(ToolRiskLevel.LOW, metadata.risk)
         assertTrue(metadata.sideEffects.isEmpty())
-        assertEquals(listOf("value"), metadata.inputSummary)
+        assertEquals(listOf("value:string"), metadata.inputSummary)
         assertEquals(listOf("value"), metadata.requiredFields)
     }
 
@@ -83,6 +83,7 @@ class ExecutionToolRegistryTest {
                     sourceId = "builtin",
                     category = ToolCategory.FILES,
                     risk = ToolRiskLevel.HIGH,
+                    sideEffects = setOf("external_state_mutation"),
                 )
             )
         )

@@ -1,8 +1,8 @@
 package io.github.nastechresearch.nastech.plugin
 
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 class PluginModelsTest {
     @Test
@@ -14,11 +14,7 @@ class PluginModelsTest {
 
     @Test
     fun manifestIdIsNormalized() {
-        val manifest = PluginManifest(
-            id = "My Plugin",
-            name = "Example",
-            version = "1.0.0",
-        )
+        val manifest = PluginManifest(id = "My Plugin", name = "Example", version = "1.0.0")
         assertEquals("my-plugin", manifest.normalizedId())
     }
 

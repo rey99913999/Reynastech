@@ -115,7 +115,7 @@ fun DebugPage(vm: DebugVM = koinViewModel()) {
                         }
                     },
                     text = {
-                        Text("Logging")
+                        Text("Task Monitor")
                     }
                 )
             }
@@ -128,7 +128,7 @@ fun DebugPage(vm: DebugVM = koinViewModel()) {
                 when (page) {
                     0 -> MainPage(vm)
                     1 -> ColorsPage()
-                    2 -> Box {}
+                    2 -> TaskMonitorPage(vm)
                 }
             }
         }
@@ -276,6 +276,127 @@ private fun MainPage(vm: DebugVM) {
             value = markdown,
             onValueChange = { markdown = it },
             modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun TaskMonitorPage(vm: DebugVM) {
+    val tasks by vm.recentTasks.collectAsStateWithLifecycle()
+    val snapshot by vm.selectedTaskSnapshot.collectAsStateWithLifecycle()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("Task execution monitor", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Read-only diagnostics. Time thresholds indicate a possible delay, not proof that execution is stuck.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        Text("Recent tasks", style = MaterialTheme.typography.titleSmall)
+        if (tasks.isEmpty()) {
+            Text("No tasks have been recorded yet.")
+        } else {
+            tasks.take(10).forEach { task ->
+                Button(
+                    onClick = { vm.selectTaskForMonitoring(task.taskId) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        task.status + " • " + task.goal.replace("\\s+".toRegex(), " ").take(72),
+                        maxLines = 2,
+                    )
+                }
+            }
+        }
+
+        snapshot?.let { run ->
+            HorizontalDivider()
+            Text("Current task", style = MaterialTheme.typography.titleMedium)
+            Text(run.goal)
+            Text("Status: ${run.taskStatus} • ${run.health.name}")
+            Text("Total time: ${monitorDuration(run.totalElapsedMs)}")
+
+            run.currentStepGoal?.let {
+                Text("Current step: $it", style = MaterialTheme.typography.titleSmall)
+            }
+            run.currentActivity?.let { activity ->
+                Text(
+                    "Current stage: ${activity.stage} • ${monitorDuration(activity.elapsedMs)}",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                activity.description?.takeIf(String::isNotBlank)?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            run.diagnosticMessage?.let {
+                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+
+            HorizontalDivider()
+            Text("Step timings", style = MaterialTheme.typography.titleSmall)
+            run.steps.forEach { step ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Text(
+                        "${step.orderIndex + 1}. ${step.goal}",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        "${step.status} • total: ${monitorDuration(step.totalDurationMs)}" +
+                            " • active attempt: ${monitorDuration(step.currentAttemptDurationMs)}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (step.attempts.isNotEmpty()) {
+                        Text(
+                            "Recorded attempts: ${step.attempts.size}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    step.lastError?.takeIf(String::isNotBlank)?.let {
+                        Text("Last error: $it", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+
+            run.lastEvent?.let { event ->
+                HorizontalDivider()
+                Text("Last event: ${event.eventType}" + (event.status?.let { " • $it" } ?: ""))
+                event.message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                Text(
+                    "Updated: ${java.text.DateFormat.getTimeInstance().format(java.util.Date(event.timestampMs))}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Button(onClick = { vm.clearMonitoredTask() }, modifier = Modifier.fillMaxWidth()) {
+                Text("Clear selection")
+            }
+        }
+    }
+}
+
+private fun monitorDuration(durationMs: Long?): String {
+    if (durationMs == null) return "not available"
+    val ms = durationMs.coerceAtLeast(0L)
+    return when {
+        ms < 1_000L -> "${ms}ms"
+        ms < 60_000L -> String.format(java.util.Locale.ROOT, "%.1fs", ms / 1_000.0)
+        else -> String.format(
+            java.util.Locale.ROOT,
+            "%dm %02ds",
+            ms / 60_000L,
+            (ms % 60_000L) / 1_000L,
         )
     }
 }

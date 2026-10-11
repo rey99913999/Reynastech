@@ -157,7 +157,35 @@ class DeviceAgentCore(
                         results += failure(plan, step, "verify_step_missing_postcondition")
                         break
                     }
-                    val verification = verifier.verify(predicate, before)
+                    val verificationStartedAtMs = android.os.SystemClock.elapsedRealtime()
+                    taskManager.recordExecutionEvent(
+                        taskId = plan.taskId,
+                        stepId = step.taskStepId,
+                        eventType = "VERIFICATION_STARTED",
+                        status = "RUNNING",
+                        message = "Checking the device postcondition",
+                    )
+                    val verification = try {
+                        verifier.verify(predicate, before)
+                    } catch (t: Throwable) {
+                        val durationMs = (android.os.SystemClock.elapsedRealtime() - verificationStartedAtMs).coerceAtLeast(0L)
+                        taskManager.recordExecutionEvent(
+                            taskId = plan.taskId,
+                            stepId = step.taskStepId,
+                            eventType = "VERIFICATION_COMPLETED",
+                            status = "FAILED",
+                            message = "Device verification failed after ${durationMs}ms (${t.javaClass.simpleName})",
+                        )
+                        throw t
+                    }
+                    val verificationDurationMs = (android.os.SystemClock.elapsedRealtime() - verificationStartedAtMs).coerceAtLeast(0L)
+                    taskManager.recordExecutionEvent(
+                        taskId = plan.taskId,
+                        stepId = step.taskStepId,
+                        eventType = "VERIFICATION_COMPLETED",
+                        status = if (verification.verified) "SUCCESS" else "FAILED",
+                        message = "Device verification finished in ${verificationDurationMs}ms",
+                    )
                     val result = if (verification.verified) {
                         ExecutionStepResult(
                             stepId = step.id,
@@ -218,6 +246,21 @@ class DeviceAgentCore(
                 break
             }
 
+            val actionLabel = step.deviceAction?.name ?: step.toolName ?: "device action"
+            val waitingForApp = step.deviceAction == DeviceAction.WAIT_FOR_RESPONSE
+            val stagePrefix = if (waitingForApp) "WAIT" else "ACTION"
+            val actionStartedAtMs = android.os.SystemClock.elapsedRealtime()
+            taskManager.recordExecutionEvent(
+                taskId = plan.taskId,
+                stepId = step.taskStepId,
+                eventType = "${stagePrefix}_STARTED",
+                status = "RUNNING",
+                message = if (waitingForApp) {
+                    "Waiting for the target app to respond"
+                } else {
+                    "Device action $actionLabel started"
+                },
+            )
             val initial = executeAction(
                 step = step,
                 registry = registry,
@@ -240,6 +283,32 @@ class DeviceAgentCore(
             } else {
                 initial
             }
+
+            val actionDurationMs = (android.os.SystemClock.elapsedRealtime() - actionStartedAtMs).coerceAtLeast(0L)
+            val actionEventType = when {
+                action.requiresApproval -> "${stagePrefix}_AWAITING_APPROVAL"
+                action.executed -> if (waitingForApp) "WAIT_COMPLETED" else "ACTION_COMPLETED"
+                else -> if (waitingForApp) "WAIT_FAILED" else "ACTION_FAILED"
+            }
+            val actionStatus = when {
+                action.requiresApproval -> "APPROVAL_REQUIRED"
+                action.executed -> "SUCCESS"
+                else -> "FAILED"
+            }
+            taskManager.recordExecutionEvent(
+                taskId = plan.taskId,
+                stepId = step.taskStepId,
+                eventType = actionEventType,
+                status = actionStatus,
+                message = when {
+                    action.requiresApproval ->
+                        "Device action $actionLabel is waiting for user approval"
+                    action.executed ->
+                        "Device action $actionLabel completed in ${actionDurationMs}ms"
+                    else ->
+                        "Device action $actionLabel failed after ${actionDurationMs}ms"
+                },
+            )
 
             if (action.requiresApproval) {
                 results += ExecutionStepResult(
@@ -290,13 +359,41 @@ class DeviceAgentCore(
             for (predicate in postconditions) {
                 verificationAttempts++
                 val started = System.currentTimeMillis()
-                val result = when (predicate.type) {
-                    DevicePostconditionType.SCREEN_CHANGED,
-                    DevicePostconditionType.SCREEN_FINGERPRINT_CHANGED ->
-                        verifier.verify(predicate, before)
-                    else ->
-                        waiter.waitFor(predicate, before)
+                val verificationStartedAtMs = android.os.SystemClock.elapsedRealtime()
+                taskManager.recordExecutionEvent(
+                    taskId = plan.taskId,
+                    stepId = step.taskStepId,
+                    eventType = "VERIFICATION_STARTED",
+                    status = "RUNNING",
+                    message = "Verifying device state (${predicate.type.name})",
+                )
+                val result = try {
+                    when (predicate.type) {
+                        DevicePostconditionType.SCREEN_CHANGED,
+                        DevicePostconditionType.SCREEN_FINGERPRINT_CHANGED ->
+                            verifier.verify(predicate, before)
+                        else ->
+                            waiter.waitFor(predicate, before)
+                    }
+                } catch (t: Throwable) {
+                    val durationMs = (android.os.SystemClock.elapsedRealtime() - verificationStartedAtMs).coerceAtLeast(0L)
+                    taskManager.recordExecutionEvent(
+                        taskId = plan.taskId,
+                        stepId = step.taskStepId,
+                        eventType = "VERIFICATION_COMPLETED",
+                        status = "FAILED",
+                        message = "Device state verification failed after ${durationMs}ms (${t.javaClass.simpleName})",
+                    )
+                    throw t
                 }
+                val verificationDurationMs = (android.os.SystemClock.elapsedRealtime() - verificationStartedAtMs).coerceAtLeast(0L)
+                taskManager.recordExecutionEvent(
+                    taskId = plan.taskId,
+                    stepId = step.taskStepId,
+                    eventType = "VERIFICATION_COMPLETED",
+                    status = if (result.verified) "SUCCESS" else "FAILED",
+                    message = "Device state verification finished in ${verificationDurationMs}ms",
+                )
                 localWaitMs += System.currentTimeMillis() - started
                 verificationSource = result.observationSource
                 if (!result.verified) {
