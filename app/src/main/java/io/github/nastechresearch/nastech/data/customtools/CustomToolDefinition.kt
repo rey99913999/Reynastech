@@ -4,6 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlin.uuid.Uuid
 
 /**
  * Portable description of a user-authored tool.
@@ -45,7 +46,7 @@ object CustomToolDefinitionValidator {
     const val MAX_ACTIONS = 32
 
     private val idPattern = Regex("[a-z0-9][a-z0-9._-]{0,63}")
-    private val toolNamePattern = Regex("[a-zA-Z][a-zA-Z0-9_.-]{0,63}")
+    private val toolNamePattern = Regex("[a-zA-Z][a-zA-Z0-9_.-]{0,60}")
 
     /** Returns a user-readable validation error, or null when structurally valid. */
     fun validate(definition: CustomToolDefinition): String? {
@@ -53,7 +54,7 @@ object CustomToolDefinitionValidator {
             return "Tool id must be 1–64 lowercase letters, digits, dots, underscores, or hyphens."
         }
         if (!toolNamePattern.matches(definition.name)) {
-            return "Tool name must start with a letter and contain only letters, digits, dots, underscores, or hyphens."
+            return "Tool name must start with a letter and contain only letters, digits, dots, underscores, or hyphens (maximum 61 characters)."
         }
         if (definition.description.isBlank() || definition.description.length > MAX_DESCRIPTION_CHARS) {
             return "Description must be between 1 and $MAX_DESCRIPTION_CHARS characters."
