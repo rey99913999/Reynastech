@@ -53,4 +53,8 @@
     <string name="custom_tools_action_sequence">Action sequence</string>
     <string name="custom_tools_mcp">MCP</string>
     <string name="custom_tools_file_too_large">File exceeds the 1 MiB import limit.</string>
+    <string name="custom_tools_static_warnings_heading">Source inspection warnings</string>
+    <string name="custom_tools_static_warnings_none">No known warning patterns were detected; this does not prove the script is safe.</string>
+    <string name="custom_tools_static_warnings_disclaimer">Heuristic matches can be false positives and can miss dangerous code. Review the full source; warnings are not a sandbox.</string>
+    <string name="custom_tools_unsupported_file_type">Choose a JavaScript (.js) or Python (.py) file.</string>
 </resources>
