@@ -1,6 +1,9 @@
 package io.github.nastechresearch.nastech.data.ai.tools
 
+import android.graphics.Rect
 import android.view.KeyEvent
+import android.view.accessibility.AccessibilityNodeInfo
+import io.github.nastechresearch.nastech.service.RikkaAccessibilityService
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -98,18 +101,102 @@ private inline fun <T> handle(
     is KeyboardApiClient.Result.Err -> failureEnvelope(result.failure)
 }
 
+private data class SendButtonCandidate(
+    val node: AccessibilityNodeInfo,
+    val score: Int,
+    val label: String,
+)
+
+private data class SendButtonClickResult(
+    val clicked: Boolean,
+    val reason: String,
+    val label: String? = null,
+)
+
+private fun sendLabelScore(raw: String?): Int {
+    val value = raw?.trim()?.lowercase().orEmpty()
+    if (value.isEmpty()) return 0
+    return when {
+        value == "send" || value == "submit" -> 4
+        value.contains("send message") || value.contains("send prompt") -> 5
+        value.startsWith("send ") -> 4
+        listOf("إرسال", "ارسال", "أرسل", "ارسل").any(value::contains) -> 5
+        else -> 0
+    }
+}
+
+/**
+ * Clicks a semantically labelled send/submit control from the active app's accessibility
+ * tree. No screenshot or AI inference is used. A candidate must be visible, enabled,
+ * clickable, and in the lower-right portion of the app window to avoid tapping unrelated
+ * "send" controls elsewhere on the screen.
+ */
+private fun clickAccessibleSendButton(): SendButtonClickResult {
+    val service = RikkaAccessibilityService.instance
+        ?: return SendButtonClickResult(false, "accessibility_service_inactive")
+    val root = service.rootInActiveWindow
+        ?: return SendButtonClickResult(false, "no_active_window")
+    val rootBounds = Rect().also(root::getBoundsInScreen)
+    if (rootBounds.isEmpty) return SendButtonClickResult(false, "window_bounds_unavailable")
+
+    val candidates = mutableListOf<SendButtonCandidate>()
+    fun visit(node: AccessibilityNodeInfo) {
+        if (node.isVisibleToUser && node.isEnabled) {
+            val text = node.text?.toString()
+            val description = node.contentDescription?.toString()
+            val resourceId = node.viewIdResourceName.orEmpty().lowercase()
+            val labelScore = maxOf(sendLabelScore(text), sendLabelScore(description))
+            val idScore = if (resourceId.contains("send") || resourceId.contains("submit")) 1 else 0
+
+            if (labelScore > 0 || idScore > 0) {
+                val clickable = runCatching {
+                    if (node.isClickable) node else service.resolveClickable(node)
+                }.getOrNull()
+                if (clickable != null && clickable.isVisibleToUser && clickable.isEnabled) {
+                    val bounds = Rect().also(clickable::getBoundsInScreen)
+                    val lowerRight =
+                        !bounds.isEmpty &&
+                        bounds.centerX() >= rootBounds.left + rootBounds.width() * 0.45f &&
+                        bounds.centerY() >= rootBounds.top + rootBounds.height() * 0.45f
+                    if (lowerRight) {
+                        val label = sequenceOf(description, text)
+                            .firstOrNull { sendLabelScore(it) > 0 }
+                            ?: resourceId
+                        val score = labelScore * 100 + idScore * 20
+                        candidates.add(SendButtonCandidate(clickable, score, label.take(100)))
+                    }
+                }
+            }
+        }
+        for (i in 0 until node.childCount) {
+            val child = runCatching { node.getChild(i) }.getOrNull() ?: continue
+            visit(child)
+        }
+    }
+
+    visit(root)
+    val target = candidates.maxByOrNull { it.score }
+        ?: return SendButtonClickResult(false, "no_confident_lower_right_send_button")
+    val clicked = runCatching {
+        target.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+    }.getOrDefault(false)
+    return if (clicked) {
+        SendButtonClickResult(true, "accessibility_send_button_clicked", target.label)
+    } else {
+        SendButtonClickResult(false, "accessibility_click_rejected", target.label)
+    }
+}
+
 // -- tools ------------------------------------------------------------------------------
 
 fun keyboardTypeTool(client: KeyboardApiClient): Tool = Tool(
     name = "keyboard_type",
     description = "Type text into the currently focused text field on the device via the " +
-        "agent-keyboard IME. Inserts at the cursor. Set submit=true to insert the text and " +
-        "press Enter as one atomic action inside the keyboard service - prefer this over a " +
-        "separate keyboard_press_key(enter) call, which can race the app and garble input " +
-        "(especially in terminals). Fails if " +
-        "no field is focused or the field is a password field. In terminal-like apps " +
-        "keyboard_read_field returns empty, so take a screenshot first to confirm the prompt " +
-        "is ready before typing. Example: keyboard_type(text=\"whoami\", submit=true).",
+        "agent-keyboard IME. When submit=true, first try to click a visible, enabled send/submit " +
+        "button exposed by Nastech Accessibility in the lower-right part of the active app; no " +
+        "screenshot or AI detection is used. If no confidently labelled button is found, fall back " +
+        "to Enter for terminals and search fields. Reports which submit path was used. Fails if " +
+        "no field is focused or the field is a password field. Example: keyboard_type(text=\\"Hello\\", submit=true).",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
@@ -119,9 +206,8 @@ fun keyboardTypeTool(client: KeyboardApiClient): Tool = Tool(
                 })
                 put("submit", buildJsonObject {
                     put("type", "boolean")
-                    put("description", "If true, press Enter after typing as one atomic " +
-                        "action (default false). Use for terminals, search boxes, and chat " +
-                        "inputs to avoid a type/press_key race.")
+                    put("description", "If true, type then click a labelled lower-right send button using " +
+                        "Accessibility; if none is confidently detected, fall back to Enter (default false).")
                 })
             },
             required = listOf("text"),
@@ -135,17 +221,34 @@ fun keyboardTypeTool(client: KeyboardApiClient): Tool = Tool(
                 "Provide the text to type.",
             )
         val submit = args.jsonObject["submit"]?.jsonPrimitive?.booleanOrNull ?: false
-        when (val result = if (submit) {
-            client.typeTextAndSubmit(text)
-        } else {
-            client.typeText(text)
-        }) {
-            is KeyboardApiClient.Result.Err -> failureEnvelope(result.failure)
-            is KeyboardApiClient.Result.Ok ->
-                ok {
-                    put("typed", text.length)
-                    if (submit) put("submitted", true)
+        when (val typed = client.typeText(text)) {
+            is KeyboardApiClient.Result.Err -> failureEnvelope(typed.failure)
+            is KeyboardApiClient.Result.Ok -> {
+                if (!submit) {
+                    ok { put("typed", text.length) }
+                } else {
+                    val buttonResult = clickAccessibleSendButton()
+                    if (buttonResult.clicked) {
+                        ok {
+                            put("typed", text.length)
+                            put("submitted", true)
+                            put("submit_method", "accessibility_send_button")
+                            buttonResult.label?.let { put("send_button_label", it) }
+                        }
+                    } else {
+                        when (val enterResult = client.pressKey(KeyEvent.KEYCODE_ENTER)) {
+                            is KeyboardApiClient.Result.Err -> failureEnvelope(enterResult.failure)
+                            is KeyboardApiClient.Result.Ok -> ok {
+                                put("typed", text.length)
+                                put("submitted", true)
+                                put("submit_method", "enter_fallback")
+                                put("send_button_lookup", buttonResult.reason)
+                                buttonResult.label?.let { put("send_button_label", it) }
+                            }
+                        }
+                    }
                 }
+            }
         }
     },
 )
