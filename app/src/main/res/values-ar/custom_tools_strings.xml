@@ -24,6 +24,7 @@
     <string name="custom_tools_save_edit">حفظ التعديلات (معطّلة)</string>
     <string name="custom_tools_cancel_edit">إلغاء التعديل</string>
     <string name="custom_tools_editing_status">يجري تعديل «%1$s». احفظ لاستبدال التعريف المحفوظ.</string>
+    <string name="custom_tools_edit_id_immutable">لا يمكن تغيير معرّف الأداة أثناء تعديل أداة محفوظة.</string>
     <string name="custom_tools_updated_disabled_status">تم تحديث «%1$s» مع إبقائها معطّلة. راجعها قبل التفعيل.</string>
     <string name="custom_tools_edit_cancelled">تم إلغاء التعديل.</string>
     <string name="custom_tools_delete">حذف</string>
