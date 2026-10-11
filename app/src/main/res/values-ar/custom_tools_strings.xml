@@ -49,4 +49,7 @@
     <string name="custom_tools_file_read_error">تعذّر قراءة الملف المحدد.</string>
     <string name="custom_tools_schema_json_error">يجب أن يكون مخطط المدخلات كائن JSON.</string>
     <string name="custom_tools_schema_invalid_error">صيغة JSON لمخطط المدخلات غير صالحة.</string>
+    <string name="custom_tools_imported_from">ملف سكربت مستورد: %1$s</string>
+    <string name="custom_tools_action_sequence">تسلسل إجراءات</string>
+    <string name="custom_tools_mcp">MCP</string>
 </resources>
