@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.OutlinedButton
@@ -41,6 +42,7 @@ import io.github.nastechresearch.nastech.data.customtools.CustomToolKind
 import io.github.nastechresearch.nastech.data.customtools.CustomToolRepository
 import io.github.nastechresearch.nastech.ui.components.nav.BackButton
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomToolsPage() {
     val context = LocalContext.current
@@ -137,9 +139,9 @@ fun CustomToolsPage() {
                 )
                 Text(
                     if (scriptKind == CustomToolKind.PYTHON)
-                        "Python runs through your existing Termux integration and may access the Termux environment."
+                        "Python runs through Termux. Arguments are available as an input dictionary; print output to return a result."
                     else
-                        "JavaScript runs in the local engine without DOM or Node.js APIs."
+                        "JavaScript runs in the local engine without DOM or Node.js APIs. Use the input object for arguments and return a result."
                 )
                 Button(
                     onClick = {
