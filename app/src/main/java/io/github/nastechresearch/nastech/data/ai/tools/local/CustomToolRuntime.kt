@@ -24,10 +24,12 @@ import io.github.nastechresearch.nastech.data.customtools.CustomToolKind
 import io.github.nastechresearch.nastech.data.customtools.CustomToolDefinitionValidator
 import io.github.nastechresearch.nastech.data.preferences.TermuxRuntime
 import kotlin.uuid.Uuid
+import java.util.concurrent.atomic.AtomicBoolean
 
 private const val CUSTOM_JS_TIMEOUT_MS = 5_000L
 private const val CUSTOM_OUTPUT_LIMIT_CHARS = 24_000
 private const val TERMUX_PYTHON = "/data/data/com.termux/files/usr/bin/python"
+private val CUSTOM_JS_EXECUTION_ACTIVE = AtomicBoolean(false)
 
 /** A validated custom definition paired with its assistant-callable tool. */
 data class CustomToolRegistration(
@@ -191,9 +193,20 @@ object CustomToolRuntime {
         source: String,
         input: JsonObject,
     ): List<UIMessagePart> {
+        // QuickJS evaluation is native and cannot be safely interrupted from a coroutine.
+        // If a script exceeds the wall-clock wait limit and continues running, fail closed
+        // rather than allowing multiple abandoned script threads to accumulate.
+        if (!CUSTOM_JS_EXECUTION_ACTIVE.compareAndSet(false, true)) {
+            return failure(
+                toolId,
+                "javascript_busy",
+                "A previous custom JavaScript script is still running. Wait for it to finish before retrying.",
+            )
+        }
+
         val done = CompletableDeferred<String>()
         val inputLiteral = JsonPrimitive(input.toString()).toString()
-        Thread {
+        val worker = Thread {
             var engine: QuickJSContext? = null
             try {
                 engine = QuickJSContext.create()
@@ -221,11 +234,21 @@ object CustomToolRuntime {
                 )
             } finally {
                 try { engine?.destroy() } catch (_: Throwable) { }
+                CUSTOM_JS_EXECUTION_ACTIVE.set(false)
             }
         }.apply {
             name = "custom-js-${System.nanoTime()}"
             isDaemon = true
-            start()
+        }
+        try {
+            worker.start()
+        } catch (t: Throwable) {
+            CUSTOM_JS_EXECUTION_ACTIVE.set(false)
+            return failure(
+                toolId,
+                "javascript_start_failed",
+                t.message ?: "Could not start the custom JavaScript runtime.",
+            )
         }
 
         val payload = withTimeoutOrNull(CUSTOM_JS_TIMEOUT_MS) { done.await() }
