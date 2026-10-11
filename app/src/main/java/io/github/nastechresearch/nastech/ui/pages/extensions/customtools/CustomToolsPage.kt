@@ -48,6 +48,8 @@ import io.github.nastechresearch.nastech.data.customtools.CustomToolRepository
 import io.github.nastechresearch.nastech.R
 import io.github.nastechresearch.nastech.ui.components.nav.BackButton
 
+private const val MAX_IMPORTED_FILE_BYTES = 1024 * 1024
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomToolsPage() {
