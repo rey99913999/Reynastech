@@ -209,8 +209,10 @@ internal fun buildTaskExecutionSnapshot(
             0L
         }
     val mostRecentEvent = orderedAudit.lastOrNull()
-    val waitingForApproval = mostRecentEvent?.eventType == "ACTION_AWAITING_APPROVAL" ||
-        mostRecentEvent?.status == "APPROVAL_REQUIRED"
+    val waitingForApproval = mostRecentEvent?.eventType in setOf(
+        "ACTION_AWAITING_APPROVAL",
+        "WAIT_AWAITING_APPROVAL",
+    ) || mostRecentEvent?.status == "APPROVAL_REQUIRED"
 
     val health = when {
         task.status == TaskStatus.COMPLETED.name -> TaskExecutionHealth.COMPLETED
@@ -347,7 +349,8 @@ private fun findActiveActivity(
                 active = event
             "MODEL_RESPONSE_RECEIVED", "MODEL_REQUEST_FAILED", "MODEL_REQUEST_CANCELLED",
             "ACTION_COMPLETED", "ACTION_FAILED", "ACTION_AWAITING_APPROVAL",
-            "VERIFICATION_COMPLETED", "WAIT_COMPLETED", "WAIT_FAILED" -> {
+            "VERIFICATION_COMPLETED", "WAIT_COMPLETED", "WAIT_FAILED",
+            "WAIT_AWAITING_APPROVAL" -> {
                 val start = active
                 if (start != null && matchingEnd(start.eventType, event.eventType)) active = null
             }
@@ -378,6 +381,6 @@ private fun matchingEnd(startType: String, endType: String): Boolean = when (sta
         "ACTION_COMPLETED", "ACTION_FAILED", "ACTION_AWAITING_APPROVAL",
     )
     "VERIFICATION_STARTED" -> endType == "VERIFICATION_COMPLETED"
-    "WAIT_STARTED" -> endType in setOf("WAIT_COMPLETED", "WAIT_FAILED")
+    "WAIT_STARTED" -> endType in setOf("WAIT_COMPLETED", "WAIT_FAILED", "WAIT_AWAITING_APPROVAL")
     else -> false
 }
