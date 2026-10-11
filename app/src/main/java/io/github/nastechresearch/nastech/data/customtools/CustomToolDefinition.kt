@@ -98,36 +98,41 @@ object CustomToolDefinitionValidator {
  * not a malware verdict; absence of matches does not establish safety.
  */
 object CustomToolSourceInspector {
-    private data class PatternHint(val regex: Regex, val label: String)
-
-    private val javascriptHints = listOf(
-        PatternHint(Regex("""\beval\s*\(""", RegexOption.IGNORE_CASE), "eval(...)"),
-        PatternHint(Regex("""\bnew\s+Function\b""", RegexOption.IGNORE_CASE), "new Function(...)"),
-        PatternHint(Regex("""\bfetch\s*\(""", RegexOption.IGNORE_CASE), "fetch(...) network requests"),
-        PatternHint(Regex("""XMLHttpRequest|WebSocket""", RegexOption.IGNORE_CASE), "XHR / WebSocket network access"),
-        PatternHint(Regex("""\b(globalThis|process|require)\b"""), "global/process/module access"),
-        PatternHint(Regex("""\bwhile\s*\(\s*true\s*\)|for\s*\(\s*;\s*;\s*\)"""), "possible infinite loop"),
-    )
-
-    private val pythonHints = listOf(
-        PatternHint(Regex("""\bos\s*\.\s*system\s*\(""", RegexOption.IGNORE_CASE), "os.system(...) shell execution"),
-        PatternHint(Regex("""\bsubprocess\b""", RegexOption.IGNORE_CASE), "subprocess command execution"),
-        PatternHint(Regex("""\b(socket|requests|urllib)\b""", RegexOption.IGNORE_CASE), "network access libraries"),
-        PatternHint(Regex("""\b(eval|exec)\s*\(""", RegexOption.IGNORE_CASE), "eval(...) / exec(...) dynamic code"),
-        PatternHint(Regex("""\bopen\s*\(""", RegexOption.IGNORE_CASE), "open(...) filesystem access"),
-        PatternHint(Regex("""shutil\s*\.\s*rmtree|os\s*\.\s*(remove|unlink)\s*\(""", RegexOption.IGNORE_CASE), "filesystem deletion"),
-        PatternHint(Regex("""\bwhile\s+True\s*:"""), "possible infinite loop"),
-        PatternHint(Regex("""\bctypes\b""", RegexOption.IGNORE_CASE), "ctypes native-library access"),
-    )
-
+    /**
+     * This deliberately uses conservative substring checks instead of a regex parser.
+     * It is a review aid, not a security verdict or a sandbox.
+     */
     fun inspect(definition: CustomToolDefinition): List<String> {
-        val hints = when (definition.kind) {
-            CustomToolKind.JAVASCRIPT -> javascriptHints
-            CustomToolKind.PYTHON -> pythonHints
+        val source = definition.source.lowercase()
+        val warnings = mutableListOf<String>()
+
+        fun containsAny(vararg needles: String): Boolean = needles.any(source::contains)
+
+        when (definition.kind) {
+            CustomToolKind.JAVASCRIPT -> {
+                if (containsAny("eval(", "eval (")) warnings += "eval(...) dynamic evaluation"
+                if (containsAny("new function")) warnings += "new Function(...) dynamic code"
+                if (containsAny("fetch(", "fetch (")) warnings += "fetch(...) network requests"
+                if (containsAny("xmlhttprequest", "websocket")) warnings += "XHR / WebSocket network access"
+                if (containsAny("globalthis", "process", "require(")) warnings += "global/process/module access"
+                if (containsAny("while(true)", "while (true)", "for(;;)", "for (;;)", "for (;;)")) {
+                    warnings += "possible infinite loop"
+                }
+            }
+            CustomToolKind.PYTHON -> {
+                if (containsAny("os.system(", "os.system (")) warnings += "os.system(...) shell execution"
+                if (containsAny("subprocess")) warnings += "subprocess command execution"
+                if (containsAny("socket", "requests", "urllib")) warnings += "network access libraries"
+                if (containsAny("eval(", "exec(", "eval (", "exec (")) warnings += "eval(...) / exec(...) dynamic code"
+                if (containsAny("open(" , "open (")) warnings += "open(...) filesystem access"
+                if (containsAny("shutil.rmtree", "os.remove(", "os.unlink(", "os.remove (", "os.unlink (")) {
+                    warnings += "filesystem deletion"
+                }
+                if (containsAny("while true:")) warnings += "possible infinite loop"
+                if (containsAny("ctypes")) warnings += "ctypes native-library access"
+            }
             else -> return emptyList()
         }
-        return hints.filter { it.regex.containsMatchIn(definition.source) }
-            .map { it.label }
-            .distinct()
+        return warnings.distinct()
     }
 }
