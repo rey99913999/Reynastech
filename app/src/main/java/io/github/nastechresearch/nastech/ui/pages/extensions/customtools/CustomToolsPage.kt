@@ -38,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -69,6 +70,7 @@ fun CustomToolsPage() {
     var message by remember { mutableStateOf<String?>(null) }
     var reviewedTool by remember { mutableStateOf<CustomToolDefinition?>(null) }
     var deleteTarget by remember { mutableStateOf<CustomToolDefinition?>(null) }
+    var editingToolId by remember { mutableStateOf<String?>(null) }
 
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
@@ -267,16 +269,28 @@ fun CustomToolsPage() {
                     }
                     Button(
                         onClick = {
-                            repository.importJson(jsonDraft).fold(
+                            repository.importJson(jsonDraft, replaceExisting = editingToolId != null).fold(
                                 onSuccess = {
-                                    message = context.getString(R.string.custom_tools_imported_disabled_status, it.name)
+                                    message = if (editingToolId != null) {
+                                        context.getString(R.string.custom_tools_updated_disabled_status, it.name)
+                                    } else {
+                                        context.getString(R.string.custom_tools_imported_disabled_status, it.name)
+                                    }
                                     jsonDraft = ""
+                                    editingToolId = null
                                 },
                                 onFailure = { message = it.message ?: "Import failed." },
                             )
                         },
                         enabled = jsonDraft.isNotBlank(),
-                    ) { Text(stringResource(R.string.custom_tools_import_json)) }
+                    ) { Text(stringResource(if (editingToolId != null) R.string.custom_tools_save_edit else R.string.custom_tools_import_json)) }
+                    if (editingToolId != null) {
+                        TextButton(onClick = {
+                            editingToolId = null
+                            jsonDraft = ""
+                            message = context.getString(R.string.custom_tools_edit_cancelled)
+                        }) { Text(stringResource(R.string.custom_tools_cancel_edit)) }
+                    }
                 }
             }
 
@@ -297,6 +311,12 @@ fun CustomToolsPage() {
                             Text(stringResource(R.string.custom_tools_status, stringResource(when (tool.kind) { CustomToolKind.JAVASCRIPT -> R.string.custom_tools_javascript; CustomToolKind.PYTHON -> R.string.custom_tools_python; CustomToolKind.ACTION_SEQUENCE -> R.string.custom_tools_action_sequence; CustomToolKind.MCP -> R.string.custom_tools_mcp }), stringResource(if (tool.enabled) R.string.custom_tools_enabled else R.string.custom_tools_disabled)))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedButton(onClick = { reviewedTool = tool }) { Text(stringResource(R.string.custom_tools_review)) }
+                                OutlinedButton(onClick = {
+                                    editingToolId = tool.id
+                                    jsonDraft = Json.encodeToString(tool)
+                                    importMode = "json"
+                                    message = context.getString(R.string.custom_tools_editing_status, tool.name)
+                                }) { Text(stringResource(R.string.custom_tools_edit)) }
                                 TextButton(onClick = { deleteTarget = tool }) { Text(stringResource(R.string.custom_tools_delete)) }
                             }
                         }
