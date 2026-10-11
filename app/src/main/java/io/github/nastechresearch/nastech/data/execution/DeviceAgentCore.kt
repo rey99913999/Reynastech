@@ -157,7 +157,35 @@ class DeviceAgentCore(
                         results += failure(plan, step, "verify_step_missing_postcondition")
                         break
                     }
-                    val verification = verifier.verify(predicate, before)
+                    val verificationStartedAtMs = android.os.SystemClock.elapsedRealtime()
+                    taskManager.recordExecutionEvent(
+                        taskId = plan.taskId,
+                        stepId = step.taskStepId,
+                        eventType = "VERIFICATION_STARTED",
+                        status = "RUNNING",
+                        message = "Checking the device postcondition",
+                    )
+                    val verification = try {
+                        verifier.verify(predicate, before)
+                    } catch (t: Throwable) {
+                        val durationMs = (android.os.SystemClock.elapsedRealtime() - verificationStartedAtMs).coerceAtLeast(0L)
+                        taskManager.recordExecutionEvent(
+                            taskId = plan.taskId,
+                            stepId = step.taskStepId,
+                            eventType = "VERIFICATION_COMPLETED",
+                            status = "FAILED",
+                            message = "Device verification failed after ${durationMs}ms (${t.javaClass.simpleName})",
+                        )
+                        throw t
+                    }
+                    val verificationDurationMs = (android.os.SystemClock.elapsedRealtime() - verificationStartedAtMs).coerceAtLeast(0L)
+                    taskManager.recordExecutionEvent(
+                        taskId = plan.taskId,
+                        stepId = step.taskStepId,
+                        eventType = "VERIFICATION_COMPLETED",
+                        status = if (verification.verified) "SUCCESS" else "FAILED",
+                        message = "Device verification finished in ${verificationDurationMs}ms",
+                    )
                     val result = if (verification.verified) {
                         ExecutionStepResult(
                             stepId = step.id,
