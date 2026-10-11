@@ -218,6 +218,21 @@ class DeviceAgentCore(
                 break
             }
 
+            val actionLabel = step.deviceAction?.name ?: step.toolName ?: "device action"
+            val waitingForApp = step.deviceAction == DeviceAction.WAIT_FOR_RESPONSE
+            val stagePrefix = if (waitingForApp) "WAIT" else "ACTION"
+            val actionStartedAtMs = android.os.SystemClock.elapsedRealtime()
+            taskManager.recordExecutionEvent(
+                taskId = plan.taskId,
+                stepId = step.taskStepId,
+                eventType = "${stagePrefix}_STARTED",
+                status = "RUNNING",
+                message = if (waitingForApp) {
+                    "Waiting for the target app to respond"
+                } else {
+                    "Device action $actionLabel started"
+                },
+            )
             val initial = executeAction(
                 step = step,
                 registry = registry,
@@ -240,6 +255,32 @@ class DeviceAgentCore(
             } else {
                 initial
             }
+
+            val actionDurationMs = (android.os.SystemClock.elapsedRealtime() - actionStartedAtMs).coerceAtLeast(0L)
+            val actionEventType = when {
+                action.requiresApproval -> "${stagePrefix}_AWAITING_APPROVAL"
+                action.executed -> if (waitingForApp) "WAIT_COMPLETED" else "ACTION_COMPLETED"
+                else -> if (waitingForApp) "WAIT_FAILED" else "ACTION_FAILED"
+            }
+            val actionStatus = when {
+                action.requiresApproval -> "APPROVAL_REQUIRED"
+                action.executed -> "SUCCESS"
+                else -> "FAILED"
+            }
+            taskManager.recordExecutionEvent(
+                taskId = plan.taskId,
+                stepId = step.taskStepId,
+                eventType = actionEventType,
+                status = actionStatus,
+                message = when {
+                    action.requiresApproval ->
+                        "Device action $actionLabel is waiting for user approval"
+                    action.executed ->
+                        "Device action $actionLabel completed in ${actionDurationMs}ms"
+                    else ->
+                        "Device action $actionLabel failed after ${actionDurationMs}ms"
+                },
+            )
 
             if (action.requiresApproval) {
                 results += ExecutionStepResult(
