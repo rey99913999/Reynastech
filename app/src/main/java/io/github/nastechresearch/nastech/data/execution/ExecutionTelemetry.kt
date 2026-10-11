@@ -1,8 +1,11 @@
 package io.github.nastechresearch.nastech.data.execution
 
 import io.github.nastechresearch.nastech.data.db.AppDatabase
+import io.github.nastechresearch.nastech.data.task.TaskAuditLogEntity
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.uuid.Uuid
 
 class ExecutionTelemetry(
     private val db: AppDatabase,
@@ -103,6 +106,37 @@ class ExecutionTelemetry(
                 generalLlmRequests = 1,
             )
         )
+    }
+
+    /**
+     * Persist a stage boundary in the existing task audit table. This remains best-effort
+     * and stores only stage names/timing summaries, never prompts or tool arguments.
+     */
+    suspend fun recordTaskStageEvent(
+        taskId: String?,
+        eventType: String,
+        status: String? = null,
+        message: String? = null,
+    ) {
+        if (taskId.isNullOrBlank()) return
+        try {
+            val task = db.taskDao().getById(taskId) ?: return
+            db.taskAuditLogDao().insert(
+                TaskAuditLogEntity(
+                    eventId = Uuid.random().toString(),
+                    taskId = taskId,
+                    stepId = task.currentStepId,
+                    eventType = eventType.take(80),
+                    status = status?.take(80),
+                    message = message?.take(1_000),
+                    timestamp = System.currentTimeMillis(),
+                )
+            )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Throwable) {
+            // Diagnostic persistence must never become a new failure path.
+        }
     }
 
     fun recentDeviceEvents(taskId: String? = null): List<DeviceTelemetryEvent> =
