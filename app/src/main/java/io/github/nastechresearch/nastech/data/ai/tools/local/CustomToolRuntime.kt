@@ -60,6 +60,8 @@ object CustomToolRuntime {
                     definition = definition,
                     availableTools = { baseTools },
                     mcpManager = mcpManager,
+                    settingsStore = settingsStore,
+                    callerAssistantId = callerAssistantId,
                 )
                 CustomToolRegistration(definition, tool)
             }
@@ -71,6 +73,8 @@ object CustomToolRuntime {
         definition: CustomToolDefinition,
         availableTools: () -> List<Tool>,
         mcpManager: McpManager,
+        settingsStore: io.github.nastechresearch.nastech.data.datastore.SettingsStore,
+        callerAssistantId: String?,
     ): Tool {
         val properties = definition.inputSchema["properties"] as? JsonObject ?: JsonObject(emptyMap())
         val required = (definition.inputSchema["required"] as? JsonArray)
