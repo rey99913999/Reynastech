@@ -49,6 +49,8 @@ object CustomToolRuntime {
         definitions: List<CustomToolDefinition>,
         baseTools: List<Tool>,
         mcpManager: McpManager,
+        settingsStore: io.github.nastechresearch.nastech.data.datastore.SettingsStore,
+        callerAssistantId: String?,
     ): List<CustomToolRegistration> {
         val registrations = definitions
             .filter { it.enabled && CustomToolDefinitionValidator.validate(it) == null }
@@ -88,10 +90,13 @@ object CustomToolRuntime {
                         CustomToolKind.JAVASCRIPT -> runJavaScript(definition.id, definition.source, input)
                         CustomToolKind.PYTHON -> runPython(context, definition, input)
                         CustomToolKind.ACTION_SEQUENCE -> runActions(definition, availableTools())
-                        CustomToolKind.MCP -> {
-                            val serverId = Uuid.parse(definition.mcpServerId)
-                            mcpManager.callTool(serverId, definition.remoteToolName, input)
-                        }
+                        CustomToolKind.MCP -> runMcpTool(
+                            definition = definition,
+                            input = input,
+                            mcpManager = mcpManager,
+                            settingsStore = settingsStore,
+                            callerAssistantId = callerAssistantId,
+                        )
                     }
                 }.getOrElse { error ->
                     listOf(
@@ -107,6 +112,83 @@ object CustomToolRuntime {
             },
         )
     }
+
+    /**
+     * Match the same authorization gates used by the normal MCP tool catalogue at call time.
+     * Custom wrappers must not bypass a disabled server, an assistant's server allow-list, or a
+     * disabled individual remote tool merely because a UUID was embedded in imported JSON.
+     */
+    private fun runMcpTool(
+        definition: CustomToolDefinition,
+        input: JsonObject,
+        mcpManager: McpManager,
+        settingsStore: io.github.nastechresearch.nastech.data.datastore.SettingsStore,
+        callerAssistantId: String?,
+    ): List<UIMessagePart> {
+        if (callerAssistantId.isNullOrBlank()) {
+            return failure(
+                definition.id,
+                "mcp_assistant_context_missing",
+                "MCP custom tools can only run when the calling assistant is known.",
+            )
+        }
+        val serverId = runCatching { Uuid.parse(definition.mcpServerId) }.getOrNull()
+            ?: return failure(definition.id, "mcp_server_id_invalid", "The configured MCP server id is invalid.")
+        val settings = settingsStore.settingsFlow.value
+        val assistant = settings.assistants.firstOrNull { it.id.toString() == callerAssistantId }
+            ?: return failure(definition.id, "mcp_assistant_not_found", "The calling assistant no longer exists.")
+        if (serverId !in assistant.mcpServers) {
+            return failure(
+                definition.id,
+                "mcp_server_not_allowed",
+                "This MCP server is not enabled for the calling assistant.",
+            )
+        }
+        val server = settings.mcpServers.firstOrNull { it.id == serverId }
+            ?: return failure(definition.id, "mcp_server_not_found", "The referenced MCP server is not configured.")
+        if (!server.commonOptions.enable) {
+            return failure(definition.id, "mcp_server_disabled", "The referenced MCP server is disabled.")
+        }
+        val remoteTool = server.commonOptions.tools.firstOrNull { it.name == definition.remoteToolName }
+            ?: return failure(
+                definition.id,
+                "mcp_tool_not_configured",
+                "The remote tool is not present in this server's configured tool list.",
+            )
+        if (!remoteTool.enable) {
+            return failure(definition.id, "mcp_tool_disabled", "The referenced remote MCP tool is disabled.")
+        }
+        return listOf(
+            UIMessagePart.Text(
+                buildJsonObject {
+                    put("tool_id", definition.id)
+                    put("remote_tool", definition.remoteToolName)
+                    put("result", "Authorized")
+                }.toString()
+            )
+        ).let {
+            // Execute only after the same server/tool checks the built-in catalogue applies.
+            runBlockingMcpCall(mcpManager, serverId, definition.remoteToolName, input)
+        }
+    }
+
+    private fun runBlockingMcpCall(
+        mcpManager: McpManager,
+        serverId: Uuid,
+        remoteToolName: String,
+        input: JsonObject,
+    ): List<UIMessagePart> {
+        // callTool is suspend, and this helper is called from the suspend Tool.execute path.
+        // Kept separate to make authorization checks above easy to audit.
+        return mcpCallSuspend(mcpManager, serverId, remoteToolName, input)
+    }
+
+    private suspend fun mcpCallSuspend(
+        mcpManager: McpManager,
+        serverId: Uuid,
+        remoteToolName: String,
+        input: JsonObject,
+    ): List<UIMessagePart> = mcpManager.callTool(serverId, remoteToolName, input)
 
     private suspend fun runActions(
         definition: CustomToolDefinition,
