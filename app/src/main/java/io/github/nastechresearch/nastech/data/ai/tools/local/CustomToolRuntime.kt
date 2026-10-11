@@ -118,7 +118,7 @@ object CustomToolRuntime {
      * Custom wrappers must not bypass a disabled server, an assistant's server allow-list, or a
      * disabled individual remote tool merely because a UUID was embedded in imported JSON.
      */
-    private fun runMcpTool(
+    private suspend fun runMcpTool(
         definition: CustomToolDefinition,
         input: JsonObject,
         mcpManager: McpManager,
@@ -158,37 +158,8 @@ object CustomToolRuntime {
         if (!remoteTool.enable) {
             return failure(definition.id, "mcp_tool_disabled", "The referenced remote MCP tool is disabled.")
         }
-        return listOf(
-            UIMessagePart.Text(
-                buildJsonObject {
-                    put("tool_id", definition.id)
-                    put("remote_tool", definition.remoteToolName)
-                    put("result", "Authorized")
-                }.toString()
-            )
-        ).let {
-            // Execute only after the same server/tool checks the built-in catalogue applies.
-            runBlockingMcpCall(mcpManager, serverId, definition.remoteToolName, input)
-        }
+        return mcpManager.callTool(serverId, definition.remoteToolName, input)
     }
-
-    private fun runBlockingMcpCall(
-        mcpManager: McpManager,
-        serverId: Uuid,
-        remoteToolName: String,
-        input: JsonObject,
-    ): List<UIMessagePart> {
-        // callTool is suspend, and this helper is called from the suspend Tool.execute path.
-        // Kept separate to make authorization checks above easy to audit.
-        return mcpCallSuspend(mcpManager, serverId, remoteToolName, input)
-    }
-
-    private suspend fun mcpCallSuspend(
-        mcpManager: McpManager,
-        serverId: Uuid,
-        remoteToolName: String,
-        input: JsonObject,
-    ): List<UIMessagePart> = mcpManager.callTool(serverId, remoteToolName, input)
 
     private suspend fun runActions(
         definition: CustomToolDefinition,
