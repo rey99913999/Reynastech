@@ -24,6 +24,7 @@
     <string name="custom_tools_save_edit">Save changes (disabled)</string>
     <string name="custom_tools_cancel_edit">Cancel edit</string>
     <string name="custom_tools_editing_status">Editing %1$s. Save to replace the saved definition.</string>
+    <string name="custom_tools_edit_id_immutable">The tool id cannot change while editing a saved tool.</string>
     <string name="custom_tools_updated_disabled_status">Updated %1$s and left it disabled. Review it before enabling.</string>
     <string name="custom_tools_edit_cancelled">Edit cancelled.</string>
     <string name="custom_tools_delete">Delete</string>
