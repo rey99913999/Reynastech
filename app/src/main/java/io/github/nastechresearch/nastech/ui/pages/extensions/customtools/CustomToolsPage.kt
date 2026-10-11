@@ -292,6 +292,7 @@ fun CustomToolsPage() {
                 ) {
                     Text(tool.description)
                     Text("Tool id: ${tool.id}")
+                    Text("Assistant-callable name: ct_${tool.name}")
                     Text("Type: ${tool.kind.name.lowercase()}")
                     Text("Input schema: ${tool.inputSchema}")
                     when (tool.kind) {
