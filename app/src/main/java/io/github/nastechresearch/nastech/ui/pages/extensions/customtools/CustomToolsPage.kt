@@ -269,18 +269,27 @@ fun CustomToolsPage() {
                     }
                     Button(
                         onClick = {
-                            repository.importJson(jsonDraft, replaceExisting = editingToolId != null).fold(
-                                onSuccess = {
-                                    message = if (editingToolId != null) {
-                                        context.getString(R.string.custom_tools_updated_disabled_status, it.name)
-                                    } else {
-                                        context.getString(R.string.custom_tools_imported_disabled_status, it.name)
-                                    }
-                                    jsonDraft = ""
-                                    editingToolId = null
-                                },
-                                onFailure = { message = it.message ?: "Import failed." },
-                            )
+                            val expectedId = editingToolId
+                            val draftId = runCatching {
+                                (Json.parseToJsonElement(jsonDraft) as? JsonObject)
+                                    ?.get("id")?.toString()?.trim('"')
+                            }.getOrNull()
+                            if (expectedId != null && draftId != expectedId) {
+                                message = context.getString(R.string.custom_tools_edit_id_immutable)
+                            } else {
+                                repository.importJson(jsonDraft, replaceExisting = expectedId != null).fold(
+                                    onSuccess = {
+                                        message = if (expectedId != null) {
+                                            context.getString(R.string.custom_tools_updated_disabled_status, it.name)
+                                        } else {
+                                            context.getString(R.string.custom_tools_imported_disabled_status, it.name)
+                                        }
+                                        jsonDraft = ""
+                                        editingToolId = null
+                                    },
+                                    onFailure = { message = it.message ?: "Import failed." },
+                                )
+                            }
                         },
                         enabled = jsonDraft.isNotBlank(),
                     ) { Text(stringResource(if (editingToolId != null) R.string.custom_tools_save_edit else R.string.custom_tools_import_json)) }
