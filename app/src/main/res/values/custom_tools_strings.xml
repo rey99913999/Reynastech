@@ -49,4 +49,7 @@
     <string name="custom_tools_file_read_error">Could not read the selected file.</string>
     <string name="custom_tools_schema_json_error">Input schema must be a JSON object.</string>
     <string name="custom_tools_schema_invalid_error">Input schema is invalid JSON.</string>
+    <string name="custom_tools_imported_from">Imported script file: %1$s</string>
+    <string name="custom_tools_action_sequence">Action sequence</string>
+    <string name="custom_tools_mcp">MCP</string>
 </resources>
