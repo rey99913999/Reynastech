@@ -1115,7 +1115,7 @@ class LocalTools(
             definition.enabled && when (definition.kind) {
                 CustomToolKind.JAVASCRIPT -> options.contains(LocalToolOption.JavascriptEngine)
                 CustomToolKind.PYTHON -> options.contains(LocalToolOption.Termux)
-                CustomToolKind.MCP -> options.contains(LocalToolOption.McpControl)
+                CustomToolKind.MCP -> true
                 CustomToolKind.ACTION_SEQUENCE -> true
             }
         }
@@ -1125,6 +1125,8 @@ class LocalTools(
                 definitions = customDefinitions,
                 baseTools = tools.toList(),
                 mcpManager = mcpManager,
+                settingsStore = settingsStore,
+                callerAssistantId = invocationContext.callerAssistantId,
             )
             registrations.forEach { registration ->
                 tools.add(registration.tool)
