@@ -50,19 +50,17 @@ object CustomToolRuntime {
         baseTools: List<Tool>,
         mcpManager: McpManager,
     ): List<CustomToolRegistration> {
-        val customTools = mutableListOf<Tool>()
         val registrations = definitions
             .filter { it.enabled && CustomToolDefinitionValidator.validate(it) == null }
             .map { definition ->
                 val tool = createTool(
                     context = context,
                     definition = definition,
-                    availableTools = { baseTools + customTools },
+                    availableTools = { baseTools },
                     mcpManager = mcpManager,
                 )
                 CustomToolRegistration(definition, tool)
             }
-        customTools.addAll(registrations.map { it.tool })
         return registrations
     }
 
