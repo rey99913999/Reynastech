@@ -106,7 +106,7 @@ object CustomToolSourceInspector {
         val source = definition.source.lowercase()
         val warnings = mutableListOf<String>()
 
-        fun containsAny(vararg needles: String): Boolean = needles.any(source::contains)
+        fun containsAny(vararg needles: String): Boolean = needles.any { needle -> source.contains(needle) }
 
         when (definition.kind) {
             CustomToolKind.JAVASCRIPT -> {
