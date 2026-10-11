@@ -68,6 +68,8 @@ object CustomToolDefinitionValidator {
                 definition.actions.size > MAX_ACTIONS -> "A tool can contain at most $MAX_ACTIONS actions."
                 definition.actions.any { !toolNamePattern.matches(it.tool) } ->
                     "Every action must reference a valid Nastech tool name."
+                definition.actions.any { it.tool.startsWith("ct_") } ->
+                    "Action-sequence tools cannot nest other custom tools; this prevents hidden approval chains."
                 definition.source.isNotEmpty() -> "Action-sequence tools cannot include script source."
                 else -> null
             }
@@ -79,7 +81,8 @@ object CustomToolDefinitionValidator {
                 else -> null
             }
             CustomToolKind.MCP -> when {
-                definition.mcpServerId.isBlank() -> "An existing MCP server id is required."
+                runCatching { Uuid.parse(definition.mcpServerId) }.getOrNull() == null ->
+                    "A valid id for an already configured MCP server is required."
                 !toolNamePattern.matches(definition.remoteToolName) -> "A valid remote MCP tool name is required."
                 definition.source.isNotEmpty() || definition.actions.isNotEmpty() ->
                     "MCP wrappers cannot embed source code or action steps."
