@@ -31,13 +31,23 @@ private fun findMatches(
         }
         "content_description" -> {
             val out = mutableListOf<AccessibilityNodeInfo>()
-            fun walk(n: AccessibilityNodeInfo) {
+            // A few apps expose very large accessibility trees. The caller only needs a
+            // small set of candidates; bound this fallback traversal so locating a send
+            // button cannot spend seconds walking every node in a complex screen.
+            var visited = 0
+            val maxVisited = 300
+            val maxDepth = 18
+            fun walk(n: AccessibilityNodeInfo, depth: Int) {
+                if (visited >= maxVisited || depth > maxDepth || out.size >= 50) return
+                visited++
                 if (n.contentDescription?.toString() == value) out.add(n)
                 for (i in 0 until n.childCount) {
-                    n.getChild(i)?.let { walk(it) }
+                    if (visited >= maxVisited || out.size >= 50) break
+                    val child = runCatching { n.getChild(i) }.getOrNull() ?: continue
+                    walk(child, depth + 1)
                 }
             }
-            walk(root)
+            walk(root, 0)
             out
         }
         else -> emptyList()
