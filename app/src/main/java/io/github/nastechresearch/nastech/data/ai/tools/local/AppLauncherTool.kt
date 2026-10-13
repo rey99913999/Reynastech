@@ -51,7 +51,11 @@ fun openAppTool(
     streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
 ): Tool = Tool(
     name = "open_app",
-    description = "Open an installed Android app by its human-readable label. Resolve locally, reject ambiguous matches, launch the app, and distinguish dispatch from confirmed foreground.",
+    description = "Open an installed Android app by its human-readable label. Resolve and launch locally. " +
+        "FAST PATH for continued automation: if the app opens with its composer already focused, call " +
+        "keyboard_type(text, submit=true) next. Do not take screenshots or inspect the window tree merely " +
+        "to confirm the keyboard. Do not relaunch the app unless dispatch_succeeded is false or a result " +
+        "explicitly confirms the wrong app is in front. Returns launch/foreground timing details.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
@@ -64,6 +68,7 @@ fun openAppTool(
         )
     },
     execute = { input ->
+        val actionStartedAt = android.os.SystemClock.elapsedRealtime()
         val requested = input.jsonObject["name"]?.jsonPrimitive?.contentOrNull?.trim()
         if (requested.isNullOrBlank()) {
             return@Tool listOf(UIMessagePart.Text("""{"error":"app_name_required"}"""))
@@ -130,6 +135,9 @@ fun openAppTool(
             listOf(UIMessagePart.Text(buildJsonObject {
                 put("dispatch_succeeded", true)
                 put("confirmed_foreground", confirmed)
+                put("resolution_and_prepare_ms", (android.os.SystemClock.elapsedRealtime() - actionStartedAt).coerceAtLeast(0L))
+                put("foreground_wait_ms", if (accessibilityRunning && !keyguardLocked) (android.os.SystemClock.elapsedRealtime() - (actionStartedAt + 0L)).coerceAtLeast(0L) else 0L)
+                put("total_elapsed_ms", (android.os.SystemClock.elapsedRealtime() - actionStartedAt).coerceAtLeast(0L))
                 put("label", candidate.label)
                 put("package", candidate.packageName)
                 put("activity", candidate.activityName)
