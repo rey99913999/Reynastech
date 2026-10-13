@@ -260,7 +260,7 @@ fun keyboardTypeTool(client: KeyboardApiClient): Tool = Tool(
         "over screenshots, read_window_tree, find_node, or coordinate taps for text entry. If the target " +
         "app is open and its composer is already focused, call keyboard_type immediately; do not inspect " +
         "the screen just to confirm the keyboard or typed text. With submit=true, type then click a clearly " +
-        "labelled lower-right send button via Accessibility (no screenshot/AI); if none is found, use Enter. " +
+        "labelled send button in the lower composer area via Accessibility (no screenshot/AI); if none is found, use Enter. " +
         "Do not add separate click/Enter calls after success. Returns per-step elapsed milliseconds.",
     parameters = {
         InputSchema.Obj(
@@ -271,7 +271,7 @@ fun keyboardTypeTool(client: KeyboardApiClient): Tool = Tool(
                 })
                 put("submit", buildJsonObject {
                     put("type", "boolean")
-                    put("description", "If true, type then click a labelled lower-right send button using " +
+                    put("description", "If true, type then click a labelled send button in the lower composer area using " +
                         "Accessibility; if none is confidently detected, fall back to Enter (default false).")
                 })
             },
