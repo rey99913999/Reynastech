@@ -131,6 +131,19 @@ private fun sendLabelScore(raw: String?): Int {
  * clickable, and in the lower-right portion of the app window to avoid tapping unrelated
  * "send" controls elsewhere on the screen.
  */
+private data class PendingAccessibilityNode(
+    val node: AccessibilityNodeInfo,
+    val depth: Int,
+    val bottom: Int,
+    val right: Int,
+    val area: Long,
+)
+
+/**
+ * Prioritizes nodes at the bottom-right of the active window, where chat composers usually
+ * place Send. This avoids depth-first scanning the entire conversation history before reaching
+ * the composer. No screenshot or AI inference is used.
+ */
 private fun clickAccessibleSendButton(): SendButtonClickResult {
     val service = RikkaAccessibilityService.instance
         ?: return SendButtonClickResult(false, "accessibility_service_inactive")
@@ -139,16 +152,38 @@ private fun clickAccessibleSendButton(): SendButtonClickResult {
     val rootBounds = Rect().also(root::getBoundsInScreen)
     if (rootBounds.isEmpty) return SendButtonClickResult(false, "window_bounds_unavailable")
 
-    val candidates = mutableListOf<SendButtonCandidate>()
-    // Accessibility trees can be large or cyclic through provider-backed nodes. Bound the
-    // synchronous scan so submit never spends an unbounded amount of time walking the UI.
+    val maxVisitedNodes = 180
+    val maxDepth = 18
+    val maxQueuedNodes = 600
+    val queue = java.util.PriorityQueue<PendingAccessibilityNode>(
+        compareByDescending<PendingAccessibilityNode> { it.bottom }
+            .thenByDescending { it.right }
+            .thenBy { it.area }
+    )
+    fun enqueue(node: AccessibilityNodeInfo, depth: Int) {
+        if (!node.isVisibleToUser || queue.size >= maxQueuedNodes) return
+        val bounds = Rect().also(node::getBoundsInScreen)
+        if (bounds.isEmpty) return
+        queue.add(
+            PendingAccessibilityNode(
+                node = node,
+                depth = depth,
+                bottom = bounds.bottom,
+                right = bounds.right,
+                area = bounds.width().toLong().coerceAtLeast(0L) *
+                    bounds.height().toLong().coerceAtLeast(0L),
+            )
+        )
+    }
+    enqueue(root, 0)
     var visitedNodes = 0
-    val maxVisitedNodes = 120
-    val maxDepth = 12
-    var foundSemanticSendButton = false
-    fun visit(node: AccessibilityNodeInfo, depth: Int) {
-        if (foundSemanticSendButton || visitedNodes >= maxVisitedNodes || depth > maxDepth) return
+    var bestCandidate: SendButtonCandidate? = null
+
+    while (queue.isNotEmpty() && visitedNodes < maxVisitedNodes) {
+        val pending = queue.remove()
+        val node = pending.node
         visitedNodes++
+
         if (node.isVisibleToUser && node.isEnabled) {
             val text = node.text?.toString()
             val description = node.contentDescription?.toString()
@@ -170,24 +205,41 @@ private fun clickAccessibleSendButton(): SendButtonClickResult {
                         val label = sequenceOf(description, text)
                             .firstOrNull { sendLabelScore(it) > 0 }
                             ?: resourceId
-                        val score = labelScore * 100 + idScore * 20
-                        candidates.add(SendButtonCandidate(clickable, score, label.take(100)))
-                        // A semantic send label in the lower-right composer area is a strong
-                        // match: do not walk more descendants/siblings after finding it.
-                        if (labelScore >= 4) foundSemanticSendButton = true
+                        val candidate = SendButtonCandidate(
+                            node = clickable,
+                            score = labelScore * 100 + idScore * 20,
+                            label = label.take(100),
+                        )
+
+                        // A semantic label on a control in the composer region is sufficient;
+                        // click now rather than enumerating more of the active window.
+                        if (labelScore >= 4) {
+                            val clicked = runCatching {
+                                clickable.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                            }.getOrDefault(false)
+                            return if (clicked) {
+                                SendButtonClickResult(true, "accessibility_send_button_clicked", candidate.label)
+                            } else {
+                                SendButtonClickResult(false, "accessibility_click_rejected", candidate.label)
+                            }
+                        }
+                        if (bestCandidate == null || candidate.score > bestCandidate!!.score) {
+                            bestCandidate = candidate
+                        }
                     }
                 }
             }
         }
+
+        if (pending.depth >= maxDepth) continue
         for (i in 0 until node.childCount) {
-            if (foundSemanticSendButton || visitedNodes >= maxVisitedNodes) break
+            if (queue.size >= maxQueuedNodes) break
             val child = runCatching { node.getChild(i) }.getOrNull() ?: continue
-            visit(child, depth + 1)
+            enqueue(child, pending.depth + 1)
         }
     }
 
-    visit(root, 0)
-    val target = candidates.maxByOrNull { it.score }
+    val target = bestCandidate
         ?: return SendButtonClickResult(false, "no_confident_lower_right_send_button")
     val clicked = runCatching {
         target.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
