@@ -128,8 +128,9 @@ private fun sendLabelScore(raw: String?): Int {
 /**
  * Clicks a semantically labelled send/submit control from the active app's accessibility
  * tree. No screenshot or AI inference is used. A candidate must be visible, enabled,
- * clickable, and in the lower-right portion of the app window to avoid tapping unrelated
- * "send" controls elsewhere on the screen.
+ * clickable, and in the lower portion of the app window to avoid tapping unrelated
+ * "send" controls elsewhere on the screen. Horizontal position is not restricted because RTL
+ * layouts (including Gemini Arabic) can place Send left of the composer and attachments right.
  */
 private data class PendingAccessibilityNode(
     val node: AccessibilityNodeInfo,
@@ -140,9 +141,9 @@ private data class PendingAccessibilityNode(
 )
 
 /**
- * Prioritizes nodes at the bottom-right of the active window, where chat composers usually
- * place Send. This avoids depth-first scanning the entire conversation history before reaching
- * the composer. No screenshot or AI inference is used.
+ * Prioritizes nodes near the bottom of the active window, where chat composers usually
+ * place Send. Do not prefer the right edge: RTL layouts can put Send on the left and attachments
+ * on the right. No screenshot or AI inference is used.
  */
 private fun clickAccessibleSendButton(): SendButtonClickResult {
     val service = RikkaAccessibilityService.instance
@@ -157,8 +158,8 @@ private fun clickAccessibleSendButton(): SendButtonClickResult {
     val maxQueuedNodes = 600
     val queue = java.util.PriorityQueue<PendingAccessibilityNode>(
         compareByDescending<PendingAccessibilityNode> { it.bottom }
-            .thenByDescending { it.right }
             .thenBy { it.area }
+            .thenByDescending { it.right }
     )
     fun enqueue(node: AccessibilityNodeInfo, depth: Int) {
         if (!node.isVisibleToUser || queue.size >= maxQueuedNodes) return
@@ -197,11 +198,11 @@ private fun clickAccessibleSendButton(): SendButtonClickResult {
                 }.getOrNull()
                 if (clickable != null && clickable.isVisibleToUser && clickable.isEnabled) {
                     val bounds = Rect().also(clickable::getBoundsInScreen)
-                    val lowerRight =
+                    // Send can be on either horizontal side depending on layout direction.
+                    val lowerComposerArea =
                         !bounds.isEmpty &&
-                        bounds.centerX() >= rootBounds.left + rootBounds.width() * 0.45f &&
                         bounds.centerY() >= rootBounds.top + rootBounds.height() * 0.45f
-                    if (lowerRight) {
+                    if (lowerComposerArea) {
                         val label = sequenceOf(description, text)
                             .firstOrNull { sendLabelScore(it) > 0 }
                             ?: resourceId
