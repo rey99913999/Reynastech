@@ -143,10 +143,11 @@ private fun clickAccessibleSendButton(): SendButtonClickResult {
     // Accessibility trees can be large or cyclic through provider-backed nodes. Bound the
     // synchronous scan so submit never spends an unbounded amount of time walking the UI.
     var visitedNodes = 0
-    val maxVisitedNodes = 350
-    val maxDepth = 18
+    val maxVisitedNodes = 120
+    val maxDepth = 12
+    var foundSemanticSendButton = false
     fun visit(node: AccessibilityNodeInfo, depth: Int) {
-        if (visitedNodes >= maxVisitedNodes || depth > maxDepth) return
+        if (foundSemanticSendButton || visitedNodes >= maxVisitedNodes || depth > maxDepth) return
         visitedNodes++
         if (node.isVisibleToUser && node.isEnabled) {
             val text = node.text?.toString()
@@ -171,12 +172,15 @@ private fun clickAccessibleSendButton(): SendButtonClickResult {
                             ?: resourceId
                         val score = labelScore * 100 + idScore * 20
                         candidates.add(SendButtonCandidate(clickable, score, label.take(100)))
+                        // A semantic send label in the lower-right composer area is a strong
+                        // match: do not walk more descendants/siblings after finding it.
+                        if (labelScore >= 4) foundSemanticSendButton = true
                     }
                 }
             }
         }
         for (i in 0 until node.childCount) {
-            if (visitedNodes >= maxVisitedNodes) break
+            if (foundSemanticSendButton || visitedNodes >= maxVisitedNodes) break
             val child = runCatching { node.getChild(i) }.getOrNull() ?: continue
             visit(child, depth + 1)
         }
@@ -199,12 +203,12 @@ private fun clickAccessibleSendButton(): SendButtonClickResult {
 
 fun keyboardTypeTool(client: KeyboardApiClient): Tool = Tool(
     name = "keyboard_type",
-    description = "Type text into the currently focused text field on the device via the " +
-        "agent-keyboard IME. When submit=true, first try to click a visible, enabled send/submit " +
-        "button exposed by Nastech Accessibility in the lower-right part of the active app; no " +
-        "screenshot or AI detection is used. If no confidently labelled button is found, fall back " +
-        "to Enter for terminals and search fields. Reports which submit path was used. Fails if " +
-        "no field is focused or the field is a password field. Example: keyboard_type(text=\"Hello\", submit=true).",
+    description = "FAST PATH: type directly into the focused field through agent-keyboard. Prefer this " +
+        "over screenshots, read_window_tree, find_node, or coordinate taps for text entry. If the target " +
+        "app is open and its composer is already focused, call keyboard_type immediately; do not inspect " +
+        "the screen just to confirm the keyboard or typed text. With submit=true, type then click a clearly " +
+        "labelled lower-right send button via Accessibility (no screenshot/AI); if none is found, use Enter. " +
+        "Do not add separate click/Enter calls after success. Returns per-step elapsed milliseconds.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
@@ -228,22 +232,35 @@ fun keyboardTypeTool(client: KeyboardApiClient): Tool = Tool(
                 "missing_text", "text is required",
                 "Provide the text to type.",
             )
+        val actionStartedAt = android.os.SystemClock.elapsedRealtime()
         val submit = args.jsonObject["submit"]?.jsonPrimitive?.booleanOrNull ?: false
+        val typeStartedAt = android.os.SystemClock.elapsedRealtime()
         when (val typed = client.typeText(text)) {
             is KeyboardApiClient.Result.Err -> failureEnvelope(typed.failure)
             is KeyboardApiClient.Result.Ok -> {
+                val typingMs = (android.os.SystemClock.elapsedRealtime() - typeStartedAt).coerceAtLeast(0L)
                 if (!submit) {
-                    ok { put("typed", text.length) }
+                    ok {
+                        put("typed", text.length)
+                        put("typing_ms", typingMs)
+                        put("total_elapsed_ms", (android.os.SystemClock.elapsedRealtime() - actionStartedAt).coerceAtLeast(0L))
+                    }
                 } else {
+                    val scanStartedAt = android.os.SystemClock.elapsedRealtime()
                     val buttonResult = clickAccessibleSendButton()
+                    val scanMs = (android.os.SystemClock.elapsedRealtime() - scanStartedAt).coerceAtLeast(0L)
                     if (buttonResult.clicked) {
                         ok {
                             put("typed", text.length)
                             put("submitted", true)
                             put("submit_method", "accessibility_send_button")
+                            put("typing_ms", typingMs)
+                            put("send_button_scan_ms", scanMs)
+                            put("total_elapsed_ms", (android.os.SystemClock.elapsedRealtime() - actionStartedAt).coerceAtLeast(0L))
                             buttonResult.label?.let { put("send_button_label", it) }
                         }
                     } else {
+                        val enterStartedAt = android.os.SystemClock.elapsedRealtime()
                         when (val enterResult = client.pressKey(KeyEvent.KEYCODE_ENTER)) {
                             is KeyboardApiClient.Result.Err -> failureEnvelope(enterResult.failure)
                             is KeyboardApiClient.Result.Ok -> ok {
@@ -251,6 +268,10 @@ fun keyboardTypeTool(client: KeyboardApiClient): Tool = Tool(
                                 put("submitted", true)
                                 put("submit_method", "enter_fallback")
                                 put("send_button_lookup", buttonResult.reason)
+                                put("typing_ms", typingMs)
+                                put("send_button_scan_ms", scanMs)
+                                put("enter_ms", (android.os.SystemClock.elapsedRealtime() - enterStartedAt).coerceAtLeast(0L))
+                                put("total_elapsed_ms", (android.os.SystemClock.elapsedRealtime() - actionStartedAt).coerceAtLeast(0L))
                                 buttonResult.label?.let { put("send_button_label", it) }
                             }
                         }
