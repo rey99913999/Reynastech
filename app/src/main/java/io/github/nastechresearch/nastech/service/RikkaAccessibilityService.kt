@@ -156,8 +156,16 @@ class RikkaAccessibilityService : AccessibilityService() {
         var emitted = 0
         var seen = 0
         var truncated = false
+        // Cap total nodes visited as well as nodes emitted. A restrictive filter can otherwise
+        // walk a huge accessibility tree while emitting almost nothing, delaying every later
+        // automation step. Callers can explicitly request a larger output cap when needed.
+        val maxVisitedNodes = (cap.coerceAtLeast(1) * 4).coerceIn(200, 8_000)
         fun walk(n: AccessibilityNodeInfo, depth: Int) {
             if (truncated) return
+            if (seen >= maxVisitedNodes) {
+                truncated = true
+                return
+            }
             seen++
             if (filter(n, depth)) {
                 emit(n, depth, seen)
