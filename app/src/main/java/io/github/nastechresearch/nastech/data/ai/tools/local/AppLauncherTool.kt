@@ -77,6 +77,7 @@ fun openAppTool(
         val resolution = io.github.nastechresearch.nastech.data.execution.AppResolver(
             io.github.nastechresearch.nastech.data.execution.PackageManagerInstalledAppCatalog(context)
         ).resolve(requested)
+        val resolutionElapsedMs = (android.os.SystemClock.elapsedRealtime() - actionStartedAt).coerceAtLeast(0L)
 
         val candidate = when (resolution) {
             is io.github.nastechresearch.nastech.data.execution.AppResolution.Resolved -> resolution.candidate
@@ -123,9 +124,13 @@ fun openAppTool(
         return@Tool try {
             context.startActivity(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             val accessibilityRunning = RikkaAccessibilityService.instance != null
+            val foregroundWaitStartedAt = android.os.SystemClock.elapsedRealtime()
             val foreground = if (accessibilityRunning && !keyguardLocked) {
                 waitForForegroundPackage(candidate.packageName)
             } else null
+            val foregroundWaitMs = if (accessibilityRunning && !keyguardLocked) {
+                (android.os.SystemClock.elapsedRealtime() - foregroundWaitStartedAt).coerceAtLeast(0L)
+            } else 0L
             val confirmed = foreground == candidate.packageName
 
             AgentTurnTracker.recordNavigatedAway(candidate.packageName)
@@ -135,8 +140,8 @@ fun openAppTool(
             listOf(UIMessagePart.Text(buildJsonObject {
                 put("dispatch_succeeded", true)
                 put("confirmed_foreground", confirmed)
-                put("resolution_and_prepare_ms", (android.os.SystemClock.elapsedRealtime() - actionStartedAt).coerceAtLeast(0L))
-                put("foreground_wait_ms", if (accessibilityRunning && !keyguardLocked) (android.os.SystemClock.elapsedRealtime() - (actionStartedAt + 0L)).coerceAtLeast(0L) else 0L)
+                put("resolve_app_ms", resolutionElapsedMs)
+                put("foreground_wait_ms", foregroundWaitMs)
                 put("total_elapsed_ms", (android.os.SystemClock.elapsedRealtime() - actionStartedAt).coerceAtLeast(0L))
                 put("label", candidate.label)
                 put("package", candidate.packageName)
