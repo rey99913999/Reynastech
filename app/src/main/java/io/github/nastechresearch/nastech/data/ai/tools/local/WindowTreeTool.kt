@@ -69,7 +69,7 @@ fun readWindowTreeTool(
                 })
                 put("max_nodes", buildJsonObject {
                     put("type", "integer")
-                    put("description", "Cap on returned nodes (default 500, max 2000)")
+                    put("description", "Cap on returned nodes (default 160, max 2000)")
                 })
                 put("package_name", buildJsonObject {
                     put("type", "string")
