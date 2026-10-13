@@ -18,7 +18,7 @@ import me.rerere.ai.ui.UIMessagePart
 import io.github.nastechresearch.nastech.data.ai.tools.ToolInvocationContext
 import io.github.nastechresearch.nastech.service.ActionLogEntry
 
-private const val DEFAULT_MAX_NODES = 500
+private const val DEFAULT_MAX_NODES = 160
 private const val MAX_NODES_HARD_CEILING = 2000
 
 internal fun nodeToJson(
@@ -59,7 +59,7 @@ fun readWindowTreeTool(
     streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
 ): Tool = Tool(
     name = "read_window_tree",
-    description = "Snapshot of the active window's a11y node tree. Default filters to visible nodes that are clickable / scrollable / editable / have text or content_description. verbose=true skips the filter (use sparingly). max_nodes caps result (default 500, max 2000). package_name optionally restricts + errors if the foreground app doesn't match.",
+    description = "Snapshot of the active window's accessibility tree. FAST PATH: when a focused composer is ready, prefer keyboard_type(text, submit=true); do not read the full tree just to find Send. For a specific labelled element, prefer find_node. This tool returns visible actionable/text nodes; default result is capped at 160 nodes to keep responses small. verbose=true skips filtering (use sparingly); max_nodes can request more (hard max 2000). package_name optionally checks the foreground app.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
