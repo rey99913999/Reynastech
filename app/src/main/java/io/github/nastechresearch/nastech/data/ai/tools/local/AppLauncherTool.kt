@@ -179,10 +179,11 @@ fun launchAppTool(
 ): Tool = Tool(
     name = "launch_app",
     description = """
-        Open an installed app on the device by its package name (e.g. com.termux, com.android.settings).
-        Returns {success: true} if the launch intent was dispatched. If you do not know the package name,
-        first call list_installed_apps to discover available packages. The app is brought to the
-        foreground; screen-automation tools (tap, swipe, read_window_tree) can then drive its UI.
+        FAST PATH: launch an installed app by package name, then continue with keyboard_type directly
+        if the target composer is already focused. Do not take screenshots or inspect the window tree
+        just to check whether the keyboard is open. If dispatch succeeds but foreground is not confirmed,
+        do not relaunch blindly; check the reported foreground/dispatch status first. Timing fields identify
+        app-launch and foreground-wait costs.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -196,6 +197,7 @@ fun launchAppTool(
         )
     },
     execute = { input ->
+        val actionStartedAt = android.os.SystemClock.elapsedRealtime()
         val pkg = input.jsonObject["package_name"]?.jsonPrimitive?.contentOrNull
         if (pkg.isNullOrBlank()) {
             return@Tool listOf(
@@ -233,17 +235,24 @@ fun launchAppTool(
             // wrong_foreground_app. Only meaningful when AccessibilityService is bound;
             // when unbound we cannot verify and report confirmed_foreground:false.
             val accessibilityRunning = RikkaAccessibilityService.instance != null
+            val foregroundWaitStartedAt = android.os.SystemClock.elapsedRealtime()
             val finalForeground: String? = if (accessibilityRunning && !keyLocked) {
                 waitForForegroundPackage(pkg)
             } else null
+            val foregroundWaitMs = if (accessibilityRunning && !keyLocked) {
+                (android.os.SystemClock.elapsedRealtime() - foregroundWaitStartedAt).coerceAtLeast(0L)
+            } else 0L
             val confirmed = finalForeground == pkg
             if (accessibilityRunning && !keyLocked && !confirmed) {
                 listOf(
                     UIMessagePart.Text(
                         buildJsonObject {
                             put("error", "launch_did_not_focus")
+                            put("dispatch_succeeded", true)
                             put("requested", pkg)
                             put("current_foreground", finalForeground.orEmpty())
+                            put("foreground_wait_ms", foregroundWaitMs)
+                            put("total_elapsed_ms", (android.os.SystemClock.elapsedRealtime() - actionStartedAt).coerceAtLeast(0L))
                             put(
                                 "recovery",
                                 "The launch intent was dispatched but the OS did not move ${pkg} to the foreground within 2.5s. The user is likely actively viewing another app (often Nastech itself) — do NOT pass package_name to read_window_tree on this turn. Either ask the user to switch to ${pkg}, or call read_window_tree with no package_name guard so you can see whatever IS currently on screen."
@@ -261,6 +270,8 @@ fun launchAppTool(
                             put("success", true)
                             put("package", pkg)
                             put("confirmed_foreground", confirmed)
+                            put("foreground_wait_ms", foregroundWaitMs)
+                            put("total_elapsed_ms", (android.os.SystemClock.elapsedRealtime() - actionStartedAt).coerceAtLeast(0L))
                             if (!accessibilityRunning) {
                                 put("note", "AccessibilityService not bound — could not verify foreground. Treat success as best-effort.")
                             }
