@@ -140,7 +140,14 @@ private fun clickAccessibleSendButton(): SendButtonClickResult {
     if (rootBounds.isEmpty) return SendButtonClickResult(false, "window_bounds_unavailable")
 
     val candidates = mutableListOf<SendButtonCandidate>()
-    fun visit(node: AccessibilityNodeInfo) {
+    // Accessibility trees can be large or cyclic through provider-backed nodes. Bound the
+    // synchronous scan so submit never spends an unbounded amount of time walking the UI.
+    var visitedNodes = 0
+    val maxVisitedNodes = 350
+    val maxDepth = 18
+    fun visit(node: AccessibilityNodeInfo, depth: Int) {
+        if (visitedNodes >= maxVisitedNodes || depth > maxDepth) return
+        visitedNodes++
         if (node.isVisibleToUser && node.isEnabled) {
             val text = node.text?.toString()
             val description = node.contentDescription?.toString()
@@ -169,12 +176,13 @@ private fun clickAccessibleSendButton(): SendButtonClickResult {
             }
         }
         for (i in 0 until node.childCount) {
+            if (visitedNodes >= maxVisitedNodes) break
             val child = runCatching { node.getChild(i) }.getOrNull() ?: continue
-            visit(child)
+            visit(child, depth + 1)
         }
     }
 
-    visit(root)
+    visit(root, 0)
     val target = candidates.maxByOrNull { it.score }
         ?: return SendButtonClickResult(false, "no_confident_lower_right_send_button")
     val clicked = runCatching {
