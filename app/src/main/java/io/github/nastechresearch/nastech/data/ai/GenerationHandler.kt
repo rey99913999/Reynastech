@@ -1202,6 +1202,7 @@ class GenerationHandler(
                             // wall-clock envelope instead of even attempting.
                             val remainingMs = ToolRuntimeLimits.turnBudgetMs -
                                 (android.os.SystemClock.elapsedRealtime() - turnStartMs)
+                            val toolExecutionStartedAtMs = android.os.SystemClock.elapsedRealtime()
                             val result = if (remainingMs <= 0L) {
                                 Log.w(TAG, "generateText: ${toolDef.name} skipped — wall-clock budget already exceeded")
                                 listOf(UIMessagePart.Text(json.encodeToString(buildJsonObject {
@@ -1222,6 +1223,15 @@ class GenerationHandler(
                                         })))
                                     }
                             }
+                            val toolExecutionElapsedMs =
+                                (android.os.SystemClock.elapsedRealtime() - toolExecutionStartedAtMs).coerceAtLeast(0L)
+                            Log.i(TAG, "tool ${toolDef.name} execution returned in ${toolExecutionElapsedMs}ms")
+                            executionTelemetry.recordTaskStageEvent(
+                                taskId = taskId,
+                                eventType = "TOOL_EXECUTION_TIMING",
+                                status = if (toolExecutionElapsedMs >= 2_500L) "SLOW" else "OK",
+                                message = "${toolDef.name} tool execution took ${toolExecutionElapsedMs}ms",
+                            )
 
                             deviceExecutionEvidence = DeviceExecutionEvidenceTracker.recordToolResult(
                                 current = deviceExecutionEvidence,
