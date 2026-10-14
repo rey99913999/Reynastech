@@ -112,6 +112,7 @@ import io.github.nastechresearch.nastech.ui.pages.chat.MeshGradientBackground
 import io.github.nastechresearch.nastech.ui.pages.debug.DebugPage
 import io.github.nastechresearch.nastech.ui.pages.developer.DeveloperPage
 import io.github.nastechresearch.nastech.ui.pages.extensions.ExtensionsPage
+import io.github.nastechresearch.nastech.ui.pages.extensions.customtools.CustomToolsPage
 import io.github.nastechresearch.nastech.ui.pages.extensions.PromptPage
 import io.github.nastechresearch.nastech.ui.pages.extensions.QuickMessagesPage
 import io.github.nastechresearch.nastech.ui.pages.extensions.skills.SkillDetailPage
@@ -597,6 +598,10 @@ class RouteActivity : ComponentActivity() {
                                 PluginManagerScreen()
                             }
 
+                            entry<Screen.CustomTools> {
+                                CustomToolsPage()
+                            }
+
                             entry<Screen.SettingSubAgents> {
                                 SettingSubAgentsPage()
                             }
@@ -1012,6 +1017,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Extensions : Screen
+
+    @Serializable
+    data object CustomTools : Screen
 
     @Serializable
     data object QuickMessages : Screen

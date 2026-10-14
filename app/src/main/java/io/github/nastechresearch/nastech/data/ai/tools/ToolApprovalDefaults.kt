@@ -290,7 +290,8 @@ object ToolApprovalDefaults {
         "grant_directory_access",
     )
 
-    fun allowsAlwaysAllow(toolName: String): Boolean = toolName !in NO_ALWAYS_ALLOW
+    fun allowsAlwaysAllow(toolName: String): Boolean =
+        !toolName.startsWith("ct_") && toolName !in NO_ALWAYS_ALLOW
 
     /**
      * True if [toolName] requires approval. Local tools are looked up in [ALWAYS_ASK];
@@ -300,5 +301,5 @@ object ToolApprovalDefaults {
      * Allow", which is a fair trade for the floor.
      */
     fun requiresApproval(toolName: String): Boolean =
-        toolName in ALWAYS_ASK || toolName.startsWith("mcp__")
+        toolName.startsWith("ct_") || toolName in ALWAYS_ASK || toolName.startsWith("mcp__")
 }

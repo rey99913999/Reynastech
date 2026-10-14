@@ -31,13 +31,23 @@ private fun findMatches(
         }
         "content_description" -> {
             val out = mutableListOf<AccessibilityNodeInfo>()
-            fun walk(n: AccessibilityNodeInfo) {
+            // A few apps expose very large accessibility trees. The caller only needs a
+            // small set of candidates; bound this fallback traversal so locating a send
+            // button cannot spend seconds walking every node in a complex screen.
+            var visited = 0
+            val maxVisited = 300
+            val maxDepth = 18
+            fun walk(n: AccessibilityNodeInfo, depth: Int) {
+                if (visited >= maxVisited || depth > maxDepth || out.size >= 50) return
+                visited++
                 if (n.contentDescription?.toString() == value) out.add(n)
                 for (i in 0 until n.childCount) {
-                    n.getChild(i)?.let { walk(it) }
+                    if (visited >= maxVisited || out.size >= 50) break
+                    val child = runCatching { n.getChild(i) }.getOrNull() ?: continue
+                    walk(child, depth + 1)
                 }
             }
-            walk(root)
+            walk(root, 0)
             out
         }
         else -> emptyList()
@@ -57,10 +67,10 @@ fun findNodeTool(
 ): Tool = Tool(
     name = "find_node",
     description = """
-        Find accessibility nodes in the active window matching a selector. by: text |
-        content_description | view_id_resource_name. Returns {matches: [...]} with at most 50
-        node summaries. Use read_window_tree first to see what's available, then this for
-        targeted lookups.
+        FAST TARGETED LOOKUP: find a known exact text, content_description, or view_id_resource_name
+        directly; do not call read_window_tree first when the label is already known. Returns up to 50
+        matches. For an exact, unique label that should be activated, use click_node directly to avoid
+        an extra tool/model round-trip. For message sending, prefer keyboard_type(text, submit=true).
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -136,10 +146,11 @@ fun clickNodeTool(
 ): Tool = Tool(
     name = "click_node",
     description = """
-        Find an accessibility node by selector and tap it via ACTION_CLICK. If the matched node
-        is not clickable but a clickable ancestor exists, the ancestor is clicked instead.
-        nth (default 0) disambiguates when multiple nodes match. Returns {success, clicked, ...}
-        or a structured error.
+        FAST DIRECT CLICK: find the exact known text, content_description, or view id and activate
+        it in one tool call via ACTION_CLICK; a clickable ancestor is used when needed. Use this
+        directly for a known unique labelled control instead of separate read_window_tree/find_node
+        calls. Set package_name to guard the target app. For send buttons, prefer keyboard_type(text,
+        submit=true), which types and sends in one call when the field is focused.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
