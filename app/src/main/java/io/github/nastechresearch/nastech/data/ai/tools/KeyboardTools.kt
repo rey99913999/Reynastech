@@ -113,37 +113,119 @@ private data class SendButtonClickResult(
     val label: String? = null,
 )
 
-private fun sendLabelScore(raw: String?): Int {
-    val value = raw?.trim()?.lowercase().orEmpty()
+internal fun sendLabelScore(raw: String?): Int {
+    val value = raw?.trim()?.lowercase()?.replace(Regex("\\s+"), " ").orEmpty()
     if (value.isEmpty()) return 0
     return when {
-        value == "send" || value == "submit" -> 4
-        value.contains("send message") || value.contains("send prompt") -> 5
-        value.startsWith("send ") -> 4
-        listOf("إرسال", "ارسال", "أرسل", "ارسل").any(value::contains) -> 5
+        value in setOf("send", "submit", "send message", "send prompt", "send a message", "submit message") -> 5
+        listOf("إرسال", "ارسال", "أرسل", "ارسل").any { token ->
+            value == token || value.startsWith("$token ")
+        } -> 5
+        value.startsWith("send ") || value.startsWith("submit ") -> 4
         else -> 0
     }
 }
 
 /**
+ * Rank only semantically labelled controls in the composer area. A strong label outranks
+ * geometric convenience; a directly clickable semantic node is preferred to an ancestor.
+ */
+internal fun sendButtonCandidateScore(
+    labelScore: Int,
+    semanticNodeClickable: Boolean,
+    ancestorDistance: Int,
+    lowerComposerArea: Boolean,
+): Int {
+    if (labelScore <= 0 || !lowerComposerArea) return Int.MIN_VALUE
+    return labelScore * 1_000 +
+        (if (semanticNodeClickable) 100 else 0) -
+        ancestorDistance.coerceIn(0, 10) * 10
+}
+
+/**
+ * An ancestor is a safe proxy for a non-clickable semantic label only when it actually
+ * contains that label and remains close in size. This rejects a distant/root container
+ * that resolveClickable() could otherwise return after walking an unbounded parent chain.
+ */
+internal fun isPlausibleSendButtonAncestor(
+    semanticLeft: Int,
+    semanticTop: Int,
+    semanticRight: Int,
+    semanticBottom: Int,
+    ancestorLeft: Int,
+    ancestorTop: Int,
+    ancestorRight: Int,
+    ancestorBottom: Int,
+    maxAreaRatio: Int = 25,
+): Boolean {
+    val semanticWidth = semanticRight - semanticLeft
+    val semanticHeight = semanticBottom - semanticTop
+    val ancestorWidth = ancestorRight - ancestorLeft
+    val ancestorHeight = ancestorBottom - ancestorTop
+    if (semanticWidth <= 0 || semanticHeight <= 0 || ancestorWidth <= 0 || ancestorHeight <= 0) {
+        return false
+    }
+    val containsSemanticNode =
+        ancestorLeft <= semanticLeft && ancestorTop <= semanticTop &&
+            ancestorRight >= semanticRight && ancestorBottom >= semanticBottom
+    if (!containsSemanticNode) return false
+    val semanticArea = semanticWidth.toLong() * semanticHeight.toLong()
+    val ancestorArea = ancestorWidth.toLong() * ancestorHeight.toLong()
+    return ancestorArea <= semanticArea * maxAreaRatio.coerceAtLeast(1)
+}
+
+private data class ClickableSendTarget(
+    val node: AccessibilityNodeInfo,
+    val ancestorDistance: Int,
+    val semanticNodeClickable: Boolean,
+)
+
+/**
+ * Resolve the nearest safe click target for a semantic Send node. Unlike the generic
+ * resolveClickable(), this walk is bounded and validates that a clickable ancestor actually
+ * contains the labelled node without ballooning into a large unrelated container.
+ */
+private fun resolveSendClickTarget(semanticNode: AccessibilityNodeInfo): ClickableSendTarget? {
+    if (!semanticNode.isVisibleToUser || !semanticNode.isEnabled) return null
+    val semanticBounds = Rect().also(semanticNode::getBoundsInScreen)
+    if (semanticBounds.isEmpty) return null
+
+    if (semanticNode.isClickable) {
+        return ClickableSendTarget(semanticNode, ancestorDistance = 0, semanticNodeClickable = true)
+    }
+
+    var current = semanticNode
+    for (distance in 1..5) {
+        current = runCatching { current.parent }.getOrNull() ?: return null
+        if (!current.isClickable || !current.isVisibleToUser || !current.isEnabled) continue
+        val bounds = Rect().also(current::getBoundsInScreen)
+        if (bounds.isEmpty) continue
+        if (!isPlausibleSendButtonAncestor(
+                semanticBounds.left, semanticBounds.top, semanticBounds.right, semanticBounds.bottom,
+                bounds.left, bounds.top, bounds.right, bounds.bottom,
+            )
+        ) continue
+        return ClickableSendTarget(current, distance, semanticNodeClickable = false)
+    }
+    return null
+}
+
+/**
  * Clicks a semantically labelled send/submit control from the active app's accessibility
- * tree. No screenshot or AI inference is used. A candidate must be visible, enabled,
- * clickable, and in the lower portion of the app window to avoid tapping unrelated
- * "send" controls elsewhere on the screen. Horizontal position is not restricted because RTL
- * layouts (including Gemini Arabic) can place Send left of the composer and attachments right.
+ * tree. No screenshot or AI inference is used. Candidates must be visible, enabled, clickable,
+ * tightly related to their semantic label, and in the lower composer area. Horizontal position
+ * is deliberately not used to choose between candidates: RTL layouts can place Send on the left.
  */
 private data class PendingAccessibilityNode(
     val node: AccessibilityNodeInfo,
     val depth: Int,
     val bottom: Int,
-    val right: Int,
     val area: Long,
 )
 
 /**
- * Prioritizes nodes near the bottom of the active window, where chat composers usually
- * place Send. Do not prefer the right edge: RTL layouts can put Send on the left and attachments
- * on the right. No screenshot or AI inference is used.
+ * Prioritize the lower, smaller composer controls to keep the bounded search fast, without a
+ * left/right bias. Candidate selection itself is ranked by semantic label and click-target context.
  */
 private fun clickAccessibleSendButton(): SendButtonClickResult {
     val service = RikkaAccessibilityService.instance
@@ -159,7 +241,6 @@ private fun clickAccessibleSendButton(): SendButtonClickResult {
     val queue = java.util.PriorityQueue<PendingAccessibilityNode>(
         compareByDescending<PendingAccessibilityNode> { it.bottom }
             .thenBy { it.area }
-            .thenByDescending { it.right }
     )
     fun enqueue(node: AccessibilityNodeInfo, depth: Int) {
         if (!node.isVisibleToUser || queue.size >= maxQueuedNodes) return
@@ -170,7 +251,6 @@ private fun clickAccessibleSendButton(): SendButtonClickResult {
                 node = node,
                 depth = depth,
                 bottom = bounds.bottom,
-                right = bounds.right,
                 area = bounds.width().toLong().coerceAtLeast(0L) *
                     bounds.height().toLong().coerceAtLeast(0L),
             )
@@ -188,42 +268,32 @@ private fun clickAccessibleSendButton(): SendButtonClickResult {
         if (node.isVisibleToUser && node.isEnabled) {
             val text = node.text?.toString()
             val description = node.contentDescription?.toString()
-            val resourceId = node.viewIdResourceName.orEmpty().lowercase()
             val labelScore = maxOf(sendLabelScore(text), sendLabelScore(description))
-            val idScore = if (resourceId.contains("send") || resourceId.contains("submit")) 1 else 0
 
-            if (labelScore > 0 || idScore > 0) {
-                val clickable = runCatching {
-                    if (node.isClickable) node else service.resolveClickable(node)
-                }.getOrNull()
-                if (clickable != null && clickable.isVisibleToUser && clickable.isEnabled) {
-                    val bounds = Rect().also(clickable::getBoundsInScreen)
-                    // Send can be on either horizontal side depending on layout direction.
+            // A resource ID alone is not sufficient evidence to click. Require an actual
+            // Send/Submit label so attachment and microphone controls cannot win by position.
+            if (labelScore > 0) {
+                val target = resolveSendClickTarget(node)
+                if (target != null) {
+                    val bounds = Rect().also(target.node::getBoundsInScreen)
                     val lowerComposerArea =
                         !bounds.isEmpty &&
-                        bounds.centerY() >= rootBounds.top + rootBounds.height() * 0.45f
-                    if (lowerComposerArea) {
+                            bounds.centerY() >= rootBounds.top + rootBounds.height() * 0.45f
+                    val score = sendButtonCandidateScore(
+                        labelScore = labelScore,
+                        semanticNodeClickable = target.semanticNodeClickable,
+                        ancestorDistance = target.ancestorDistance,
+                        lowerComposerArea = lowerComposerArea,
+                    )
+                    if (score != Int.MIN_VALUE) {
                         val label = sequenceOf(description, text)
                             .firstOrNull { sendLabelScore(it) > 0 }
-                            ?: resourceId
+                            .orEmpty()
                         val candidate = SendButtonCandidate(
-                            node = clickable,
-                            score = labelScore * 100 + idScore * 20,
+                            node = target.node,
+                            score = score,
                             label = label.take(100),
                         )
-
-                        // A semantic label on a control in the composer region is sufficient;
-                        // click now rather than enumerating more of the active window.
-                        if (labelScore >= 4) {
-                            val clicked = runCatching {
-                                clickable.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                            }.getOrDefault(false)
-                            return if (clicked) {
-                                SendButtonClickResult(true, "accessibility_send_button_clicked", candidate.label)
-                            } else {
-                                SendButtonClickResult(false, "accessibility_click_rejected", candidate.label)
-                            }
-                        }
                         if (bestCandidate == null || candidate.score > bestCandidate!!.score) {
                             bestCandidate = candidate
                         }
