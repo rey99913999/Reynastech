@@ -91,7 +91,8 @@ internal fun buildConsultStrategistTool(
     needsApproval = { false },
     execute = { input ->
         val consultationNumber = budget.reserve()
-            ?: return@Tool listOf(
+        if (consultationNumber == null) {
+            listOf(
                 UIMessagePart.Text(
                     buildJsonObject {
                         put("error", "consultation_limit_reached")
@@ -101,7 +102,7 @@ internal fun buildConsultStrategistTool(
                     }.toString(),
                 ),
             )
-
+        } else {
         val args = input.jsonObject
         fun field(name: String): String =
             args[name]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
@@ -179,5 +180,6 @@ internal fun buildConsultStrategistTool(
                 "Strategist consultation $consultationNumber$limitText:\n" + answer.take(16_000),
             ),
         )
+        }
     },
 )
