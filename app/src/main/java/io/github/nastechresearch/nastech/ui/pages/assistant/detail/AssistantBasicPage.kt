@@ -112,6 +112,9 @@ internal fun AssistantBasicContent(
     var strategistTemperatureText by remember(assistant.id) {
         mutableStateOf(assistant.strategistTemperature?.toString() ?: "0.2")
     }
+    var strategistTopPText by remember(assistant.id) {
+        mutableStateOf(assistant.strategistTopP?.toString() ?: "")
+    }
     var strategistMaxTokensText by remember(assistant.id) {
         mutableStateOf(assistant.strategistMaxTokens?.toString() ?: "2048")
     }
@@ -423,6 +426,32 @@ internal fun AssistantBasicContent(
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             isError = strategistTemperatureText.isNotBlank() &&
                                 (strategistTemperatureText.toFloatOrNull()?.let { it in 0f..2f } != true),
+                        )
+                    },
+                )
+                HorizontalDivider()
+                FormItem(
+                    modifier = Modifier.padding(8.dp),
+                    label = { Text("Strategist top-p") },
+                    description = { Text("Optional value from 0 to 1. Leave blank to use the provider/model default.") },
+                    content = {
+                        OutlinedTextField(
+                            value = strategistTopPText,
+                            onValueChange = { text ->
+                                strategistTopPText = text
+                                if (text.isBlank()) {
+                                    onUpdate(assistant.copy(strategistTopP = null))
+                                } else {
+                                    text.toFloatOrNull()?.takeIf { it in 0f..1f }?.let { value ->
+                                        onUpdate(assistant.copy(strategistTopP = value))
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            isError = strategistTopPText.isNotBlank() &&
+                                (strategistTopPText.toFloatOrNull()?.let { it in 0f..1f } != true),
                         )
                     },
                 )
