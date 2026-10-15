@@ -315,6 +315,13 @@ internal fun AssistantBasicContent(
                                 )
                             },
                         )
+                        if (assistant.strategistModelId == null) {
+                            Text(
+                                "Select a strategist model to make consult_strategist available. The execution model must support tool calls, and the strategist provider must be enabled.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                     },
                 )
                 if (!providers.any { provider ->
