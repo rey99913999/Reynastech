@@ -41,7 +41,7 @@ internal class StrategistConsultationBudget(private val limit: Long?) {
  * Directly asks the Assistant's configured strategist model for advice. This does not create
  * a conversation, dispatch a sub-agent, or invoke the Agent Runtime.
  */
-fun buildConsultStrategistTool(
+internal fun buildConsultStrategistTool(
     settings: Settings,
     assistant: Assistant,
     strategistModel: Model,
@@ -108,6 +108,11 @@ fun buildConsultStrategistTool(
 
         val prompt = buildString {
             appendLine("You are advising the execution model for the same Assistant. Give strategic guidance, not a claim that you performed the task.")
+            if (assistant.strategistSystemPrompt.isNotBlank()) {
+                appendLine()
+                appendLine("CUSTOM STRATEGIST SYSTEM INSTRUCTIONS:")
+                appendLine(assistant.strategistSystemPrompt.trim())
+            }
             appendLine("Answer the current question with actionable next steps, key trade-offs, and any important verification to perform.")
             if (assistant.strategistIncludeOriginalGoal && originalGoal.isNotBlank()) {
                 appendLine()
