@@ -109,6 +109,12 @@ internal fun AssistantBasicContent(
     var strategistLimitText by remember(assistant.id) {
         mutableStateOf(assistant.strategistConsultationLimit?.toString() ?: "3")
     }
+    var strategistPolicyText by remember(assistant.id) {
+        mutableStateOf(assistant.strategistConsultationPolicy)
+    }
+    var strategistSystemPromptText by remember(assistant.id) {
+        mutableStateOf(assistant.strategistSystemPrompt)
+    }
     var strategistTemperatureText by remember(assistant.id) {
         mutableStateOf(assistant.strategistTemperature?.toString() ?: "0.2")
     }
@@ -377,8 +383,11 @@ internal fun AssistantBasicContent(
                     description = { Text("This policy is included in the tool instructions and can be written freely.") },
                     content = {
                         OutlinedTextField(
-                            value = assistant.strategistConsultationPolicy,
-                            onValueChange = { onUpdate(assistant.copy(strategistConsultationPolicy = it)) },
+                            value = strategistPolicyText,
+                            onValueChange = { text ->
+                                strategistPolicyText = text
+                                onUpdate(assistant.copy(strategistConsultationPolicy = text))
+                            },
                             modifier = Modifier.fillMaxWidth(),
                             minLines = 4,
                             maxLines = 10,
@@ -392,8 +401,11 @@ internal fun AssistantBasicContent(
                     description = { Text("Control how the thinking model analyzes problems and formats its advice.") },
                     content = {
                         OutlinedTextField(
-                            value = assistant.strategistSystemPrompt,
-                            onValueChange = { onUpdate(assistant.copy(strategistSystemPrompt = it)) },
+                            value = strategistSystemPromptText,
+                            onValueChange = { text ->
+                                strategistSystemPromptText = text
+                                onUpdate(assistant.copy(strategistSystemPrompt = text))
+                            },
                             modifier = Modifier.fillMaxWidth(),
                             minLines = 4,
                             maxLines = 10,
