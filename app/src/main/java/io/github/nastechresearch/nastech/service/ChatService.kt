@@ -1195,6 +1195,12 @@ class ChatService(
                 tools = generationTools,
                 sourceHints = registrySourceHints,
             )
+            // This is a user-configured collaboration primitive, not an optional device
+            // capability. Keep it visible to the executor from the first request instead of
+            // requiring discover_tools/load_tools to uncover it.
+            generationTools.firstOrNull { it.name == "consult_strategist" }?.let {
+                progressiveRegistry.registerAlwaysVisible(it)
+            }
             val activeTaskId = taskManager
                 .latestActiveTaskForConversation(conversationId.toString())
                 ?.taskId
