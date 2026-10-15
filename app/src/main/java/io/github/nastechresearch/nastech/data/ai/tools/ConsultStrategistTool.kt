@@ -151,6 +151,7 @@ internal fun buildConsultStrategistTool(
             params = TextGenerationParams(
                 model = strategistModel,
                 temperature = assistant.strategistTemperature,
+                topP = assistant.strategistTopP,
                 maxTokens = assistant.strategistMaxTokens,
                 maxStreamRetries = settings.responseStreamMaxRetries,
                 reasoningLevel = assistant.strategistReasoningLevel,
