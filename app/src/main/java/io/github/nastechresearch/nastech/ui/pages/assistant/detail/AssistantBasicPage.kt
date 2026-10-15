@@ -311,6 +311,16 @@ internal fun AssistantBasicContent(
                         )
                     },
                 )
+                if (!providers.any { provider ->
+                        provider.enabled && provider.models.any { it.id == assistant.strategistModelId }
+                    }) {
+                    Text(
+                        text = "Select a model from an enabled provider before using strategist consultation.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                }
                 HorizontalDivider()
                 FormItem(
                     modifier = Modifier.padding(8.dp),
