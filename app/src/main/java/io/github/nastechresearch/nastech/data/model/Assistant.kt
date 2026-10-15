@@ -64,6 +64,7 @@ data class Assistant(
     val strategistConsultationLimit: Long? = 3L,
     val strategistReasoningLevel: ReasoningLevel = ReasoningLevel.AUTO,
     val strategistTemperature: Float? = 0.2f,
+    val strategistTopP: Float? = null,
     val strategistMaxTokens: Int? = 2048,
     val strategistIncludeOriginalGoal: Boolean = true,
     val strategistIncludeCurrentPlan: Boolean = true,
