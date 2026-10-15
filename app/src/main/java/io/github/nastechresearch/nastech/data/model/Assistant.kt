@@ -53,6 +53,25 @@ data class WaitUntilSettings(
 data class Assistant(
     val id: Uuid = Uuid.random(),
     val chatModelId: Uuid? = null, // 如果为null, 使用全局默认模型
+
+    // Assistant-scoped strategist model. This is a direct model-to-model consultation
+    // inside the same Assistant, not a sub-agent.
+    val strategistConsultationEnabled: Boolean = false,
+    val strategistModelId: Uuid? = null,
+    val strategistSystemPrompt: String = "You are the strategist for another model executing the user's task. Analyze the situation carefully and return practical, prioritized advice. Do not claim to have performed actions; recommend concrete next steps.",
+    val strategistConsultationPolicy: String = "Consult only when additional reasoning is likely to materially improve the result: when blocked, after repeated failed attempts, when the plan needs reassessment, or before a consequential decision. Include the relevant current state and ask a focused question. Do not consult merely to restate the task.",
+    // null = unlimited; 0 = disabled for this task; any positive value is the per-turn limit.
+    val strategistConsultationLimit: Long? = 3L,
+    val strategistReasoningLevel: ReasoningLevel = ReasoningLevel.AUTO,
+    val strategistTemperature: Float? = 0.2f,
+    val strategistTopP: Float? = null,
+    val strategistMaxTokens: Int? = 2048,
+    val strategistIncludeOriginalGoal: Boolean = true,
+    val strategistIncludeCurrentPlan: Boolean = true,
+    val strategistIncludeCompletedWork: Boolean = true,
+    val strategistIncludeBlocker: Boolean = true,
+    val strategistIncludePreviousAttempts: Boolean = true,
+    val strategistIncludeAdditionalContext: Boolean = true,
     val name: String = "",
     val avatar: Avatar = Avatar.Dummy,
     val useAssistantAvatar: Boolean = false, // 使用助手头像替代模型头像

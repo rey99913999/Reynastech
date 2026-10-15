@@ -106,6 +106,25 @@ internal fun AssistantBasicContent(
     onUpdate: (Assistant) -> Unit,
     vm: AssistantDetailVM
 ) {
+    var strategistLimitText by remember(assistant.id) {
+        mutableStateOf(assistant.strategistConsultationLimit?.toString() ?: "3")
+    }
+    var strategistPolicyText by remember(assistant.id) {
+        mutableStateOf(assistant.strategistConsultationPolicy)
+    }
+    var strategistSystemPromptText by remember(assistant.id) {
+        mutableStateOf(assistant.strategistSystemPrompt)
+    }
+    var strategistTemperatureText by remember(assistant.id) {
+        mutableStateOf(assistant.strategistTemperature?.toString() ?: "0.2")
+    }
+    var strategistTopPText by remember(assistant.id) {
+        mutableStateOf(assistant.strategistTopP?.toString() ?: "")
+    }
+    var strategistMaxTokensText by remember(assistant.id) {
+        mutableStateOf(assistant.strategistMaxTokens?.toString() ?: "2048")
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -258,6 +277,306 @@ internal fun AssistantBasicContent(
                     )
                 }
             )
+            HorizontalDivider()
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = { Text("Strategist consultation") },
+                description = {
+                    Text("Let this Assistant's execution model consult a separately selected thinking model. Both models remain part of this Assistant.")
+                },
+                tail = {
+                    Switch(
+                        checked = assistant.strategistConsultationEnabled,
+                        onCheckedChange = {
+                            onUpdate(assistant.copy(strategistConsultationEnabled = it))
+                        },
+                    )
+                },
+            )
+            if (assistant.strategistConsultationEnabled) {
+                HorizontalDivider()
+                FormItem(
+                    modifier = Modifier.padding(8.dp),
+                    label = { Text("Strategist model") },
+                    description = { Text("Choose the model that will provide plans, analysis, and recommendations.") },
+                    content = {
+                        ModelSelector(
+                            modelId = assistant.strategistModelId,
+                            providers = providers,
+                            type = ModelType.CHAT,
+                            allowClear = true,
+                            onSelect = { selected ->
+                                onUpdate(
+                                    assistant.copy(
+                                        strategistModelId = selected.modelId
+                                            .takeIf { it.isNotBlank() }
+                                            ?.let { selected.id },
+                                    ),
+                                )
+                            },
+                        )
+                        if (assistant.strategistModelId == null) {
+                            Text(
+                                "Select a strategist model to make consult_strategist available. The execution model must support tool calls, and the strategist provider must be enabled.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    },
+                )
+                if (!providers.any { provider ->
+                        provider.enabled && provider.models.any { it.id == assistant.strategistModelId }
+                    }) {
+                    Text(
+                        text = "Select a model from an enabled provider before using strategist consultation.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                }
+                HorizontalDivider()
+                FormItem(
+                    modifier = Modifier.padding(8.dp),
+                    label = { Text("Consultation limit") },
+                    description = { Text("Maximum calls to the strategist per generation. Enter any non-negative whole number, or enable Unlimited.") },
+                    content = {
+                        androidx.compose.foundation.layout.Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            androidx.compose.foundation.layout.Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text("Unlimited consultations")
+                                Switch(
+                                    checked = assistant.strategistConsultationLimit == null,
+                                    onCheckedChange = { unlimited ->
+                                        if (unlimited) {
+                                            onUpdate(assistant.copy(strategistConsultationLimit = null))
+                                        } else {
+                                            val value = strategistLimitText.toLongOrNull()
+                                                ?.takeIf { it >= 0L } ?: 3L
+                                            strategistLimitText = value.toString()
+                                            onUpdate(assistant.copy(strategistConsultationLimit = value))
+                                        }
+                                    },
+                                )
+                            }
+                            OutlinedTextField(
+                                value = strategistLimitText,
+                                onValueChange = { text ->
+                                    strategistLimitText = text
+                                    text.toLongOrNull()?.takeIf { it >= 0L }?.let { value ->
+                                        if (assistant.strategistConsultationLimit != null) {
+                                            onUpdate(assistant.copy(strategistConsultationLimit = value))
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = assistant.strategistConsultationLimit != null,
+                                singleLine = true,
+                                label = { Text("Number of consultations") },
+                                isError = assistant.strategistConsultationLimit != null &&
+                                    (strategistLimitText.toLongOrNull()?.let { it >= 0L } != true),
+                            )
+                        }
+                    },
+                )
+                HorizontalDivider()
+                FormItem(
+                    modifier = Modifier.padding(8.dp),
+                    label = { Text("When should the execution model consult?") },
+                    description = { Text("This policy is included in the tool instructions and can be written freely.") },
+                    content = {
+                        OutlinedTextField(
+                            value = strategistPolicyText,
+                            onValueChange = { text ->
+                                strategistPolicyText = text
+                                onUpdate(assistant.copy(strategistConsultationPolicy = text))
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 4,
+                            maxLines = 10,
+                        )
+                    },
+                )
+                HorizontalDivider()
+                FormItem(
+                    modifier = Modifier.padding(8.dp),
+                    label = { Text("Strategist system instructions") },
+                    description = { Text("Control how the thinking model analyzes problems and formats its advice.") },
+                    content = {
+                        OutlinedTextField(
+                            value = strategistSystemPromptText,
+                            onValueChange = { text ->
+                                strategistSystemPromptText = text
+                                onUpdate(assistant.copy(strategistSystemPrompt = text))
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 4,
+                            maxLines = 10,
+                        )
+                    },
+                )
+                HorizontalDivider()
+                FormItem(
+                    modifier = Modifier.padding(8.dp),
+                    label = { Text("Strategist reasoning") },
+                    content = {
+                        ReasoningButton(
+                            reasoningLevel = assistant.strategistReasoningLevel,
+                            onUpdateReasoningLevel = { level ->
+                                onUpdate(assistant.copy(strategistReasoningLevel = level))
+                            },
+                        )
+                    },
+                )
+                HorizontalDivider()
+                FormItem(
+                    modifier = Modifier.padding(8.dp),
+                    label = { Text("Strategist temperature") },
+                    description = { Text("Optional value from 0 to 2. Leave blank to use the provider/model default.") },
+                    content = {
+                        OutlinedTextField(
+                            value = strategistTemperatureText,
+                            onValueChange = { text ->
+                                strategistTemperatureText = text
+                                if (text.isBlank()) {
+                                    onUpdate(assistant.copy(strategistTemperature = null))
+                                } else {
+                                    text.toFloatOrNull()?.takeIf { it in 0f..2f }?.let { value ->
+                                        onUpdate(assistant.copy(strategistTemperature = value))
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            isError = strategistTemperatureText.isNotBlank() &&
+                                (strategistTemperatureText.toFloatOrNull()?.let { it in 0f..2f } != true),
+                        )
+                    },
+                )
+                HorizontalDivider()
+                FormItem(
+                    modifier = Modifier.padding(8.dp),
+                    label = { Text("Strategist top-p") },
+                    description = { Text("Optional value from 0 to 1. Leave blank to use the provider/model default.") },
+                    content = {
+                        OutlinedTextField(
+                            value = strategistTopPText,
+                            onValueChange = { text ->
+                                strategistTopPText = text
+                                if (text.isBlank()) {
+                                    onUpdate(assistant.copy(strategistTopP = null))
+                                } else {
+                                    text.toFloatOrNull()?.takeIf { it in 0f..1f }?.let { value ->
+                                        onUpdate(assistant.copy(strategistTopP = value))
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            isError = strategistTopPText.isNotBlank() &&
+                                (strategistTopPText.toFloatOrNull()?.let { it in 0f..1f } != true),
+                        )
+                    },
+                )
+                HorizontalDivider()
+                FormItem(
+                    modifier = Modifier.padding(8.dp),
+                    label = { Text("Strategist max output tokens") },
+                    description = { Text("Leave blank to use the provider/model default.") },
+                    content = {
+                        OutlinedTextField(
+                            value = strategistMaxTokensText,
+                            onValueChange = { text ->
+                                strategistMaxTokensText = text
+                                if (text.isBlank()) {
+                                    onUpdate(assistant.copy(strategistMaxTokens = null))
+                                } else {
+                                    text.toIntOrNull()?.takeIf { it > 0 }?.let { value ->
+                                        onUpdate(assistant.copy(strategistMaxTokens = value))
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            isError = strategistMaxTokensText.isNotBlank() &&
+                                (strategistMaxTokensText.toIntOrNull()?.let { it > 0 } != true),
+                        )
+                    },
+                )
+                HorizontalDivider()
+                Text(
+                    "Context sent to the strategist",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+                FormItem(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    label = { Text("Original user goal") },
+                    tail = {
+                        Switch(
+                            checked = assistant.strategistIncludeOriginalGoal,
+                            onCheckedChange = { onUpdate(assistant.copy(strategistIncludeOriginalGoal = it)) },
+                        )
+                    },
+                )
+                FormItem(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    label = { Text("Current plan") },
+                    tail = {
+                        Switch(
+                            checked = assistant.strategistIncludeCurrentPlan,
+                            onCheckedChange = { onUpdate(assistant.copy(strategistIncludeCurrentPlan = it)) },
+                        )
+                    },
+                )
+                FormItem(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    label = { Text("Completed work and observed results") },
+                    tail = {
+                        Switch(
+                            checked = assistant.strategistIncludeCompletedWork,
+                            onCheckedChange = { onUpdate(assistant.copy(strategistIncludeCompletedWork = it)) },
+                        )
+                    },
+                )
+                FormItem(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    label = { Text("Current blocker") },
+                    tail = {
+                        Switch(
+                            checked = assistant.strategistIncludeBlocker,
+                            onCheckedChange = { onUpdate(assistant.copy(strategistIncludeBlocker = it)) },
+                        )
+                    },
+                )
+                FormItem(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    label = { Text("Previous attempts") },
+                    tail = {
+                        Switch(
+                            checked = assistant.strategistIncludePreviousAttempts,
+                            onCheckedChange = { onUpdate(assistant.copy(strategistIncludePreviousAttempts = it)) },
+                        )
+                    },
+                )
+                FormItem(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    label = { Text("Additional context and tool results") },
+                    tail = {
+                        Switch(
+                            checked = assistant.strategistIncludeAdditionalContext,
+                            onCheckedChange = { onUpdate(assistant.copy(strategistIncludeAdditionalContext = it)) },
+                        )
+                    },
+                )
+            }
             HorizontalDivider()
             FormItem(
                 modifier = Modifier.padding(8.dp),

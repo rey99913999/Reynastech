@@ -1149,6 +1149,36 @@ class ChatService(
                             )
                         )
                     }
+                    // Direct model-to-model consultation under this Assistant. This is
+                    // intentionally separate from the sub-agent/Agent Runtime feature.
+                    val strategistModel = if (
+                        assistant.strategistConsultationEnabled &&
+                        assistant.strategistConsultationLimit != 0L &&
+                        (model.abilities.isEmpty() || ModelAbility.TOOL in model.abilities)
+                    ) {
+                        settings.findModelById(assistant.strategistModelId)
+                    } else null
+                    val strategistProvider = strategistModel?.findProvider(settings.providers)
+                    if (strategistModel != null && strategistProvider?.enabled == true) {
+                        val consultationGoal = conversation.currentMessages
+                            .asReversed()
+                            .firstOrNull { it.role == MessageRole.USER }
+                            ?.toText()
+                            .orEmpty()
+                        add(
+                            io.github.nastechresearch.nastech.data.ai.tools.buildConsultStrategistTool(
+                                settings = settings,
+                                assistant = assistant,
+                                strategistModel = strategistModel,
+                                providerManager = providerManager,
+                                originalGoal = consultationGoal,
+                                budget = io.github.nastechresearch.nastech.data.ai.tools.StrategistConsultationBudget(
+                                    assistant.strategistConsultationLimit,
+                                ),
+                            ),
+                        )
+                    }
+
                     if (conversationAgentRuntime.isEnabled(conversationId.toString())) {
                         val agentToolSet = this.map { it.name }
                         add(
@@ -1165,6 +1195,12 @@ class ChatService(
                 tools = generationTools,
                 sourceHints = registrySourceHints,
             )
+            // This is a user-configured collaboration primitive, not an optional device
+            // capability. Keep it visible to the executor from the first request instead of
+            // requiring discover_tools/load_tools to uncover it.
+            generationTools.firstOrNull { it.name == "consult_strategist" }?.let {
+                progressiveRegistry.registerAlwaysVisible(it)
+            }
             val activeTaskId = taskManager
                 .latestActiveTaskForConversation(conversationId.toString())
                 ?.taskId
