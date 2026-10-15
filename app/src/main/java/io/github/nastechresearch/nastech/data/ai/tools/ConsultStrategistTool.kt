@@ -184,7 +184,7 @@ internal fun buildConsultStrategistTool(
         val limitText = assistant.strategistConsultationLimit?.let { " of $it" } ?: " (unlimited)"
         listOf(
             UIMessagePart.Text(
-                "Strategist consultation $consultationNumber$limitText:\n" + answer.take(16_000),
+                "Strategist consultation $consultationNumber$limitText:\n" + answer,
             ),
         )
         }
