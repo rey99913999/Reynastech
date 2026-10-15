@@ -1154,7 +1154,7 @@ class ChatService(
                     val strategistModel = if (
                         assistant.strategistConsultationEnabled &&
                         assistant.strategistConsultationLimit != 0L &&
-                        ModelAbility.TOOL in model.abilities
+                        (model.abilities.isEmpty() || ModelAbility.TOOL in model.abilities)
                     ) {
                         settings.findModelById(assistant.strategistModelId)
                     } else null
