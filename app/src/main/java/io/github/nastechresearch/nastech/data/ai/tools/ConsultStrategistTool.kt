@@ -9,6 +9,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
+import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderManager
@@ -107,20 +108,20 @@ internal fun buildConsultStrategistTool(
         fun field(name: String): String =
             args[name]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
 
-        val prompt = buildString {
-            appendLine("You are advising the execution model for the same Assistant. Give strategic guidance, not a claim that you performed the task.")
+        val systemPrompt = buildString {
+            appendLine("You are the thinking and strategy model for another model that is executing the user's task under the same Assistant.")
+            appendLine("Analyze the available evidence carefully. Return practical, prioritized advice and concrete next steps. Do not claim you performed actions.")
             if (assistant.strategistSystemPrompt.isNotBlank()) {
                 appendLine()
-                appendLine("CUSTOM STRATEGIST SYSTEM INSTRUCTIONS:")
                 appendLine(assistant.strategistSystemPrompt.trim())
             }
-            appendLine("Answer the current question with actionable next steps, key trade-offs, and any important verification to perform.")
+        }
+        val userPrompt = buildString {
             if (assistant.strategistIncludeOriginalGoal && originalGoal.isNotBlank()) {
-                appendLine()
                 appendLine("ORIGINAL USER GOAL:")
                 appendLine(originalGoal.trim())
+                appendLine()
             }
-            appendLine()
             appendLine("CURRENT QUESTION:")
             appendLine(field("question").ifBlank { "Review the current situation and recommend the best next step." })
             fun addContext(enabled: Boolean, key: String, heading: String) {
@@ -145,7 +146,13 @@ internal fun buildConsultStrategistTool(
             "The strategist model's provider '${provider.name}' is disabled. Enable it or select another strategist model."
         }
         val providerImpl = providerManager.getProviderByType(provider)
-        val requestMessages = listOf(UIMessage.user(prompt))
+        val requestMessages = listOf(
+            UIMessage(
+                role = MessageRole.SYSTEM,
+                parts = listOf(UIMessagePart.Text(systemPrompt)),
+            ),
+            UIMessage.user(userPrompt),
+        )
         val result = providerImpl.generateText(
             providerSetting = provider,
             messages = requestMessages,
