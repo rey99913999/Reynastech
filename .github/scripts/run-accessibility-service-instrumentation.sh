@@ -27,7 +27,7 @@ adb shell settings put secure accessibility_enabled 1
 runner=$(adb shell pm list instrumentation \
   | tr -d '\r' \
   | grep -F "(target=${app_id})" \
-  | grep -F "androidx.test.runner.AndroidJUnitRunner" \
+  | grep -F "AndroidJUnitRunner" \
   | cut -d' ' -f1 \
   | cut -d':' -f2)
 if [ -z "${runner}" ]; then
