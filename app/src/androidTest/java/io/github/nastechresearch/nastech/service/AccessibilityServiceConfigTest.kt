@@ -119,13 +119,24 @@ class AccessibilityServiceConfigTest {
                 (runtimeInfo.flags and AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS) != 0,
             )
             assertTrue(
-                "The connected service must observe click events",
-                (runtimeInfo.eventTypes and AccessibilityEvent.TYPE_VIEW_CLICKED) != 0,
+                "The connected service must expose interactive windows",
+                (runtimeInfo.flags and AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS) != 0,
             )
-            assertTrue(
-                "The connected service must observe text-change events",
-                (runtimeInfo.eventTypes and AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) != 0,
+            val requiredRuntimeEvents = listOf(
+                AccessibilityEvent.TYPE_VIEW_CLICKED,
+                AccessibilityEvent.TYPE_VIEW_CONTEXT_CLICKED,
+                AccessibilityEvent.TYPE_VIEW_LONG_CLICKED,
+                AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED,
+                AccessibilityEvent.TYPE_VIEW_SCROLLED,
+                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
+                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
             )
+            requiredRuntimeEvents.forEach { requiredEvent ->
+                assertTrue(
+                    "The connected service must subscribe to event type $requiredEvent",
+                    (runtimeInfo.eventTypes and requiredEvent) != 0,
+                )
+            }
 
             val recording = WorkflowRecordingController.start(
                 context,
@@ -134,6 +145,25 @@ class AccessibilityServiceConfigTest {
             try {
                 ActivityScenario.launch(AccessibilityConfigTestActivity::class.java).use { scenario ->
                     instrumentation.waitForIdleSync()
+
+                    val interactiveWindowVisible = awaitCondition(timeoutMs = 10_000L) {
+                        activeService.windows.any { window ->
+                            if (!window.isActive) {
+                                false
+                            } else {
+                                val root = window.root
+                                try {
+                                    root?.packageName?.toString() == context.packageName
+                                } finally {
+                                    root?.recycle()
+                                }
+                            }
+                        }
+                    }
+                    assertTrue(
+                        "The active app window should be present in AccessibilityService.windows",
+                        interactiveWindowVisible,
+                    )
 
                     val buttonResourceId = "android:id/button1"
                     val editResourceId = "android:id/edit"
