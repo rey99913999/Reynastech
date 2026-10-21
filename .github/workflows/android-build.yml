@@ -162,7 +162,16 @@ jobs:
           profile: pixel_5
           emulator-options: -no-snapshot-load -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace -Pandroid.testInstrumentationRunnerArguments.class=io.github.nastechresearch.nastech.service.AccessibilityServiceConfigTest
+          script: |
+            component='io.github.nastechresearch.nastech/.service.RikkaAccessibilityService'
+            enabled="$(adb shell settings get secure enabled_accessibility_services | tr -d '\r')"
+            case ":$enabled:" in
+              *":$component:"*) ;;
+              *) if [ "$enabled" = "null" ] || [ -z "$enabled" ]; then enabled="$component"; else enabled="$enabled:$component"; fi ;;
+            esac
+            adb shell settings put secure enabled_accessibility_services "$enabled"
+            adb shell settings put secure accessibility_enabled 1
+            ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace -Pandroid.testInstrumentationRunnerArguments.class=io.github.nastechresearch.nastech.service.AccessibilityServiceConfigTest
 
       - name: Build debug APK
         if: always()
