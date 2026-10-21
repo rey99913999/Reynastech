@@ -2,7 +2,6 @@ package io.github.nastechresearch.nastech.service
 
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.view.accessibility.AccessibilityEvent
-import android.util.Xml
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.nastechresearch.nastech.R
