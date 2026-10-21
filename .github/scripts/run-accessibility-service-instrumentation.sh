@@ -8,22 +8,9 @@ test_class='io.github.nastechresearch.nastech.service.AccessibilityServiceConfig
 # Install both APKs before enabling the service so Android can resolve and bind it.
 ./gradlew :app:installDebug :app:installDebugAndroidTest --no-daemon --stacktrace
 
-component="${app_id}/${service_class}"
-enabled="$(adb shell settings get secure enabled_accessibility_services | tr -d '\r')"
-case ":${enabled}:" in
-  *":${component}:"*) ;;
-  *)
-    if [ "${enabled}" = "null" ] || [ -z "${enabled}" ]; then
-      enabled="${component}"
-    else
-      enabled="${enabled}:${component}"
-    fi
-    ;;
-esac
-adb shell settings put secure enabled_accessibility_services "${enabled}"
-adb shell settings put secure accessibility_enabled 1
-
-echo "Enabled accessibility services: $(adb shell settings get secure enabled_accessibility_services)"
+echo "Accessibility settings before instrumentation:"
+echo "Enabled services: $(adb shell settings get secure enabled_accessibility_services)"
+echo "Global accessibility flag: $(adb shell settings get secure accessibility_enabled)"
 echo "--- Accessibility manager state before instrumentation ---"
 adb shell dumpsys accessibility | grep -i -C 2 -E 'RikkaAccessibilityService|nastech|enabled services|binding services|bound services|isConnected|connected' || true
 echo "--- Installed service declaration ---"
