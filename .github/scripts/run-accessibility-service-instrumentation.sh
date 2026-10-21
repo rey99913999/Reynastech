@@ -23,6 +23,12 @@ esac
 adb shell settings put secure enabled_accessibility_services "${enabled}"
 adb shell settings put secure accessibility_enabled 1
 
+echo "Enabled accessibility services: $(adb shell settings get secure enabled_accessibility_services)"
+echo "--- Accessibility manager state before instrumentation ---"
+adb shell dumpsys accessibility | grep -i -C 2 -E 'RikkaAccessibilityService|nastech|enabled services|binding services|bound services|isConnected|connected' || true
+echo "--- Installed service declaration ---"
+adb shell dumpsys package "${app_id}" | grep -i -C 2 -E 'RikkaAccessibilityService|android.accessibilityservice.AccessibilityService' || true
+
 # Find the installed instrumentation runner for the debug application ID.
 runner=$(adb shell pm list instrumentation \
   | tr -d '\r' \
