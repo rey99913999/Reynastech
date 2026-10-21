@@ -144,7 +144,11 @@ class AccessibilityServiceConfigTest {
                 "Accessibility service integration test",
             )
             try {
-                ActivityScenario.launch(AccessibilityConfigTestActivity::class.java).use {
+                ActivityScenario.launch(AccessibilityConfigTestActivity::class.java).use { scenario ->
+                    // Let ActivityScenario's launch transactions settle once, then poll with a
+                    // bounded loop. Repeated waitForIdleSync() calls can block indefinitely
+                    // while the accessibility service is processing a steady stream of events.
+                    instrumentation.waitForIdleSync()
 
                     val interactiveWindowVisible = awaitCondition(timeoutMs = 10_000L) {
                         activeService.windows.any { window ->
@@ -284,10 +288,8 @@ class AccessibilityServiceConfigTest {
     }
 
     private fun awaitCondition(timeoutMs: Long, condition: () -> Boolean): Boolean {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
         val deadline = SystemClock.uptimeMillis() + timeoutMs
         while (SystemClock.uptimeMillis() < deadline) {
-            instrumentation.waitForIdleSync()
             if (condition()) return true
             SystemClock.sleep(100L)
         }
