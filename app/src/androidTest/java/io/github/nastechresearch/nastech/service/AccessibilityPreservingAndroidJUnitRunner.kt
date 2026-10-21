@@ -13,9 +13,11 @@ import androidx.test.runner.AndroidJUnitRunner
 class AccessibilityPreservingAndroidJUnitRunner : AndroidJUnitRunner() {
 
     override fun onCreate(arguments: Bundle?) {
+        super.onCreate(arguments)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            // AndroidJUnitRunner may initialize its UiAutomation during super.onCreate;
+            // request the preserving flag afterward so the final connection uses it.
             getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
         }
-        super.onCreate(arguments)
     }
 }
