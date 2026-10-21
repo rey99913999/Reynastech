@@ -1,7 +1,6 @@
 package io.github.nastechresearch.nastech.service
 
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 /**
  * Cancellation-safe serialization for AccessibilityService gesture dispatches.
@@ -14,6 +13,14 @@ import kotlinx.coroutines.sync.withLock
 internal class GestureDispatchQueue {
     private val mutex = Mutex()
 
-    suspend fun <T> withNextGesture(block: suspend () -> T): T =
-        mutex.withLock { block() }
+    suspend fun <T> withNextGesture(block: suspend () -> T): T {
+        // Acquire before entering try so a cancelled waiter never unlocks a mutex it did
+        // not acquire. After lock() returns, finally always releases the acquired lock.
+        mutex.lock()
+        return try {
+            block()
+        } finally {
+            mutex.unlock()
+        }
+    }
 }
