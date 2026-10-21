@@ -209,10 +209,10 @@ class AccessibilityServiceConfigTest {
     }
 
     private fun awaitCondition(timeoutMs: Long, condition: () -> Boolean): Boolean {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        // Poll without waitForIdleSync(): a continuously active accessibility/IME event stream
+        // can keep the main looper non-idle and defeat the explicit timeout for this condition.
         val deadline = SystemClock.uptimeMillis() + timeoutMs
         while (SystemClock.uptimeMillis() < deadline) {
-            instrumentation.waitForIdleSync()
             if (condition()) return true
             SystemClock.sleep(100L)
         }
