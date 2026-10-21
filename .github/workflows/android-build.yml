@@ -145,6 +145,18 @@ jobs:
         if: ${{ !contains(github.event.head_commit.message, '[skip-tests]') }}
         run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
 
+      - name: Run accessibility service config instrumentation test
+        if: ${{ !contains(github.event.head_commit.message, '[skip-tests]') }}
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace -Pandroid.testInstrumentationRunnerArguments.class=io.github.nastechresearch.nastech.service.AccessibilityServiceConfigTest
+
       - name: Build debug APK
         if: always()
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
