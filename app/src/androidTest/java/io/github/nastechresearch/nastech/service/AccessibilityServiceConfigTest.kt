@@ -144,12 +144,9 @@ class AccessibilityServiceConfigTest {
                 "Accessibility service integration test",
             )
             try {
-                ActivityScenario.launch(AccessibilityConfigTestActivity::class.java).use { scenario ->
-                    // Let ActivityScenario's launch transactions settle once, then poll with a
-                    // bounded loop. Repeated waitForIdleSync() calls can block indefinitely
-                    // while the accessibility service is processing a steady stream of events.
-                    instrumentation.waitForIdleSync()
-
+                ActivityScenario.launch(AccessibilityConfigTestActivity::class.java).use {
+                    // Poll the service's live window list with a bounded loop rather than waiting
+                    // for the UI looper to become idle; accessibility events may keep it active.
                     val interactiveWindowVisible = awaitCondition(timeoutMs = 10_000L) {
                         activeService.windows.any { window ->
                             if (!window.isActive) {
