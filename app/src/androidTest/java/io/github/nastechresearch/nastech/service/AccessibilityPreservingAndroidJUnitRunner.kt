@@ -1,21 +1,24 @@
 package io.github.nastechresearch.nastech.service
 
 import android.app.UiAutomation
-import android.os.Build
 import android.os.Bundle
 import androidx.test.runner.AndroidJUnitRunner
 
 /**
- * Keep accessibility services enabled during instrumentation. The default UiAutomation
- * connection suppresses them; request the preserving flag before AndroidJUnitRunner can
- * create its default automation connection.
+ * Accessibility integration tests exercise the app's real service. UiAutomation normally
+ * suppresses accessibility services, so force the preserving flag for every automation
+ * connection, including any connection requested by AndroidJUnitRunner itself.
  */
 class AccessibilityPreservingAndroidJUnitRunner : AndroidJUnitRunner() {
 
+    override fun getUiAutomation(): UiAutomation =
+        super.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
+
+    override fun getUiAutomation(flags: Int): UiAutomation =
+        super.getUiAutomation(flags or UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
+
     override fun onCreate(arguments: Bundle?) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
-        }
+        getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
         super.onCreate(arguments)
     }
 }
