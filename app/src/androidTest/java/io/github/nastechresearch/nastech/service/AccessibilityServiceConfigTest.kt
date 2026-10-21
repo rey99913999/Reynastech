@@ -142,8 +142,7 @@ class AccessibilityServiceConfigTest {
                 "Accessibility service integration test",
             )
             try {
-                ActivityScenario.launch(AccessibilityConfigTestActivity::class.java).use { scenario ->
-                    instrumentation.waitForIdleSync()
+                ActivityScenario.launch(AccessibilityConfigTestActivity::class.java).use {
 
                     val interactiveWindowVisible = awaitCondition(timeoutMs = 10_000L) {
                         activeService.windows.any { window ->
