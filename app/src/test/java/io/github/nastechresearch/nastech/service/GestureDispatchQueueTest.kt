@@ -37,7 +37,7 @@ class GestureDispatchQueueTest {
                 order += "cancelled-waiter-ran"
             }
         }
-        // UNDISTPATCHED above runs the waiter immediately until it suspends on the held Mutex.
+        // CoroutineStart.UNDISPATCHED above runs the waiter immediately until it suspends on the held Mutex.
         val third = async(start = CoroutineStart.UNDISPATCHED) {
             queue.withNextGesture {
                 order += "third"
