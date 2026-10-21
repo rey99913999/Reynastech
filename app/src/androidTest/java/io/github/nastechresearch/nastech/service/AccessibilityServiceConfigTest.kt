@@ -6,6 +6,8 @@ import android.content.ComponentName
 import android.graphics.Rect
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
+import android.view.InputDevice
+import android.view.MotionEvent
 import android.view.accessibility.AccessibilityEvent
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -182,7 +184,7 @@ class AccessibilityServiceConfigTest {
 
                     // Inject actual emulator input rather than calling View.performClick()/setText():
                     // the acceptance test must exercise Android's user-event delivery path.
-                    shell(automation, "input tap ${buttonBounds.centerX()} ${buttonBounds.centerY()}")
+                    injectTap(automation, buttonBounds.centerX().toFloat(), buttonBounds.centerY().toFloat())
                     val clickRecorded = awaitCondition(timeoutMs = 10_000L) {
                         WorkflowRecordingStore(context).get(recording.id)?.actions.orEmpty().any {
                             it.kind == RecordingActionKind.TAP && it.resourceId == buttonResourceId
@@ -212,9 +214,9 @@ class AccessibilityServiceConfigTest {
                     }
                     assertTrue("The text input must have visible screen bounds", !editBounds.isEmpty)
 
-                    shell(automation, "input tap ${editBounds.centerX()} ${editBounds.centerY()}")
+                    injectTap(automation, editBounds.centerX().toFloat(), editBounds.centerY().toFloat())
                     SystemClock.sleep(300L)
-                    shell(automation, "input text typed-from-test")
+                    shell(automation, "input text typed-from-test >/dev/null 2>&1 & echo text-input-dispatched")
 
                     val actionsRecorded = awaitCondition(timeoutMs = 10_000L) {
                         WorkflowRecordingStore(context).get(recording.id)?.actions.orEmpty().any {
@@ -238,6 +240,46 @@ class AccessibilityServiceConfigTest {
         } finally {
             restoreSecureSetting(automation, "enabled_accessibility_services", originalEnabledServices)
             restoreSecureSetting(automation, "accessibility_enabled", originalAccessibilityEnabled)
+        }
+    }
+
+    private fun injectTap(automation: UiAutomation, x: Float, y: Float) {
+        val downTime = SystemClock.uptimeMillis()
+        val down = MotionEvent.obtain(
+            downTime,
+            downTime,
+            MotionEvent.ACTION_DOWN,
+            x,
+            y,
+            0,
+        )
+        try {
+            down.source = InputDevice.SOURCE_TOUCHSCREEN
+            assertTrue(
+                "UiAutomation should inject the touch-down event",
+                automation.injectInputEvent(down, true),
+            )
+            SystemClock.sleep(80L)
+
+            val up = MotionEvent.obtain(
+                downTime,
+                SystemClock.uptimeMillis(),
+                MotionEvent.ACTION_UP,
+                x,
+                y,
+                0,
+            )
+            try {
+                up.source = InputDevice.SOURCE_TOUCHSCREEN
+                assertTrue(
+                    "UiAutomation should inject the touch-up event",
+                    automation.injectInputEvent(up, true),
+                )
+            } finally {
+                up.recycle()
+            }
+        } finally {
+            down.recycle()
         }
     }
 
