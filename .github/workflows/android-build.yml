@@ -172,7 +172,7 @@ jobs:
             ./gradlew :app:installDebug :app:installDebugAndroidTest --no-daemon --stacktrace
 
             component="${app_id}/${service_class}"
-            enabled="$(adb shell settings get secure enabled_accessibility_services | tr -d '\\r')"
+            enabled="$(adb shell settings get secure enabled_accessibility_services | tr -d '\r')"
             case ":${enabled}:" in
               *":${component}:"*) ;;
               *) if [ "${enabled}" = "null" ] || [ -z "${enabled}" ]; then enabled="${component}"; else enabled="${enabled}:${component}"; fi ;;
@@ -181,12 +181,12 @@ jobs:
             adb shell settings put secure accessibility_enabled 1
 
             # Discover the instrumentation package instead of assuming its generated application ID.
-            runner="$(adb shell pm list instrumentation | tr -d '\\r' | grep -F "(target=${app_id})" | grep -F "/androidx.test.runner.AndroidJUnitRunner" | sed -E 's/^instrumentation:([^ ]+).*/\\1/' | head -n 1)"
+            runner="$(adb shell pm list instrumentation | tr -d '\r' | grep -F "(target=${app_id})" | grep -F "/androidx.test.runner.AndroidJUnitRunner" | sed -E 's/^instrumentation:([^ ]+).*/\1/' | head -n 1)"
             test -n "${runner}" || { echo "Android instrumentation runner not found for ${app_id}" >&2; adb shell pm list instrumentation; exit 1; }
             echo "Running ${test_class} with ${runner}"
-            output="$(adb shell am instrument -w -r -e class "${test_class}" "${runner}" 2>&1)" || { printf '%s\\n' "${output}"; exit 1; }
-            printf '%s\\n' "${output}"
-            printf '%s\\n' "${output}" | grep -Eq 'OK \\([0-9]+ tests?\\)' || { echo "Instrumentation test did not report success" >&2; exit 1; }
+            output="$(adb shell am instrument -w -r -e class "${test_class}" "${runner}" 2>&1)" || { printf '%s\n' "${output}"; exit 1; }
+            printf '%s\n' "${output}"
+            printf '%s\n' "${output}" | grep -Eq 'OK \([0-9]+ tests?\)' || { echo "Instrumentation test did not report success" >&2; exit 1; }
 
       - name: Build debug APK
         if: always()
