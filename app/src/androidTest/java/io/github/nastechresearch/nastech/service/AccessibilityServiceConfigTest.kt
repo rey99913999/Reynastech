@@ -3,11 +3,10 @@ package io.github.nastechresearch.nastech.service
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.UiAutomation
 import android.content.ComponentName
+import android.graphics.Rect
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
-import android.widget.Button
-import android.widget.EditText
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -167,35 +166,70 @@ class AccessibilityServiceConfigTest {
 
                     val buttonResourceId = "android:id/button1"
                     val editResourceId = "android:id/edit"
-                    val buttonIdVisible = awaitCondition(timeoutMs = 10_000L) {
-                        activeService.rootInActiveWindow
-                            ?.findAccessibilityNodeInfosByViewId(buttonResourceId)
-                            .orEmpty()
-                            .any { node -> node.viewIdResourceName == buttonResourceId }
-                    }
-                    assertTrue(
+                    val buttonBounds = Rect()
+                    val buttonNode = activeService.rootInActiveWindow
+                        ?.findAccessibilityNodeInfosByViewId(buttonResourceId)
+                        .orEmpty()
+                        .firstOrNull { node -> node.viewIdResourceName == buttonResourceId }
+                    assertNotNull(
                         "The active window should expose the button by its Android resource ID",
-                        buttonIdVisible,
+                        buttonNode,
+                    )
+                    requireNotNull(buttonNode).let { node ->
+                        node.getBoundsInScreen(buttonBounds)
+                        node.recycle()
+                    }
+                    assertTrue("The button must have visible screen bounds", !buttonBounds.isEmpty)
+
+                    // Inject actual emulator input rather than calling View.performClick()/setText():
+                    // the acceptance test must exercise Android's user-event delivery path.
+                    shell(automation, "input tap ${buttonBounds.centerX()} ${buttonBounds.centerY()}")
+                    val clickRecorded = awaitCondition(timeoutMs = 10_000L) {
+                        WorkflowRecordingStore(context).get(recording.id)?.actions.orEmpty().any {
+                            it.kind == RecordingActionKind.TAP && it.resourceId == buttonResourceId
+                        }
+                    }
+                    val actionsAfterClick = WorkflowRecordingStore(context).get(recording.id)?.actions.orEmpty()
+                    assertTrue(
+                        "The workflow recorder should persist the emulator click with its node ID. " +
+                            "Observed actions: " + actionsAfterClick.joinToString {
+                                "${it.kind}(id=${it.resourceId}, text=${it.text})"
+                            },
+                        clickRecorded,
                     )
 
-                    scenario.onActivity { activity ->
-                        activity.findViewById<Button>(android.R.id.button1).performClick()
-                        activity.findViewById<EditText>(android.R.id.edit).setText("typed-from-test")
+                    val editBounds = Rect()
+                    val editNode = activeService.rootInActiveWindow
+                        ?.findAccessibilityNodeInfosByViewId(editResourceId)
+                        .orEmpty()
+                        .firstOrNull { node -> node.viewIdResourceName == editResourceId }
+                    assertNotNull(
+                        "The active window should expose the text input by its Android resource ID",
+                        editNode,
+                    )
+                    requireNotNull(editNode).let { node ->
+                        node.getBoundsInScreen(editBounds)
+                        node.recycle()
                     }
-                    instrumentation.waitForIdleSync()
+                    assertTrue("The text input must have visible screen bounds", !editBounds.isEmpty)
+
+                    shell(automation, "input tap ${editBounds.centerX()} ${editBounds.centerY()}")
+                    SystemClock.sleep(300L)
+                    shell(automation, "input text typed-from-test")
 
                     val actionsRecorded = awaitCondition(timeoutMs = 10_000L) {
-                        val actions = WorkflowRecordingStore(context).get(recording.id)?.actions.orEmpty()
-                        actions.any {
-                            it.kind == RecordingActionKind.TAP && it.resourceId == buttonResourceId
-                        } && actions.any {
+                        WorkflowRecordingStore(context).get(recording.id)?.actions.orEmpty().any {
                             it.kind == RecordingActionKind.TYPE_TEXT &&
                                 it.resourceId == editResourceId &&
                                 it.text?.contains("typed-from-test") == true
                         }
                     }
+                    val finalActions = WorkflowRecordingStore(context).get(recording.id)?.actions.orEmpty()
                     assertTrue(
-                        "The workflow recorder should persist click and text-change events with their node IDs",
+                        "The workflow recorder should persist the emulator text-change event with its node ID. " +
+                            "Observed actions: " + finalActions.joinToString {
+                                "${it.kind}(id=${it.resourceId}, text=${it.text})"
+                            },
                         actionsRecorded,
                     )
                 }
