@@ -32,6 +32,10 @@ fi
 echo "Running ${test_class} with ${runner}"
 if ! adb shell am instrument -w -r -e class "${test_class}" "${runner}" > instrumentation-output.txt 2>&1; then
   cat instrumentation-output.txt
+  echo "--- Accessibility manager state after instrumentation failure ---"
+  adb shell dumpsys accessibility | grep -i -C 3 -E 'RikkaAccessibilityService|nastech|enabled services|binding services|bound services|crashed services' || true
+  echo "--- Relevant Android service/application logs ---"
+  adb logcat -d -t 5000 -v brief | grep -i -E 'RikkaAccessibilityService|AccessibilityManagerService|FATAL EXCEPTION|AndroidRuntime|nastech.debug' | tail -n 200 || true
   exit 1
 fi
 cat instrumentation-output.txt
