@@ -1,12 +1,12 @@
 package io.github.nastechresearch.nastech.service
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -22,7 +22,7 @@ class GestureDispatchQueueTest {
         val thirdStarted = CompletableDeferred<Unit>()
         val order = mutableListOf<String>()
 
-        val first = async {
+        val first = async(start = CoroutineStart.UNDISPATCHED) {
             queue.withNextGesture {
                 order += "first-start"
                 firstStarted.complete(Unit)
@@ -32,14 +32,13 @@ class GestureDispatchQueueTest {
         }
         firstStarted.await()
 
-        val cancelledWaiter = launch {
+        val cancelledWaiter = launch(start = CoroutineStart.UNDISPATCHED) {
             queue.withNextGesture {
                 order += "cancelled-waiter-ran"
             }
         }
-        // Yield until the waiting coroutine has had an opportunity to suspend on the Mutex.
-        yield()
-        val third = async {
+        // UNDISTPATCHED above runs the waiter immediately until it suspends on the held Mutex.
+        val third = async(start = CoroutineStart.UNDISPATCHED) {
             queue.withNextGesture {
                 order += "third"
                 thirdStarted.complete(Unit)
@@ -63,7 +62,7 @@ class GestureDispatchQueueTest {
         val firstStarted = CompletableDeferred<Unit>()
         val nextStarted = CompletableDeferred<Unit>()
 
-        val first = launch {
+        val first = launch(start = CoroutineStart.UNDISPATCHED) {
             queue.withNextGesture {
                 firstStarted.complete(Unit)
                 awaitCancellation()
@@ -71,14 +70,13 @@ class GestureDispatchQueueTest {
         }
         firstStarted.await()
 
-        val next = async {
+        val next = async(start = CoroutineStart.UNDISPATCHED) {
             queue.withNextGesture {
                 nextStarted.complete(Unit)
                 "completed"
             }
         }
 
-        yield()
         assertFalse(nextStarted.isCompleted)
         first.cancelAndJoin()
         assertEquals("completed", next.await())
