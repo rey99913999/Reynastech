@@ -1,8 +1,6 @@
 package io.github.nastechresearch.nastech.service
 
 import android.accessibilityservice.AccessibilityServiceInfo
-import android.content.ComponentName
-import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import android.widget.Button
@@ -78,92 +76,76 @@ class AccessibilityServiceConfigTest {
     fun connectedServiceExposesViewIdsAndRecordsClickAndTextEvents() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
-        val originalEnabledServices = shell("settings get secure enabled_accessibility_services")
-        val originalAccessibilityEnabled = shell("settings get secure accessibility_enabled")
-        val component = ComponentName(context, RikkaAccessibilityService::class.java).flattenToString()
-        val enabledComponents = originalEnabledServices
-            .split(':')
-            .filter { it.isNotBlank() && it != "null" }
-            .toMutableSet()
-            .apply { add(component) }
 
+        val serviceReady = awaitCondition(timeoutMs = 15_000L) {
+            RikkaAccessibilityService.instance != null
+        }
+        assertTrue(
+            "RikkaAccessibilityService must be enabled by the emulator setup before this test",
+            serviceReady,
+        )
+
+        val service = RikkaAccessibilityService.instance
+        assertNotNull("Accessibility service should be connected", service)
+        val activeService = requireNotNull(service)
+        val runtimeInfo = activeService.serviceInfo
+        assertTrue(
+            "The connected service must report view IDs",
+            (runtimeInfo.flags and AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS) != 0,
+        )
+        assertTrue(
+            "The connected service must observe click events",
+            (runtimeInfo.eventTypes and AccessibilityEvent.TYPE_VIEW_CLICKED) != 0,
+        )
+        assertTrue(
+            "The connected service must observe text-change events",
+            (runtimeInfo.eventTypes and AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) != 0,
+        )
+
+        val recording = WorkflowRecordingController.start(
+            context,
+            "Accessibility service integration test",
+        )
         try {
-            shell("settings put secure enabled_accessibility_services ${enabledComponents.joinToString(":")}")
-            shell("settings put secure accessibility_enabled 1")
+            ActivityScenario.launch(AccessibilityConfigTestActivity::class.java).use { scenario ->
+                instrumentation.waitForIdleSync()
 
-            val serviceReady = awaitCondition(timeoutMs = 15_000L) {
-                RikkaAccessibilityService.instance != null
-            }
-            assertTrue(
-                "RikkaAccessibilityService must connect after being enabled in the emulator",
-                serviceReady,
-            )
-
-            val service = RikkaAccessibilityService.instance
-            assertNotNull("Accessibility service should be connected", service)
-            val activeService = requireNotNull(service)
-            val runtimeInfo = activeService.serviceInfo
-            assertTrue(
-                "The connected service must report view IDs",
-                (runtimeInfo.flags and AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS) != 0,
-            )
-            assertTrue(
-                "The connected service must observe click events",
-                (runtimeInfo.eventTypes and AccessibilityEvent.TYPE_VIEW_CLICKED) != 0,
-            )
-            assertTrue(
-                "The connected service must observe text-change events",
-                (runtimeInfo.eventTypes and AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) != 0,
-            )
-
-            val recording = WorkflowRecordingController.start(
-                context,
-                "Accessibility service integration test",
-            )
-            try {
-                ActivityScenario.launch(AccessibilityConfigTestActivity::class.java).use { scenario ->
-                    instrumentation.waitForIdleSync()
-
-                    val buttonResourceId = "android:id/button1"
-                    val editResourceId = "android:id/edit"
-                    val buttonIdVisible = awaitCondition(timeoutMs = 10_000L) {
-                        activeService.rootInActiveWindow
-                            ?.findAccessibilityNodeInfosByViewId(buttonResourceId)
-                            .orEmpty()
-                            .any { node -> node.viewIdResourceName == buttonResourceId }
-                    }
-                    assertTrue(
-                        "The active window should expose the button by its Android resource ID",
-                        buttonIdVisible,
-                    )
-
-                    scenario.onActivity { activity ->
-                        activity.findViewById<Button>(android.R.id.button1).performClick()
-                        activity.findViewById<EditText>(android.R.id.edit).setText("typed-from-test")
-                    }
-                    instrumentation.waitForIdleSync()
-
-                    val actionsRecorded = awaitCondition(timeoutMs = 10_000L) {
-                        val actions = WorkflowRecordingStore(context).get(recording.id)?.actions.orEmpty()
-                        actions.any {
-                            it.kind == RecordingActionKind.TAP && it.resourceId == buttonResourceId
-                        } && actions.any {
-                            it.kind == RecordingActionKind.TYPE_TEXT &&
-                                it.resourceId == editResourceId &&
-                                it.text?.contains("typed-from-test") == true
-                        }
-                    }
-                    assertTrue(
-                        "The workflow recorder should persist click and text-change events with their node IDs",
-                        actionsRecorded,
-                    )
+                val buttonResourceId = "android:id/button1"
+                val editResourceId = "android:id/edit"
+                val buttonIdVisible = awaitCondition(timeoutMs = 10_000L) {
+                    activeService.rootInActiveWindow
+                        ?.findAccessibilityNodeInfosByViewId(buttonResourceId)
+                        .orEmpty()
+                        .any { node -> node.viewIdResourceName == buttonResourceId }
                 }
-            } finally {
-                WorkflowRecordingController.stop(context)
+                assertTrue(
+                    "The active window should expose the button by its Android resource ID",
+                    buttonIdVisible,
+                )
+
+                scenario.onActivity { activity ->
+                    activity.findViewById<Button>(android.R.id.button1).performClick()
+                    activity.findViewById<EditText>(android.R.id.edit).setText("typed-from-test")
+                }
+                instrumentation.waitForIdleSync()
+
+                val actionsRecorded = awaitCondition(timeoutMs = 10_000L) {
+                    val actions = WorkflowRecordingStore(context).get(recording.id)?.actions.orEmpty()
+                    actions.any {
+                        it.kind == RecordingActionKind.TAP && it.resourceId == buttonResourceId
+                    } && actions.any {
+                        it.kind == RecordingActionKind.TYPE_TEXT &&
+                            it.resourceId == editResourceId &&
+                            it.text?.contains("typed-from-test") == true
+                    }
+                }
+                assertTrue(
+                    "The workflow recorder should persist click and text-change events with their node IDs",
+                    actionsRecorded,
+                )
             }
         } finally {
-            restoreSecureSetting("enabled_accessibility_services", originalEnabledServices)
-            restoreSecureSetting("accessibility_enabled", originalAccessibilityEnabled)
+            WorkflowRecordingController.stop(context)
         }
     }
 
@@ -176,21 +158,5 @@ class AccessibilityServiceConfigTest {
             SystemClock.sleep(100L)
         }
         return condition()
-    }
-
-    private fun shell(command: String): String {
-        val descriptor = InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand(command)
-        return ParcelFileDescriptor.AutoCloseInputStream(descriptor)
-            .bufferedReader()
-            .use { it.readText().trim() }
-    }
-
-    private fun restoreSecureSetting(key: String, previousValue: String) {
-        if (previousValue.isBlank() || previousValue == "null") {
-            shell("settings delete secure $key")
-        } else {
-            shell("settings put secure $key $previousValue")
-        }
     }
 }
