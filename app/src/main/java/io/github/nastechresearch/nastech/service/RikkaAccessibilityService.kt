@@ -10,14 +10,11 @@ import android.os.HandlerThread
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
 
 private const val TAG = "RikkaAccService"
@@ -45,13 +42,10 @@ class RikkaAccessibilityService : AccessibilityService() {
     private val _lastActions = MutableStateFlow<List<ActionLogEntry>>(emptyList())
     val lastActions = _lastActions.asStateFlow()
 
-    // Serialise overlapping gesture-dispatch callers. Each caller takes a ticket; the
-    // shared current-counter advances when a caller's `finally` runs. Both fields are
-    // INSTANCE-scoped (was a companion-static AtomicInteger pair previously) so a
-    // service-process restart resets them — without this, an aborted caller leaving its
-    // ticket unconsumed would deadlock every subsequent caller in the next bind cycle.
-    private val serializeGate = AtomicInteger(0)
-    private val gateCurrent = AtomicInteger(0)
+    // Mutex serializes gesture dispatch without ticket-counter races. A cancelled waiter
+    // is removed from the queue instead of advancing shared state and letting later callers
+    // overtake the active gesture. Cancellation of the holder releases the mutex as well.
+    private val gestureDispatchQueue = GestureDispatchQueue()
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -102,21 +96,12 @@ class RikkaAccessibilityService : AccessibilityService() {
 
     /**
      * Dispatches a gesture and suspends until it completes / cancels / times out (5s).
-     * Serializes through a single-thread executor so concurrent calls queue behind each other
-     * (the OS rejects overlapping dispatchGesture calls).
+     * Callers are serialized by a cancellation-safe queue because Android rejects
+     * overlapping dispatchGesture calls. A cancelled waiter cannot overtake the active call.
      */
-    suspend fun dispatchGestureAsync(gesture: GestureDescription): Boolean {
-        val gate = serializeGate.incrementAndGet()
-        try {
-            // Wait for our turn in the queue (serializes overlapping callers). The
-            // ensureActive() inside the spin lets `stopGeneration` actually break us out
-            // of a wait — without it, a caller stuck waiting for a never-arriving prior
-            // gate would ignore cancellation and burn power until the service died.
-            while (gateCurrent.get() != gate - 1) {
-                currentCoroutineContext().ensureActive()
-                kotlinx.coroutines.delay(10)
-            }
-            val ok = withTimeoutOrNull(GESTURE_TIMEOUT_MS) {
+    suspend fun dispatchGestureAsync(gesture: GestureDescription): Boolean =
+        gestureDispatchQueue.withNextGesture {
+            withTimeoutOrNull(GESTURE_TIMEOUT_MS) {
                 suspendCancellableCoroutine<Boolean> { cont ->
                     val callback = object : GestureResultCallback() {
                         override fun onCompleted(d: GestureDescription) {
@@ -130,11 +115,7 @@ class RikkaAccessibilityService : AccessibilityService() {
                     if (!dispatched && cont.isActive) cont.resume(false)
                 }
             } ?: false
-            return ok
-        } finally {
-            gateCurrent.set(gate)
         }
-    }
 
     fun buildTapPath(x: Float, y: Float): Path = Path().apply { moveTo(x, y) }
 
