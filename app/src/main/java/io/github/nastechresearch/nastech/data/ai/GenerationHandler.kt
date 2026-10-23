@@ -209,7 +209,7 @@ internal fun shouldFallbackToModel(
             "invalid api key",
             "incorrect api key",
             "api key not valid",
-            "authentication_error",
+            "authentication error",
             "unauthorized",
             "invalid token",
         ).any { it in text }
@@ -234,11 +234,13 @@ internal fun shouldFallbackToModel(
         return true
     }
 
-    when (statusCode) {
-        402, 408, 409, 425, 429 -> return true
-        in 500..599 -> return true
-        in 400..499 -> return false
+    if (statusCode == 402 || statusCode == 408 || statusCode == 409 ||
+        statusCode == 425 || statusCode == 429
+    ) {
+        return true
     }
+    if (statusCode != null && statusCode in 500..599) return true
+    if (statusCode != null && statusCode in 400..499) return false
 
     if (
         listOf(
