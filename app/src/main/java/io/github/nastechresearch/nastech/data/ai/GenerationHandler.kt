@@ -865,48 +865,53 @@ class GenerationHandler(
                         }
                         modelRequestStartedAtMs = null
 
-                        if (shouldFallbackToModel(failure, requestReceivedMeaningfulOutput)) {
-                            val next = findNextFallbackModel()
-                            if (next == null) {
-                                // Even when no compatible fallback remains, discard the empty or
-                                // partial pre-output attempt so the persisted conversation stays at
-                                // the last confirmed checkpoint rather than a stranded assistant shell.
-                                messages = messagesBeforeRequest
-                                emit(GenerationChunk.Messages(messages))
-                            }
-                            if (next != null) {
-                                val failedName = activeModel.displayName.ifBlank { activeModel.modelId }
-                                val nextName = next.first.displayName.ifBlank { next.first.modelId }
-                                val reason = modelFallbackFailureLabel(failure)
-                                messages = messagesBeforeRequest
-                                emit(GenerationChunk.Messages(messages))
-                                activeModel = next.first
-                                activeProvider = next.second
-                                activeProviderImpl = next.third
-                                registry.setModel(activeModel)
-                                fallbackContextAddendum =
-                                    "Continue the same task after a model switch. The previous model failed before a usable " +
-                                    "response. Use this conversation history, confirmed tool results, and current observations. " +
-                                    "Never blindly repeat a side-effecting action with uncertain outcome; verify the target " +
-                                    "state first and then perform only the next uncompleted step."
-                                processingStatus.value = context.getString(
-                                    io.github.nastechresearch.nastech.R.string.chat_page_model_fallback,
-                                    failedName,
-                                    nextName,
-                                    reason,
-                                )
-                                executionTelemetry.recordTaskStageEvent(
-                                    taskId = taskId,
-                                    eventType = "MODEL_FALLBACK",
-                                    status = "RUNNING",
-                                    message = "Switched from ${failedName} to ${nextName}: ${reason}",
-                                )
-                                Log.w(TAG, "model fallback: ${failedName} -> ${nextName} (${reason})", failure)
-                                continue
-                            }
+                        val fallback = if (shouldFallbackToModel(failure, requestReceivedMeaningfulOutput)) {
+                            findNextFallbackModel()
+                        } else {
+                            null
+                        }
+                        if (fallback != null) {
+                            val failedName = activeModel.displayName.ifBlank { activeModel.modelId }
+                            val nextName = fallback.first.displayName.ifBlank { fallback.first.modelId }
+                            val reason = modelFallbackFailureLabel(failure)
+                            messages = messagesBeforeRequest
+                            emit(GenerationChunk.Messages(messages))
+                            activeModel = fallback.first
+                            activeProvider = fallback.second
+                            activeProviderImpl = fallback.third
+                            registry.setModel(activeModel)
+                            fallbackContextAddendum =
+                                "Continue the same task after a model switch. The previous model failed before a usable " +
+                                "response. Use this conversation history, confirmed tool results, and current observations. " +
+                                "Never blindly repeat a side-effecting action with uncertain outcome; verify the target " +
+                                "state first and then perform only the next uncompleted step."
+                            processingStatus.value = context.getString(
+                                io.github.nastechresearch.nastech.R.string.chat_page_model_fallback,
+                                failedName,
+                                nextName,
+                                reason,
+                            )
+                            executionTelemetry.recordTaskStageEvent(
+                                taskId = taskId,
+                                eventType = "MODEL_FALLBACK",
+                                status = "RUNNING",
+                                message = "Switched from ${failedName} to ${nextName}: ${reason}",
+                            )
+                            Log.w(TAG, "model fallback: ${failedName} -> ${nextName} (${reason})", failure)
+                            continue
                         }
 
-                        // Keep cancellation semantics and surface failures when no candidate remains.
+                        // Never leave a pre-output provider failure as a half-written assistant
+                        // message, even when the chain is empty or all candidates are incompatible.
+                        // The caller receives the original failure while confirmed task history stays intact.
+                        if (!requestReceivedMeaningfulOutput) {
+                            messages = messagesBeforeRequest
+                            emit(GenerationChunk.Messages(messages))
+                            throw failure
+                        }
+
+                        // Once output has started, don't replay it on another model. Mark any
+                        // in-flight tool parts as denied to preserve a deterministic replay state.
                         if (failure !is CancellationException) {
                             val lastMsg = messages.lastOrNull()
                             if (lastMsg != null) {
