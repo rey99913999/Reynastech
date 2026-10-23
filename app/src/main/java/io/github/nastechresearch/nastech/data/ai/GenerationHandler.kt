@@ -265,6 +265,37 @@ internal fun shouldFallbackToModel(
     return causes.any { it is IOException }
 }
 
+/**
+ * A short, safe status label for the user. Do not surface raw provider bodies, which may contain
+ * request details or other diagnostics not suitable for the transient status line.
+ */
+private fun modelFallbackFailureLabel(failure: Throwable): String {
+    val causes = generateSequence(failure) { it.cause }.take(8).toList()
+    val text = causes.joinToString(" ") { it.message.orEmpty() }
+        .lowercase()
+        .replace('_', ' ')
+    val statusCode = causes.filterIsInstance<HttpException>()
+        .firstOrNull()
+        ?.statusCode
+
+    return when {
+        listOf(
+            "insufficient quota",
+            "quota exceeded",
+            "insufficient credits",
+            "out of credits",
+            "billing hard limit",
+            "billing not active",
+            "payment required",
+            "credit balance",
+        ).any { it in text } || statusCode == 402 -> "quota or billing limit"
+        statusCode == 429 || "rate limit" in text || "too many requests" in text -> "rate limit"
+        statusCode != null && statusCode in 500..599 -> "server error"
+        causes.any { it is IOException } -> "network or transport error"
+        else -> "provider request failed"
+    }
+}
+
 private fun retryFailureReason(failure: Throwable): String =
     generateSequence(failure) { it.cause }
         .mapNotNull { it.message?.trim()?.takeIf(String::isNotBlank) }
