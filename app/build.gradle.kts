@@ -36,7 +36,7 @@ android {
         versionCode = 197
         versionName = "2.4.29"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "io.github.nastechresearch.nastech.service.AccessibilityPreservingAndroidJUnitRunner"
 
         // Supplied only through private Gradle properties or CI secrets; empty disables Gemini OAuth.
         buildConfigField("String", "GEMINI_OAUTH_CLIENT_ID", "\"$geminiOAuthClientId\"")

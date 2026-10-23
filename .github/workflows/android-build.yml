@@ -79,6 +79,7 @@ jobs:
             "platforms;android-37.0" \
             "build-tools;37.0.0" \
             "cmake;3.22.1" \
+            "ndk;28.2.13676358" \
             "ndk;29.0.14206865"
 
       - name: Prepare release signing configuration
@@ -142,15 +143,34 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Run debug unit tests
-        if: ${{ !contains(github.event.head_commit.message, '[skip-tests]') }}
+        if: ${{ !contains(github.event.head_commit.message, '[skip-tests]') && !contains(github.event.head_commit.message, '[skip-unit-tests]') }}
         run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
 
+      - name: Enable KVM for Android emulator
+        if: ${{ !contains(github.event.head_commit.message, '[skip-tests]') }}
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run accessibility service config instrumentation test
+        if: ${{ !contains(github.event.head_commit.message, '[skip-tests]') }}
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          emulator-options: -no-snapshot-load -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: sh .github/scripts/run-accessibility-service-instrumentation.sh
+
       - name: Build debug APK
-        if: always()
+        if: success()
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
 
       - name: Upload debug APK
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: nastech-debug-${{ github.sha }}-${{ steps.label.outputs.label }}
@@ -159,11 +179,11 @@ jobs:
           retention-days: 14
 
       - name: Build release APK
-        if: always()
+        if: success()
         run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
       - name: Upload release APK
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: nastech-release-${{ github.sha }}-${{ steps.label.outputs.label }}
