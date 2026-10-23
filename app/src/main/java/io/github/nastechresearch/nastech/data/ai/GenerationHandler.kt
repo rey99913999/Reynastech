@@ -265,6 +265,14 @@ internal fun shouldFallbackToModel(
             "service unavailable",
             "gateway timeout",
             "bad gateway",
+            "server error",
+            "internal server error",
+            "server had an error",
+            "internal error",
+            "upstream error",
+            "upstream connect error",
+            "temporarily overloaded",
+            "overloaded",
             "connection reset",
             "connection refused",
             "socket timeout",
@@ -307,6 +315,14 @@ private fun modelFallbackFailureLabel(failure: Throwable): String {
         ).any { it in text } || statusCode == 402 -> "quota or billing limit"
         statusCode == 429 || "rate limit" in text || "too many requests" in text -> "rate limit"
         statusCode != null && statusCode in 500..599 -> "server error"
+        listOf(
+            "server error",
+            "internal server error",
+            "server had an error",
+            "internal error",
+            "upstream error",
+            "overloaded",
+        ).any { it in text } -> "server error"
         causes.any { it is IOException } -> "network or transport error"
         else -> "provider request failed"
     }
