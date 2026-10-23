@@ -691,7 +691,7 @@ class GenerationHandler(
                 }
             }
             val needsTools = registry.hasRegisteredTools()
-            for (candidateId in settings.modelFallbackIds.distinct()) {
+            for (candidateId in assistant.modelFallbackIds.distinct()) {
                 if (!attemptedModelIds.add(candidateId)) continue
                 val candidate = settings.findModelById(candidateId) ?: continue
                 if (candidate.type != ModelType.CHAT) continue
