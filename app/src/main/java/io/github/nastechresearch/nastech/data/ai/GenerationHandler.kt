@@ -612,7 +612,6 @@ class GenerationHandler(
             registry.registerAll(memoryTools)
         }
         registry.setModel(activeModel)
-        var toolsInternal = registry.providerTools(activeModel)
         if (registry.hasRegisteredTools()) {
             val structuredPlanTool = buildStructuredPlanTool(
                 json = json,
@@ -636,6 +635,8 @@ class GenerationHandler(
                     .distinct()
             )
         }
+        var toolsInternal = registry.providerTools(activeModel)
+
         /**
          * Return the next enabled chat model in the configured order, skipping known-incompatible
          * candidates instead of repeatedly failing on a model that cannot serve this task.
