@@ -612,6 +612,7 @@ class GenerationHandler(
             registry.registerAll(memoryTools)
         }
         registry.setModel(activeModel)
+        var toolsInternal = registry.providerTools(activeModel)
         if (registry.hasRegisteredTools()) {
             val structuredPlanTool = buildStructuredPlanTool(
                 json = json,
@@ -781,7 +782,7 @@ class GenerationHandler(
                     var requestReceivedMeaningfulOutput = false
                     var modelRequestStartedAtMs: Long? = null
                     registry.setModel(activeModel)
-                    val toolsInternal = registry.providerTools(activeModel)
+                    toolsInternal = registry.providerTools(activeModel)
                     try {
                         onBeforeModelRequest()
                         if (devicePreflight.isDeviceTask) {
@@ -911,7 +912,6 @@ class GenerationHandler(
                         throw failure
                     }
                 }
-            }
                 messages = messages.visualTransforms(
                     transformers = outputTransformers,
                     context = context,
