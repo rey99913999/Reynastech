@@ -26,7 +26,6 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -56,8 +55,6 @@ import me.rerere.hugeicons.stroke.Cancel01
 import io.github.nastechresearch.nastech.R
 import io.github.nastechresearch.nastech.data.datastore.AutoCompactionThresholdMode
 import io.github.nastechresearch.nastech.data.datastore.Settings
-import io.github.nastechresearch.nastech.data.datastore.findModelById
-import io.github.nastechresearch.nastech.data.datastore.getCurrentAssistant
 import io.github.nastechresearch.nastech.ui.components.ai.ModelListSheet
 import io.github.nastechresearch.nastech.ui.components.ai.rememberModelListState
 import io.github.nastechresearch.nastech.ui.components.nav.BackButton
@@ -190,124 +187,6 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
         item {
             ResponseStreamRetrySettingItem(settings = settings, vm = vm)
         }
-        item {
-            ModelFallbackSettingItem(settings = settings, vm = vm)
-        }
-    }
-}
-
-@Composable
-private fun ModelFallbackSettingItem(
-    settings: Settings,
-    vm: SettingVM,
-) {
-    val pickerState = rememberModelListState(
-        modelId = null,
-        providers = settings.providers,
-        type = ModelType.CHAT,
-    )
-    val activeModelId = settings.getCurrentAssistant().chatModelId ?: settings.chatModelId
-    val fallbackModels = settings.modelFallbackIds
-        .distinct()
-        .mapNotNull { settings.findModelById(it) }
-        .filterNot { it.id == activeModelId }
-
-    fun moveModel(modelId: Uuid, delta: Int) {
-        vm.updateSettings { current ->
-            val currentModelId = current.getCurrentAssistant().chatModelId ?: current.chatModelId
-            val ids = current.modelFallbackIds.distinct()
-                .filter { current.findModelById(it) != null && it != currentModelId }
-                .toMutableList()
-            val from = ids.indexOf(modelId)
-            val to = from + delta
-            if (from !in ids.indices || to !in ids.indices) {
-                current
-            } else {
-                ids.add(to, ids.removeAt(from))
-                current.copy(modelFallbackIds = ids.take(5))
-            }
-        }
-    }
-
-    CardGroup {
-        item(
-            headlineContent = {
-                Text(stringResource(R.string.setting_model_page_fallback_chain_title))
-            },
-            supportingContent = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(stringResource(R.string.setting_model_page_fallback_chain_desc))
-                    if (fallbackModels.isEmpty()) {
-                        Text(
-                            text = stringResource(R.string.setting_model_page_fallback_chain_empty),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                    fallbackModels.forEachIndexed { index, model ->
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            Text(
-                                text = "${index + 1}. ${model.displayName}",
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                TextButton(
-                                    enabled = index > 0,
-                                    onClick = { moveModel(model.id, -1) },
-                                ) {
-                                    Text(stringResource(R.string.setting_model_page_fallback_chain_move_up))
-                                }
-                                TextButton(
-                                    enabled = index < fallbackModels.lastIndex,
-                                    onClick = { moveModel(model.id, 1) },
-                                ) {
-                                    Text(stringResource(R.string.setting_model_page_fallback_chain_move_down))
-                                }
-                                TextButton(
-                                    onClick = {
-                                        vm.updateSettings { current ->
-                                            current.copy(
-                                                modelFallbackIds = current.modelFallbackIds.filterNot { it == model.id }
-                                            )
-                                        }
-                                    },
-                                ) {
-                                    Text(stringResource(R.string.setting_model_page_fallback_chain_remove))
-                                }
-                            }
-                        }
-                    }
-                    TextButton(
-                        enabled = fallbackModels.size < 5,
-                        onClick = { pickerState.open() },
-                    ) {
-                        Text(stringResource(R.string.setting_model_page_fallback_chain_add))
-                    }
-                    ModelListSheet(state = pickerState) { selectedModel ->
-                        vm.updateSettings { current ->
-                            val currentModelId = current.getCurrentAssistant().chatModelId ?: current.chatModelId
-                            val normalized = current.modelFallbackIds.distinct()
-                                .filter { current.findModelById(it) != null && it != currentModelId }
-                            if (
-                                normalized.size >= 5 ||
-                                selectedModel.id == currentModelId ||
-                                selectedModel.id in normalized ||
-                                current.findModelById(selectedModel.id)?.type != ModelType.CHAT
-                            ) {
-                                current
-                            } else {
-                                current.copy(modelFallbackIds = normalized + selectedModel.id)
-                            }
-                        }
-                    }
-                }
-            },
-        )
     }
 }
 
