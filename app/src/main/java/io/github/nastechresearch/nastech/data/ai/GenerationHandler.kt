@@ -663,6 +663,10 @@ class GenerationHandler(
                     Log.i(TAG, "fallback: skip ${candidate.modelId}; advertised capabilities omit tools")
                     continue
                 }
+                if (needsTools && registry.providerTools(candidate).isEmpty()) {
+                    Log.i(TAG, "fallback: skip ${candidate.modelId}; tool calling is unavailable")
+                    continue
+                }
                 if (needsImages && Modality.IMAGE !in candidate.inputModalities) {
                     Log.i(TAG, "fallback: skip ${candidate.modelId}; image input is required")
                     continue
