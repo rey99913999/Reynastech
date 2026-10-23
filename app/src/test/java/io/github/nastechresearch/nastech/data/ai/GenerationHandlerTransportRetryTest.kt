@@ -15,6 +15,8 @@ class GenerationHandlerTransportRetryTest {
         assertTrue(shouldFallbackToModel(HttpException("insufficient_quota", statusCode = 400), false))
         assertTrue(shouldFallbackToModel(HttpException("payment required", statusCode = 402), false))
         assertTrue(shouldFallbackToModel(HttpException("upstream error", statusCode = 503), false))
+        assertTrue(shouldFallbackToModel(HttpException("The server had an error processing your request"), false))
+        assertTrue(shouldFallbackToModel(HttpException("overloaded_error"), false))
         assertTrue(shouldFallbackToModel(IOException("connection reset"), false))
     }
 
