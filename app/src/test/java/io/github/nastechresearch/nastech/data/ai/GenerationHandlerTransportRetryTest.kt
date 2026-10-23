@@ -10,6 +10,41 @@ import org.junit.Test
 
 class GenerationHandlerTransportRetryTest {
     @Test
+    fun `falls back on exhausted quota and transient server failures before output`() {
+        assertTrue(shouldFallbackToModel(HttpException("insufficient_quota", statusCode = 429), false))
+        assertTrue(shouldFallbackToModel(HttpException("payment required", statusCode = 402), false))
+        assertTrue(shouldFallbackToModel(HttpException("upstream error", statusCode = 503), false))
+        assertTrue(shouldFallbackToModel(IOException("connection reset"), false))
+    }
+
+    @Test
+    fun `does not fall back after meaningful partial output`() {
+        assertFalse(shouldFallbackToModel(IOException("connection reset"), true))
+        assertFalse(shouldFallbackToModel(HttpException("rate limited", statusCode = 429), true))
+    }
+
+    @Test
+    fun `does not fall back for invalid credentials or deterministic requests`() {
+        assertFalse(shouldFallbackToModel(HttpException("invalid API key", statusCode = 401), false))
+        assertFalse(shouldFallbackToModel(HttpException("forbidden", statusCode = 403), false))
+        assertFalse(shouldFallbackToModel(HttpException("bad request", statusCode = 400), false))
+    }
+
+    @Test
+    fun `does not fall back for context limits or cancellation`() {
+        assertFalse(
+            shouldFallbackToModel(
+                ResponseStreamErrorException(
+                    code = "context_length_exceeded",
+                    message = "maximum context length exceeded",
+                ),
+                receivedMeaningfulOutput = false,
+            )
+        )
+        assertFalse(shouldFallbackToModel(CancellationException("user cancelled"), false))
+    }
+
+    @Test
     fun `does not report an empty stream once a chunk arrived, even without parseable parts`() {
         assertFalse(shouldReportEmptyGenerationStream(receivedAnyChunk = true))
     }
