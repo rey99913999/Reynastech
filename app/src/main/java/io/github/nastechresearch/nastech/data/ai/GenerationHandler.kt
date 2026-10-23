@@ -226,7 +226,7 @@ internal fun shouldFallbackToModel(
             "insufficient credits",
             "out of credits",
             "billing hard limit",
-            "billing_not_active",
+            "billing not active",
             "payment required",
             "credit balance",
         ).any { it in text }
@@ -865,6 +865,13 @@ class GenerationHandler(
 
                         if (shouldFallbackToModel(failure, requestReceivedMeaningfulOutput)) {
                             val next = findNextFallbackModel()
+                            if (next == null) {
+                                // Even when no compatible fallback remains, discard the empty or
+                                // partial pre-output attempt so the persisted conversation stays at
+                                // the last confirmed checkpoint rather than a stranded assistant shell.
+                                messages = messagesBeforeRequest
+                                emit(GenerationChunk.Messages(messages))
+                            }
                             if (next != null) {
                                 val failedName = activeModel.displayName.ifBlank { activeModel.modelId }
                                 val nextName = next.first.displayName.ifBlank { next.first.modelId }
