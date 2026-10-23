@@ -226,7 +226,6 @@ class SettingsStore(
         val AUTO_COMPACTION_KEEP_RECENT_TOOL_CALLS = intPreferencesKey("auto_compaction_keep_recent_tool_calls")
         val CONTEXT_COMPACTION_TARGET_TOKENS_K = intPreferencesKey("context_compaction_target_tokens_k")
         val RESPONSE_STREAM_MAX_RETRIES = intPreferencesKey("response_stream_max_retries")
-        val MODEL_FALLBACK_IDS = stringPreferencesKey("model_fallback_ids")
 
         // 提供商
         val PROVIDERS = stringPreferencesKey("providers")
@@ -347,13 +346,6 @@ class SettingsStore(
                     ?.coerceIn(1, Int.MAX_VALUE / 1_000),
                 responseStreamMaxRetries = (preferences[RESPONSE_STREAM_MAX_RETRIES] ?: 5)
                     .coerceIn(0, 10),
-                modelFallbackIds = preferences[MODEL_FALLBACK_IDS]?.let { raw ->
-                    runCatching { JsonInstant.decodeFromString<List<Uuid>>(raw).distinct().take(5) }
-                        .getOrElse {
-                            Log.w(TAG, "Failed to decode modelFallbackIds, using empty chain", it)
-                            emptyList()
-                        }
-                } ?: emptyList(),
                 assistantTags = preferences[ASSISTANT_TAGS]?.let { raw ->
                     runCatching { JsonInstant.decodeFromString<List<Tag>>(raw) }.getOrElse {
                         Log.w(TAG, "Failed to decode assistantTags, using default", it)
@@ -851,7 +843,6 @@ class SettingsStore(
                     targetTokensK.coerceIn(1, Int.MAX_VALUE / 1_000)
             } ?: preferences.remove(CONTEXT_COMPACTION_TARGET_TOKENS_K)
             preferences[RESPONSE_STREAM_MAX_RETRIES] = settings.responseStreamMaxRetries.coerceIn(0, 10)
-            preferences[MODEL_FALLBACK_IDS] = JsonInstant.encodeToString(settings.modelFallbackIds.distinct().take(5))
 
             preferences[PROVIDERS] = JsonInstant.encodeToString(settings.providers)
             preferences[DELETED_BUILTIN_PROVIDER_IDS] = JsonInstant.encodeToString(
@@ -1044,8 +1035,6 @@ data class Settings(
     val contextCompactionTargetTokensK: Int? = null,
     /** Additional attempts for Response API streams that fail before yielding content. */
     val responseStreamMaxRetries: Int = 5,
-    /** Ordered, user-configured chat-model fallbacks for eligible pre-output failures. */
-    val modelFallbackIds: List<Uuid> = emptyList(),
     val assistantId: Uuid = DEFAULT_ASSISTANT_ID,
     val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
     /**
