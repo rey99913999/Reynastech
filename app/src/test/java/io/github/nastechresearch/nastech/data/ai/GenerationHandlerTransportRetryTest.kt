@@ -12,6 +12,7 @@ class GenerationHandlerTransportRetryTest {
     @Test
     fun `falls back on exhausted quota and transient server failures before output`() {
         assertTrue(shouldFallbackToModel(HttpException("insufficient_quota", statusCode = 429), false))
+        assertTrue(shouldFallbackToModel(HttpException("insufficient_quota", statusCode = 400), false))
         assertTrue(shouldFallbackToModel(HttpException("payment required", statusCode = 402), false))
         assertTrue(shouldFallbackToModel(HttpException("upstream error", statusCode = 503), false))
         assertTrue(shouldFallbackToModel(IOException("connection reset"), false))
