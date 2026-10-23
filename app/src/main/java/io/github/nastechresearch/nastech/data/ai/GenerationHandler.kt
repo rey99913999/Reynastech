@@ -174,6 +174,92 @@ private fun generationStreamRetryDelayMs(retryAttempt: Long): Long =
     ((retryAttempt + 1) * GENERATION_STREAM_RETRY_INITIAL_DELAY_MS)
         .coerceAtMost(GENERATION_STREAM_RETRY_MAX_DELAY_MS)
 
+/**
+ * Whether an exhausted model request may safely move to the next configured model.
+ *
+ * Fallback is only safe before any meaningful output has reached the conversation. A partial
+ * response may contain an incomplete tool call or an action whose outcome is uncertain, so it
+ * must never be replayed automatically by another provider. Authentication, malformed-request,
+ * and context-limit failures are also excluded: those require configuration or compaction rather
+ * than cycling through providers.
+ */
+internal fun shouldFallbackToModel(
+    failure: Throwable,
+    receivedMeaningfulOutput: Boolean,
+): Boolean {
+    if (receivedMeaningfulOutput || isCancellationFailure(failure) || isContextLimitFailure(failure)) {
+        return false
+    }
+    val causes = generateSequence(failure) { it.cause }.take(8).toList()
+    val text = causes.joinToString(" ") { cause ->
+        (cause.message.orEmpty() + " " + cause.toString())
+    }.lowercase().replace('_', ' ')
+
+    val statusCode = causes.filterIsInstance<HttpException>()
+        .firstOrNull()
+        ?.statusCode
+
+    // Never conceal a bad key or permission/configuration failure by changing providers.
+    if (
+        statusCode == 401 || statusCode == 403 ||
+        listOf(
+            "invalid api key",
+            "incorrect api key",
+            "api key not valid",
+            "authentication_error",
+            "unauthorized",
+            "invalid token",
+        ).any { it in text }
+    ) {
+        return false
+    }
+
+    // Providers sometimes signal exhausted account quota as a 400/429 business error.
+    if (
+        listOf(
+            "insufficient quota",
+            "quota exceeded",
+            "exceeded your current quota",
+            "insufficient credits",
+            "out of credits",
+            "billing hard limit",
+            "billing_not_active",
+            "payment required",
+            "credit balance",
+        ).any { it in text }
+    ) {
+        return true
+    }
+
+    when (statusCode) {
+        402, 408, 409, 425, 429 -> return true
+        in 500..599 -> return true
+        in 400..499 -> return false
+    }
+
+    if (
+        listOf(
+            "rate limit",
+            "too many requests",
+            "temporarily unavailable",
+            "service unavailable",
+            "gateway timeout",
+            "bad gateway",
+            "connection reset",
+            "connection refused",
+            "socket timeout",
+            "timed out",
+            "timeout",
+        ).any { it in text }
+    ) {
+        return true
+    }
+
+    // For unknown-status transport failures, only network/IO errors qualify. Parser and local
+    // programming errors must remain visible instead of silently selecting another model.
+    return causes.any { it is IOException }
+}
+
 private fun retryFailureReason(failure: Throwable): String =
     generateSequence(failure) { it.cause }
         .mapNotNull { it.message?.trim()?.takeIf(String::isNotBlank) }
