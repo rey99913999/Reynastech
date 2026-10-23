@@ -1492,12 +1492,20 @@
   <string name="setting_model_page_response_stream_retries">محاولات إعادة تدفق Response API</string>
   <string name="setting_model_page_response_stream_retries_desc">عند إغلاق تدفق Response API قبل اكتماله، أعد محاولة الطلب بهذا العدد من المرات. اضبطه على 0 لتعطيل إعادة المحاولة التلقائية.</string>
   <string name="setting_model_page_response_stream_retries_input">الحد الأقصى لعدد المحاولات</string>
+  <string name="setting_model_page_fallback_chain_title">سلسلة النماذج الاحتياطية</string>
+  <string name="setting_model_page_fallback_chain_desc">جرّب حتى خمسة نماذج دردشة بالترتيب عند نفاد الحصة أو تجاوز المعدل أو فشل الشبكة أو الخادم قبل ظهور مخرجات مفيدة. لا يؤدي المفتاح غير الصحيح أو الطلب غير الصحيح أو خطأ السياق إلى التبديل. يجب أن تدعم النماذج الاحتياطية الأدوات والصور المطلوبة للمهمة.</string>
+  <string name="setting_model_page_fallback_chain_add">إضافة نموذج احتياطي</string>
+  <string name="setting_model_page_fallback_chain_empty">لم تُضف نماذج احتياطية؛ السلسلة معطّلة.</string>
+  <string name="setting_model_page_fallback_chain_move_up">تحريك للأعلى</string>
+  <string name="setting_model_page_fallback_chain_move_down">تحريك للأسفل</string>
+  <string name="setting_model_page_fallback_chain_remove">إزالة</string>
 
   <!-- 100% Full Main Branch Localization Coverage -->
   <string name="backup_page_s3_path_style">نمط المسار (Path Style)</string>
   <string name="backup_page_s3_path_style_desc">استخدام endpoint/bucket/object. قم بالتعطيل لاستخدام bucket.endpoint/object.</string>
   <string name="chat_input_file_read_failed">فشل قراءة الملف: %s</string>
   <string name="chat_page_retrying">جارٍ إعادة المحاولة (%1$d/%2$d). الفشل السابق: %3$s</string>
+  <string name="chat_page_model_fallback">الانتقال من النموذج %1$s إلى %2$s بعد الفشل: %3$s.</string>
   <string name="chat_page_conversation_system_prompt">توجيه النظام الخاص بالمحادثة</string>
   <string name="chat_page_conversation_system_prompt_clear">مسح</string>
   <string name="chat_page_conversation_system_prompt_hint">تجاوز توجيه النظام الخاص بالمساعد لهذه المحادثة</string>
