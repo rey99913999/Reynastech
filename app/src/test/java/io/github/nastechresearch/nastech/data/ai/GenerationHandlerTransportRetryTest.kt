@@ -32,6 +32,15 @@ class GenerationHandlerTransportRetryTest {
     }
 
     @Test
+    fun `context fallback requires a known strictly larger context window`() {
+        assertTrue(hasLargerContextWindow(8_000, 32_000))
+        assertFalse(hasLargerContextWindow(32_000, 8_000))
+        assertFalse(hasLargerContextWindow(8_000, 8_000))
+        assertFalse(hasLargerContextWindow(null, 32_000))
+        assertFalse(hasLargerContextWindow(8_000, null))
+    }
+
+    @Test
     fun `does not fall back for context limits or cancellation`() {
         assertFalse(
             shouldFallbackToModel(
