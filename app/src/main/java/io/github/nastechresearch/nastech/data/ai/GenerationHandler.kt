@@ -186,6 +186,12 @@ private fun generationStreamRetryDelayMs(retryAttempt: Long): Long =
  * and context-limit failures are also excluded: those require configuration or compaction rather
  * than cycling through providers.
  */
+/** A context-limit switch is only useful when metadata proves the candidate has more room. */
+internal fun hasLargerContextWindow(currentContextLength: Int?, candidateContextLength: Int?): Boolean =
+    currentContextLength != null &&
+        candidateContextLength != null &&
+        candidateContextLength > currentContextLength
+
 internal fun shouldFallbackToModel(
     failure: Throwable,
     receivedMeaningfulOutput: Boolean,
@@ -279,6 +285,7 @@ private fun modelFallbackFailureLabel(failure: Throwable): String {
         ?.statusCode
 
     return when {
+        isContextLimitFailure(failure) -> "context window limit"
         listOf(
             "insufficient quota",
             "quota exceeded",
@@ -674,7 +681,9 @@ class GenerationHandler(
          * Return the next enabled chat model in the configured order, skipping known-incompatible
          * candidates instead of repeatedly failing on a model that cannot serve this task.
          */
-        fun findNextFallbackModel(): Triple<Model, ProviderSetting, Provider<ProviderSetting>>? {
+        fun findNextFallbackModel(
+            requireLargerContextThan: Int? = null,
+        ): Triple<Model, ProviderSetting, Provider<ProviderSetting>>? {
             val needsImages = messages.any { message ->
                 message.parts.any { part ->
                     part is UIMessagePart.Image ||
@@ -686,6 +695,13 @@ class GenerationHandler(
                 if (!attemptedModelIds.add(candidateId)) continue
                 val candidate = settings.findModelById(candidateId) ?: continue
                 if (candidate.type != ModelType.CHAT) continue
+                if (
+                    requireLargerContextThan != null &&
+                    !hasLargerContextWindow(requireLargerContextThan, candidate.contextLength)
+                ) {
+                    Log.i(TAG, "fallback: skip ${candidate.modelId}; larger context window is not confirmed")
+                    continue
+                }
                 val candidateProvider = candidate.findProvider(settings.providers) ?: continue
                 if (!candidateProvider.enabled) continue
                 if (
@@ -896,10 +912,15 @@ class GenerationHandler(
                         }
                         modelRequestStartedAtMs = null
 
-                        val fallback = if (shouldFallbackToModel(failure, requestReceivedMeaningfulOutput)) {
-                            findNextFallbackModel()
-                        } else {
-                            null
+                        val contextLimitFailure = isContextLimitFailure(failure)
+                        val fallback = when {
+                            requestReceivedMeaningfulOutput || isCancellationFailure(failure) -> null
+                            contextLimitFailure -> activeModel.contextLength?.let { contextLength ->
+                                findNextFallbackModel(requireLargerContextThan = contextLength)
+                            }
+                            shouldFallbackToModel(failure, receivedMeaningfulOutput = false) ->
+                                findNextFallbackModel()
+                            else -> null
                         }
                         if (fallback != null) {
                             val failedName = activeModel.displayName.ifBlank { activeModel.modelId }
