@@ -1983,7 +1983,7 @@
   <string name="setting_model_page_response_stream_retries_desc">When a Response API stream closes before completion, retry the request this many times. Set 0 to disable automatic retries.</string>
   <string name="setting_model_page_response_stream_retries_input">Maximum retry count</string>
   <string name="setting_model_page_fallback_chain_title">Model fallback chain</string>
-  <string name="setting_model_page_fallback_chain_desc">Try up to five chat models in order after quota, rate-limit, network, or server failures before useful output. Invalid API keys, invalid requests, and context errors do not trigger a switch. Fallback models must support the task’s tools and images.</string>
+  <string name="setting_model_page_fallback_chain_desc">Try up to five chat models in order after quota, rate-limit, network, or server failures before useful output. Context-window failures switch only when a fallback advertises a larger context. Invalid API keys and invalid requests do not trigger a switch. Fallback models must support the task’s tools and images.</string>
   <string name="setting_model_page_fallback_chain_add">Add fallback model</string>
   <string name="setting_model_page_fallback_chain_empty">No fallback models configured. The fallback chain is disabled.</string>
   <string name="setting_model_page_fallback_chain_move_up">Move up</string>
