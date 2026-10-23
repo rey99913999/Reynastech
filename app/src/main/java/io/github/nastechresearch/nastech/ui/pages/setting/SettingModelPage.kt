@@ -57,6 +57,7 @@ import io.github.nastechresearch.nastech.R
 import io.github.nastechresearch.nastech.data.datastore.AutoCompactionThresholdMode
 import io.github.nastechresearch.nastech.data.datastore.Settings
 import io.github.nastechresearch.nastech.data.datastore.findModelById
+import io.github.nastechresearch.nastech.data.datastore.getCurrentAssistant
 import io.github.nastechresearch.nastech.ui.components.ai.ModelListSheet
 import io.github.nastechresearch.nastech.ui.components.ai.rememberModelListState
 import io.github.nastechresearch.nastech.ui.components.nav.BackButton
@@ -205,14 +206,20 @@ private fun ModelFallbackSettingItem(
         providers = settings.providers,
         type = ModelType.CHAT,
     )
+    val activeModelId = settings.getCurrentAssistant().chatModelId ?: settings.chatModelId
     val fallbackModels = settings.modelFallbackIds
         .distinct()
         .mapNotNull { settings.findModelById(it) }
-        .filterNot { it.id == settings.chatModelId }
+        .filterNot { it.id == activeModelId }
 
-    fun moveModel(from: Int, to: Int) {
+    fun moveModel(modelId: Uuid, delta: Int) {
         vm.updateSettings { current ->
-            val ids = current.modelFallbackIds.distinct().toMutableList()
+            val currentModelId = current.getCurrentAssistant().chatModelId ?: current.chatModelId
+            val ids = current.modelFallbackIds.distinct()
+                .filter { current.findModelById(it) != null && it != currentModelId }
+                .toMutableList()
+            val from = ids.indexOf(modelId)
+            val to = from + delta
             if (from !in ids.indices || to !in ids.indices) {
                 current
             } else {
@@ -251,13 +258,13 @@ private fun ModelFallbackSettingItem(
                             ) {
                                 TextButton(
                                     enabled = index > 0,
-                                    onClick = { moveModel(index, index - 1) },
+                                    onClick = { moveModel(model.id, -1) },
                                 ) {
                                     Text(stringResource(R.string.setting_model_page_fallback_chain_move_up))
                                 }
                                 TextButton(
                                     enabled = index < fallbackModels.lastIndex,
-                                    onClick = { moveModel(index, index + 1) },
+                                    onClick = { moveModel(model.id, 1) },
                                 ) {
                                     Text(stringResource(R.string.setting_model_page_fallback_chain_move_down))
                                 }
@@ -283,12 +290,14 @@ private fun ModelFallbackSettingItem(
                     }
                     ModelListSheet(state = pickerState) { selectedModel ->
                         vm.updateSettings { current ->
-                            val activeModelId = current.getCurrentAssistant().chatModelId ?: current.chatModelId
+                            val currentModelId = current.getCurrentAssistant().chatModelId ?: current.chatModelId
                             val normalized = current.modelFallbackIds.distinct()
+                                .filter { current.findModelById(it) != null && it != currentModelId }
                             if (
                                 normalized.size >= 5 ||
-                                selectedModel.id == activeModelId ||
-                                selectedModel.id in normalized
+                                selectedModel.id == currentModelId ||
+                                selectedModel.id in normalized ||
+                                current.findModelById(selectedModel.id)?.type != ModelType.CHAT
                             ) {
                                 current
                             } else {
