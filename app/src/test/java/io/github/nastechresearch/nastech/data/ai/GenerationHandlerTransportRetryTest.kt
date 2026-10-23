@@ -155,6 +155,35 @@ class GenerationHandlerTransportRetryTest {
     }
 
     @Test
+    fun `does not waste retries on a confirmed exhausted quota`() {
+        assertFalse(
+            shouldRetryGenerationStreamFailure(
+                failure = HttpException("insufficient_quota", statusCode = 429),
+                retryAttempt = 0,
+                maxRetries = 5,
+                receivedMeaningfulOutput = false,
+            )
+        )
+        assertFalse(
+            shouldRetryGenerationStreamFailure(
+                failure = HttpException("billing_hard_limit_reached", statusCode = 400),
+                retryAttempt = 0,
+                maxRetries = 5,
+                receivedMeaningfulOutput = false,
+            )
+        )
+        // A generic 429 is still treated as a transient rate-limit failure.
+        assertTrue(
+            shouldRetryGenerationStreamFailure(
+                failure = HttpException("rate limit exceeded", statusCode = 429),
+                retryAttempt = 0,
+                maxRetries = 5,
+                receivedMeaningfulOutput = false,
+            )
+        )
+    }
+
+    @Test
     fun `retries the 4xx statuses that signal a transient condition`() {
         for (statusCode in listOf(408, 409, 425, 429)) {
             assertTrue(
