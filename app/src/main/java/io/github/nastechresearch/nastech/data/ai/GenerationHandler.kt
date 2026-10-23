@@ -137,7 +137,11 @@ internal fun shouldRetryGenerationStreamFailure(
     if (receivedMeaningfulOutput || retryAttempt >= maxRetries.coerceAtLeast(0).toLong()) {
         return false
     }
-    if (failure is ResponseStreamErrorException || isContextLimitFailure(failure)) {
+    if (
+        failure is ResponseStreamErrorException ||
+        isContextLimitFailure(failure) ||
+        isQuotaExhaustionFailure(failure)
+    ) {
         return false
     }
     if (isNonRetryableClientError(failure)) {
@@ -172,6 +176,25 @@ private fun isContextLimitFailure(failure: Throwable): Boolean =
                 "maximum context length" in text ||
                 "maximum context window" in text
         }
+
+private fun isQuotaExhaustionFailure(failure: Throwable): Boolean {
+    val text = generateSequence(failure) { it.cause }
+        .take(8)
+        .joinToString(" ") { cause -> cause.message.orEmpty() + " " + cause.toString() }
+        .lowercase()
+        .replace('_', ' ')
+    return listOf(
+        "insufficient quota",
+        "quota exceeded",
+        "exceeded your current quota",
+        "insufficient credits",
+        "out of credits",
+        "billing hard limit",
+        "billing not active",
+        "payment required",
+        "credit balance",
+    ).any { marker -> marker in text }
+}
 
 private fun generationStreamRetryDelayMs(retryAttempt: Long): Long =
     ((retryAttempt + 1) * GENERATION_STREAM_RETRY_INITIAL_DELAY_MS)
@@ -224,21 +247,7 @@ internal fun shouldFallbackToModel(
     }
 
     // Providers sometimes signal exhausted account quota as a 400/429 business error.
-    if (
-        listOf(
-            "insufficient quota",
-            "quota exceeded",
-            "exceeded your current quota",
-            "insufficient credits",
-            "out of credits",
-            "billing hard limit",
-            "billing not active",
-            "payment required",
-            "credit balance",
-        ).any { it in text }
-    ) {
-        return true
-    }
+    if (isQuotaExhaustionFailure(failure)) return true
 
     if (statusCode == 402 || statusCode == 408 || statusCode == 409 ||
         statusCode == 425 || statusCode == 429
