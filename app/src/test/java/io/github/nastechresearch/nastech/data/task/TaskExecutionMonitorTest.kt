@@ -79,6 +79,7 @@ class TaskExecutionMonitorTest {
             slowAfterMs = 3_000L,
             possiblyStuckAfterMs = 5_000L,
         )
+        assertEquals(TaskExecutionHealth.RUNNING, snapshot.health)
         assertEquals("WAIT", snapshot.currentActivity?.stage)
         assertEquals("RUNNING", snapshot.currentActivity?.status)
         assertEquals(7_000L, snapshot.currentActivity?.elapsedMs)
