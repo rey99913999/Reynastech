@@ -309,17 +309,21 @@ internal fun decideRateLimitRecovery(
     alreadyWaitedOnThisModel: Boolean,
     safetyMarginMs: Long = 5_000L,
 ): RateLimitRecoveryDecision {
-    if (retryAfterMs != null && retryAfterMs > maxWaitMs) {
-        return RateLimitRecoveryDecision(RateLimitRecoveryAction.SWITCH_MODEL)
+    if (retryAfterMs != null) {
+        if (retryAfterMs > maxWaitMs) {
+            return RateLimitRecoveryDecision(RateLimitRecoveryAction.SWITCH_MODEL)
+        }
+        // Honor every provider-supplied retry window that is within the user's threshold.
+        // The one-retry-then-switch rule applies only when no delay was supplied.
+        return RateLimitRecoveryDecision(
+            RateLimitRecoveryAction.WAIT_AND_RETRY,
+            retryAfterMs.coerceAtLeast(0L).saturatingAdd(safetyMarginMs.coerceAtLeast(0L)),
+        )
     }
     if (alreadyWaitedOnThisModel) {
         return RateLimitRecoveryDecision(RateLimitRecoveryAction.SWITCH_MODEL)
     }
-    val waitMs = if (retryAfterMs != null) {
-        retryAfterMs.coerceAtLeast(0L).saturatingAdd(safetyMarginMs.coerceAtLeast(0L))
-    } else {
-        missingRetryAfterWaitMs.coerceAtLeast(0L)
-    }
+    val waitMs = missingRetryAfterWaitMs.coerceAtLeast(0L)
     return RateLimitRecoveryDecision(RateLimitRecoveryAction.WAIT_AND_RETRY, waitMs)
 }
 
