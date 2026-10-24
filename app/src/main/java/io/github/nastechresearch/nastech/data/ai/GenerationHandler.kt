@@ -443,17 +443,8 @@ private fun modelFallbackFailureLabel(failure: Throwable): String {
 
     return when {
         isContextLimitFailure(failure) -> "context window limit"
-        listOf(
-            "insufficient quota",
-            "quota exceeded",
-            "insufficient credits",
-            "out of credits",
-            "billing hard limit",
-            "billing not active",
-            "payment required",
-            "credit balance",
-        ).any { it in text } || statusCode == 402 -> "quota or billing limit"
-        statusCode == 429 || "rate limit" in text || "too many requests" in text -> "rate limit"
+        isRateLimitFailure(failure) -> "rate limit"
+        isQuotaExhaustionFailure(failure) || statusCode == 402 -> "quota or billing limit"
         statusCode != null && statusCode in 500..599 -> "server error"
         listOf(
             "server error",
