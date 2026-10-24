@@ -2180,7 +2180,7 @@
   <string name="assistant_page_local_tools_wait_until_save">Save</string>
 
     <string name="assistant_page_fallback_max_wait_title">Maximum wait before switching (minutes)</string>
-    <string name="assistant_page_fallback_max_wait_desc">If the provider's retry delay is longer than this, switch to a fallback. Set 0 to switch immediately for any positive retry delay.</string>
+    <string name="assistant_page_fallback_max_wait_desc">If the retry delay returned by the provider is longer than this, switch to a fallback. Set 0 to switch immediately for any positive retry delay.</string>
     <string name="assistant_page_fallback_missing_retry_title">Wait when retry delay is missing (minutes)</string>
     <string name="assistant_page_fallback_missing_retry_desc">When rate-limited without a supplied delay, wait this long and retry the same model once.</string>
     <string name="assistant_page_fallback_cycle_cooldown_title">Cooldown between fallback cycles (seconds)</string>
