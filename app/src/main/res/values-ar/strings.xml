@@ -1493,7 +1493,7 @@
   <string name="setting_model_page_response_stream_retries_desc">عند إغلاق تدفق Response API قبل اكتماله، أعد محاولة الطلب بهذا العدد من المرات. اضبطه على 0 لتعطيل إعادة المحاولة التلقائية.</string>
   <string name="setting_model_page_response_stream_retries_input">الحد الأقصى لعدد المحاولات</string>
   <string name="assistant_page_fallback_chain_title">سلسلة النماذج الاحتياطية</string>
-  <string name="assistant_page_fallback_chain_desc">جرّب حتى خمسة نماذج دردشة بالترتيب عند نفاد الحصة أو تجاوز المعدل أو فشل الشبكة أو الخادم قبل ظهور مخرجات مفيدة. لا يُجرى التبديل عند تجاوز السياق إلا إذا كان النموذج البديل يعلن عن نافذة سياق أكبر. لا يؤدي المفتاح أو الطلب غير الصحيح إلى التبديل. يجب أن تدعم النماذج الاحتياطية الأدوات والصور المطلوبة للمهمة.</string>
+  <string name="assistant_page_fallback_chain_desc">أضف أي عدد من نماذج الدردشة الاحتياطية ورتّبها. يتنقّل التطبيق بينها دائريًا عند نفاد الحصة أو تجاوز المعدل أو فشل الشبكة أو الخادم قبل ظهور مخرجات مفيدة. يتطلب تجاوز السياق نموذجًا احتياطيًا بنافذة أكبر. أخطاء المصادقة والطلبات غير الصحيحة لا تُحل بتبديل النموذج.</string>
   <string name="assistant_page_fallback_chain_add">إضافة نموذج احتياطي</string>
   <string name="assistant_page_fallback_chain_empty">لم تُضف نماذج احتياطية؛ السلسلة معطّلة.</string>
   <string name="assistant_page_fallback_chain_move_up">تحريك للأعلى</string>
@@ -2168,4 +2168,13 @@
   <string name="assistant_page_local_tools_wait_until_condition_text_disappears">اختفاء النص</string>
   <string name="assistant_page_local_tools_wait_until_condition_screen_stable">استقرار الشاشة</string>
   <string name="assistant_page_local_tools_wait_until_save">حفظ</string>
+
+    <string name="assistant_page_fallback_max_wait_title">الحد الأقصى للانتظار قبل التبديل (دقيقة)</string>
+    <string name="assistant_page_fallback_max_wait_desc">إذا كانت مدة الانتظار التي يحددها المزوّد أطول من هذا الحد، انتقل إلى النموذج الاحتياطي. اختر 0 للتبديل فورًا عند وجود مدة انتظار موجبة.</string>
+    <string name="assistant_page_fallback_missing_retry_title">الانتظار عند غياب مدة إعادة المحاولة (دقيقة)</string>
+    <string name="assistant_page_fallback_missing_retry_desc">عند تجاوز معدل الطلبات دون مدة محددة، انتظر هذه المدة ثم أعد الطلب مرة واحدة إلى النموذج نفسه.</string>
+    <string name="assistant_page_fallback_cycle_cooldown_title">فترة التهدئة بين الدورات (ثانية)</string>
+    <string name="assistant_page_fallback_cycle_cooldown_desc">انتظار بعد المرور على النماذج الاحتياطية كلها قبل بدء دورة جديدة، لمنع الدوران السريع عند فشلها جميعًا.</string>
+    <string name="chat_page_rate_limit_wait">تجاوز النموذج %1$s معدل الطلبات؛ الانتظار %2$d ثانية قبل إعادة المحاولة.</string>
+    <string name="chat_page_fallback_cycle_wait">تمت تجربة النماذج الاحتياطية؛ الانتظار %1$d ثانية قبل بدء دورة جديدة.</string>
 </resources>
