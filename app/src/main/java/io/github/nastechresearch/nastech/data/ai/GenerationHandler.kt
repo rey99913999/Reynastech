@@ -1250,8 +1250,14 @@ class GenerationHandler(
                         if (!requestReceivedMeaningfulOutput && (quotaExhausted || rateLimitFailure) &&
                             !isCancellationFailure(failure)
                         ) {
+                            val noAlternativeWaitMs = if (rateLimitFailure) {
+                                assistant.fallbackMissingRetryAfterWaitMinutes
+                                    .coerceIn(1, 1440).toLong() * 60_000L
+                            } else {
+                                cycleCooldownMs
+                            }
                             val retryAtMs = modelCooldownUntilMs[activeModel.id]
-                                ?: nowMs.saturatingAdd(cycleCooldownMs)
+                                ?: nowMs.saturatingAdd(noAlternativeWaitMs)
                             modelCooldownUntilMs[activeModel.id] = retryAtMs
                             messages = messagesBeforeRequest
                             emit(GenerationChunk.Messages(messages))
