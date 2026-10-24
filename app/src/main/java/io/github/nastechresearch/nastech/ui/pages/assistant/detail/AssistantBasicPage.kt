@@ -414,7 +414,7 @@ internal fun AssistantBasicContent(
                             val digits = input.filter(Char::isDigit).take(4)
                             fallbackMaxWaitMinutesText = digits
                             digits.toIntOrNull()?.let { value ->
-                                onUpdate(assistant.copy(fallbackMaxRateLimitWaitMinutes = value.coerceIn(0, 1440)))
+                                vm.updateAssistant { current -> current.copy(fallbackMaxRateLimitWaitMinutes = value.coerceIn(0, 1440)) }
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -435,7 +435,7 @@ internal fun AssistantBasicContent(
                             val digits = input.filter(Char::isDigit).take(4)
                             fallbackMissingWaitMinutesText = digits
                             digits.toIntOrNull()?.let { value ->
-                                onUpdate(assistant.copy(fallbackMissingRetryAfterWaitMinutes = value.coerceIn(1, 1440)))
+                                vm.updateAssistant { current -> current.copy(fallbackMissingRetryAfterWaitMinutes = value.coerceIn(1, 1440)) }
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -456,7 +456,7 @@ internal fun AssistantBasicContent(
                             val digits = input.filter(Char::isDigit).take(5)
                             fallbackCycleCooldownSecondsText = digits
                             digits.toIntOrNull()?.let { value ->
-                                onUpdate(assistant.copy(fallbackCycleCooldownSeconds = value.coerceIn(1, 3600)))
+                                vm.updateAssistant { current -> current.copy(fallbackCycleCooldownSeconds = value.coerceIn(1, 3600)) }
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
