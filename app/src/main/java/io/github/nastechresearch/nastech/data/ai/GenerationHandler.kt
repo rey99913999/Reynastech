@@ -991,11 +991,20 @@ class GenerationHandler(
                     if (cooldownWaitMs > 0L) {
                         val activeName = activeModel.displayName.ifBlank { activeModel.modelId }
                         val waitSeconds = kotlin.math.ceil(cooldownWaitMs / 1_000.0).toInt()
-                        processingStatus.value = context.getString(
-                            io.github.nastechresearch.nastech.R.string.chat_page_rate_limit_wait,
-                            activeName,
-                            waitSeconds,
-                        )
+                        processingStatus.value = if (fallbackCycleNotBeforeMs > nowMs &&
+                            fallbackCycleNotBeforeMs >= modelCooldownUntil
+                        ) {
+                            context.getString(
+                                io.github.nastechresearch.nastech.R.string.chat_page_fallback_cycle_wait,
+                                waitSeconds,
+                            )
+                        } else {
+                            context.getString(
+                                io.github.nastechresearch.nastech.R.string.chat_page_rate_limit_wait,
+                                activeName,
+                                waitSeconds,
+                            )
+                        }
                         executionTelemetry.recordTaskStageEvent(
                             taskId = taskId,
                             eventType = "MODEL_RATE_LIMIT_WAIT_STARTED",
@@ -1205,6 +1214,7 @@ class GenerationHandler(
                             )
                             Log.w(TAG, "model fallback: ${failedName} -> ${nextName} (${reason})", failure)
                             if (fallbackCycleWrapped) {
+                                rateLimitWaitAttemptedModels.clear()
                                 fallbackCycleNotBeforeMs = maxOf(
                                     fallbackCycleNotBeforeMs,
                                     System.currentTimeMillis().saturatingAdd(cycleCooldownMs),
