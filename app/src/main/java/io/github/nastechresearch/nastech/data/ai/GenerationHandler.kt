@@ -140,7 +140,8 @@ internal fun shouldRetryGenerationStreamFailure(
     if (
         failure is ResponseStreamErrorException ||
         isContextLimitFailure(failure) ||
-        isQuotaExhaustionFailure(failure)
+        isQuotaExhaustionFailure(failure) ||
+        isRateLimitFailure(failure)
     ) {
         return false
     }
@@ -177,23 +178,140 @@ private fun isContextLimitFailure(failure: Throwable): Boolean =
                 "maximum context window" in text
         }
 
-private fun isQuotaExhaustionFailure(failure: Throwable): Boolean {
-    val text = generateSequence(failure) { it.cause }
+private fun failureText(failure: Throwable): String =
+    generateSequence(failure) { it.cause }
         .take(8)
         .joinToString(" ") { cause -> cause.message.orEmpty() + " " + cause.toString() }
         .lowercase()
         .replace('_', ' ')
-    return listOf(
+
+private fun failureStatusCode(failure: Throwable): Int? =
+    generateSequence(failure) { it.cause }
+        .take(8)
+        .filterIsInstance<HttpException>()
+        .firstOrNull()
+        ?.statusCode
+
+internal fun isRateLimitFailure(failure: Throwable): Boolean {
+    val text = failureText(failure)
+    val statusCode = failureStatusCode(failure)
+    val hardQuotaMarkers = listOf(
         "insufficient quota",
-        "quota exceeded",
-        "exceeded your current quota",
         "insufficient credits",
         "out of credits",
         "billing hard limit",
         "billing not active",
         "payment required",
         "credit balance",
-    ).any { marker -> marker in text }
+        "quota is exhausted",
+        "quota exhausted",
+    )
+    if (hardQuotaMarkers.any { it in text }) return false
+
+    val rateLimitMarkers = listOf(
+        "rate limit",
+        "rate limited",
+        "too many requests",
+        "requests per minute",
+        "request per minute",
+        "requests/minute",
+        "tokens per minute",
+        "free tier requests",
+        "free tier tokens",
+        "retry in",
+        "retry after",
+        "retry-after",
+        "retry delay",
+        "retrydelay",
+    )
+    if (rateLimitMarkers.any { it in text }) return true
+    return statusCode == 429
+}
+
+internal fun isQuotaExhaustionFailure(failure: Throwable): Boolean {
+    val text = failureText(failure)
+    val hardQuotaMarkers = listOf(
+        "insufficient quota",
+        "insufficient credits",
+        "out of credits",
+        "billing hard limit",
+        "billing not active",
+        "payment required",
+        "credit balance",
+        "quota is exhausted",
+        "quota exhausted",
+    )
+    if (hardQuotaMarkers.any { it in text }) return true
+    if (isRateLimitFailure(failure)) return false
+    return failureStatusCode(failure) == 402 ||
+        "quota exceeded" in text ||
+        "exceeded your current quota" in text
+}
+
+private val RETRY_IN_PATTERN = Regex(
+    """(?i)\\bretry(?:\\s+again)?\\s+in\\s+([0-9]+(?:\\.[0-9]+)?)\\s*(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h)\\b"""
+)
+private val RETRY_AFTER_PATTERN = Regex(
+    """(?i)\\bretry[-_ ]?(?:after|delay)["']?\\s*[:=]\\s*["']?([0-9]+(?:\\.[0-9]+)?)\\s*(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h)?\\b"""
+)
+
+/** Extract Retry-After-style durations from structured error details or provider messages. */
+internal fun extractRetryAfterDelayMs(failure: Throwable): Long? {
+    val sources = generateSequence(failure) { it.cause }.take(8)
+        .flatMap { sequenceOf(it.message.orEmpty(), it.toString()) }
+    for (source in sources) {
+        val inMatch = RETRY_IN_PATTERN.find(source)
+        val afterMatch = inMatch ?: RETRY_AFTER_PATTERN.find(source)
+        if (afterMatch != null) {
+            val amount = afterMatch.groupValues[1].toDoubleOrNull() ?: continue
+            val unit = afterMatch.groupValues.getOrNull(2).orEmpty().lowercase()
+            val multiplier = when {
+                unit.startsWith("ms") || unit.startsWith("msec") || unit.startsWith("millisecond") -> 1.0
+                unit.startsWith("s") || unit.startsWith("sec") || unit.isBlank() -> 1_000.0
+                unit.startsWith("m") -> 60_000.0
+                unit.startsWith("h") -> 3_600_000.0
+                else -> continue
+            }
+            return kotlin.math.ceil(amount * multiplier).toLong().coerceAtLeast(0L)
+        }
+    }
+    return null
+}
+
+internal enum class RateLimitRecoveryAction { WAIT_AND_RETRY, SWITCH_MODEL }
+internal data class RateLimitRecoveryDecision(
+    val action: RateLimitRecoveryAction,
+    val waitMs: Long? = null,
+)
+
+internal fun decideRateLimitRecovery(
+    retryAfterMs: Long?,
+    maxWaitMs: Long,
+    missingRetryAfterWaitMs: Long,
+    alreadyWaitedOnThisModel: Boolean,
+    safetyMarginMs: Long = 5_000L,
+): RateLimitRecoveryDecision {
+    if (retryAfterMs != null && retryAfterMs > maxWaitMs) {
+        return RateLimitRecoveryDecision(RateLimitRecoveryAction.SWITCH_MODEL)
+    }
+    if (alreadyWaitedOnThisModel) {
+        return RateLimitRecoveryDecision(RateLimitRecoveryAction.SWITCH_MODEL)
+    }
+    val waitMs = if (retryAfterMs != null) {
+        retryAfterMs.coerceAtLeast(0L).saturatingAdd(safetyMarginMs.coerceAtLeast(0L))
+    } else {
+        missingRetryAfterWaitMs.coerceAtLeast(0L)
+    }
+    return RateLimitRecoveryDecision(RateLimitRecoveryAction.WAIT_AND_RETRY, waitMs)
+}
+
+private fun Long.saturatingAdd(other: Long): Long =
+    if (Long.MAX_VALUE - this < other) Long.MAX_VALUE else this + other
+
+internal fun fallbackCandidateIndexes(currentIndex: Int, size: Int): List<Int> {
+    if (size <= 0) return emptyList()
+    val start = if (currentIndex !in 0 until size) 0 else (currentIndex + 1) % size
+    return (0 until size).map { offset -> (start + offset) % size }
 }
 
 private fun generationStreamRetryDelayMs(retryAttempt: Long): Long =
@@ -632,7 +750,11 @@ class GenerationHandler(
             ?: error("Provider not found")
         var activeProviderImpl: Provider<ProviderSetting> =
             providerManager.getProviderByType(activeProvider)
-        val attemptedModelIds = mutableSetOf(activeModel.id)
+        var fallbackCursor = -1
+        var fallbackCycleWrapped = false
+        val rateLimitWaitAttemptedModels = mutableSetOf<Uuid>()
+        val modelCooldownUntilMs = mutableMapOf<Uuid, Long>()
+        var fallbackCycleNotBeforeMs = 0L
         var fallbackContextAddendum: String? = null
 
         // Replay safety: scan the input messages for tools that were Approved + began
@@ -709,6 +831,10 @@ class GenerationHandler(
         fun findNextFallbackModel(
             requireLargerContextThan: Int? = null,
         ): Triple<Model, ProviderSetting, Provider<ProviderSetting>>? {
+            val candidateIds = assistant.modelFallbackIds.distinct()
+            if (candidateIds.isEmpty()) return null
+            val previousCursor = fallbackCursor
+            fallbackCycleWrapped = false
             val needsImages = messages.any { message ->
                 message.parts.any { part ->
                     part is UIMessagePart.Image ||
@@ -716,8 +842,9 @@ class GenerationHandler(
                 }
             }
             val needsTools = registry.hasRegisteredTools()
-            for (candidateId in assistant.modelFallbackIds.distinct()) {
-                if (!attemptedModelIds.add(candidateId)) continue
+            for (candidateIndex in fallbackCandidateIndexes(fallbackCursor, candidateIds.size)) {
+                val candidateId = candidateIds[candidateIndex]
+                if (previousCursor < 0 && candidateId == activeModel.id) continue
                 val candidate = settings.findModelById(candidateId) ?: continue
                 if (candidate.type != ModelType.CHAT) continue
                 if (
@@ -751,6 +878,8 @@ class GenerationHandler(
                     Log.w(TAG, "fallback: no provider adapter for ${candidate.modelId}", failure)
                     continue
                 }
+                fallbackCursor = candidateIndex
+                fallbackCycleWrapped = previousCursor >= 0 && candidateIndex <= previousCursor
                 return Triple(candidate, candidateProvider, candidateImpl)
             }
             return null
@@ -804,7 +933,7 @@ class GenerationHandler(
                 deviceGuardInstruction,
             ).joinToString("\n\n")
 
-        val turnStartMs = android.os.SystemClock.elapsedRealtime()
+        var turnStartMs = android.os.SystemClock.elapsedRealtime()
         var loopGuardTripCount = 0
 
         for (stepIndex in 0 until maxSteps) {
@@ -855,6 +984,39 @@ class GenerationHandler(
             // Skip generation if we have approved/denied tool calls to handle
             if (pendingTools.isEmpty()) {
                 while (true) {
+                    val nowMs = System.currentTimeMillis()
+                    val modelCooldownUntil = modelCooldownUntilMs[activeModel.id] ?: 0L
+                    val waitUntilMs = maxOf(modelCooldownUntil, fallbackCycleNotBeforeMs)
+                    val cooldownWaitMs = (waitUntilMs - nowMs).coerceAtLeast(0L)
+                    if (cooldownWaitMs > 0L) {
+                        val activeName = activeModel.displayName.ifBlank { activeModel.modelId }
+                        val waitSeconds = kotlin.math.ceil(cooldownWaitMs / 1_000.0).toInt()
+                        processingStatus.value = context.getString(
+                            io.github.nastechresearch.nastech.R.string.chat_page_rate_limit_wait,
+                            activeName,
+                            waitSeconds,
+                        )
+                        executionTelemetry.recordTaskStageEvent(
+                            taskId = taskId,
+                            eventType = "MODEL_RATE_LIMIT_WAIT_STARTED",
+                            status = "WAITING",
+                            message = "Waiting before retrying model ${activeModel.modelId} (${waitSeconds}s)",
+                        )
+                        delay(cooldownWaitMs)
+                        turnStartMs += cooldownWaitMs
+                        val wakeTimeMs = System.currentTimeMillis()
+                        if ((modelCooldownUntilMs[activeModel.id] ?: 0L) <= wakeTimeMs) {
+                            modelCooldownUntilMs.remove(activeModel.id)
+                        }
+                        if (fallbackCycleNotBeforeMs <= wakeTimeMs) fallbackCycleNotBeforeMs = 0L
+                        executionTelemetry.recordTaskStageEvent(
+                            taskId = taskId,
+                            eventType = "MODEL_RATE_LIMIT_WAIT_COMPLETED",
+                            status = "SUCCESS",
+                            message = "Wait complete for model ${activeModel.modelId}",
+                        )
+                    }
+
                     // Snapshot the last confirmed conversation state. A safe fallback can restore
                     // this snapshot only when the failed request never produced useful output.
                     val messagesBeforeRequest = messages
@@ -938,15 +1100,82 @@ class GenerationHandler(
                         modelRequestStartedAtMs = null
 
                         val contextLimitFailure = isContextLimitFailure(failure)
-                        val fallback = when {
-                            requestReceivedMeaningfulOutput || isCancellationFailure(failure) -> null
-                            contextLimitFailure -> activeModel.contextLength?.let { contextLength ->
-                                findNextFallbackModel(requireLargerContextThan = contextLength)
+                        val rateLimitFailure = isRateLimitFailure(failure)
+                        val quotaExhausted = isQuotaExhaustionFailure(failure)
+                        val nowMs = System.currentTimeMillis()
+                        val cycleCooldownMs = assistant.fallbackCycleCooldownSeconds
+                            .coerceIn(1, 3600).toLong() * 1_000L
+                        var retrySameModelAfterMs: Long? = null
+                        var fallback: Triple<Model, ProviderSetting, Provider<ProviderSetting>>? = null
+
+                        if (!requestReceivedMeaningfulOutput && !isCancellationFailure(failure)) {
+                            when {
+                                quotaExhausted -> {
+                                    modelCooldownUntilMs[activeModel.id] = nowMs.saturatingAdd(cycleCooldownMs)
+                                    fallback = findNextFallbackModel()
+                                }
+                                rateLimitFailure -> {
+                                    val retryAfterMs = extractRetryAfterDelayMs(failure)
+                                    val maxWaitMs = assistant.fallbackMaxRateLimitWaitMinutes
+                                        .coerceIn(0, 1440).toLong() * 60_000L
+                                    val missingRetryWaitMs = assistant.fallbackMissingRetryAfterWaitMinutes
+                                        .coerceIn(1, 1440).toLong() * 60_000L
+                                    val decision = decideRateLimitRecovery(
+                                        retryAfterMs = retryAfterMs,
+                                        maxWaitMs = maxWaitMs,
+                                        missingRetryAfterWaitMs = missingRetryWaitMs,
+                                        alreadyWaitedOnThisModel = activeModel.id in rateLimitWaitAttemptedModels,
+                                    )
+                                    if (decision.action == RateLimitRecoveryAction.WAIT_AND_RETRY) {
+                                        rateLimitWaitAttemptedModels.add(activeModel.id)
+                                        retrySameModelAfterMs = decision.waitMs ?: missingRetryWaitMs
+                                    } else {
+                                        val cooldownMs = retryAfterMs?.let {
+                                            it.saturatingAdd(5_000L)
+                                        } ?: cycleCooldownMs
+                                        modelCooldownUntilMs[activeModel.id] = nowMs.saturatingAdd(cooldownMs)
+                                        fallback = findNextFallbackModel()
+                                    }
+                                }
+                                contextLimitFailure -> {
+                                    fallback = activeModel.contextLength?.let { contextLength ->
+                                        findNextFallbackModel(requireLargerContextThan = contextLength)
+                                    }
+                                }
+                                shouldFallbackToModel(failure, receivedMeaningfulOutput = false) -> {
+                                    fallback = findNextFallbackModel()
+                                }
                             }
-                            shouldFallbackToModel(failure, receivedMeaningfulOutput = false) ->
-                                findNextFallbackModel()
-                            else -> null
                         }
+
+                        if (retrySameModelAfterMs != null) {
+                            val waitMs = retrySameModelAfterMs!!.coerceAtLeast(0L)
+                            val activeName = activeModel.displayName.ifBlank { activeModel.modelId }
+                            val waitSeconds = kotlin.math.ceil(waitMs / 1_000.0).toInt()
+                            messages = messagesBeforeRequest
+                            emit(GenerationChunk.Messages(messages))
+                            processingStatus.value = context.getString(
+                                io.github.nastechresearch.nastech.R.string.chat_page_rate_limit_wait,
+                                activeName,
+                                waitSeconds,
+                            )
+                            executionTelemetry.recordTaskStageEvent(
+                                taskId = taskId,
+                                eventType = "MODEL_RATE_LIMIT_WAIT_STARTED",
+                                status = "WAITING",
+                                message = "Rate limit for model ${activeModel.modelId}; retry in ${waitSeconds}s",
+                            )
+                            delay(waitMs)
+                            turnStartMs += waitMs
+                            executionTelemetry.recordTaskStageEvent(
+                                taskId = taskId,
+                                eventType = "MODEL_RATE_LIMIT_WAIT_COMPLETED",
+                                status = "SUCCESS",
+                                message = "Rate-limit wait completed for ${activeModel.modelId}",
+                            )
+                            continue
+                        }
+
                         if (fallback != null) {
                             val failedName = activeModel.displayName.ifBlank { activeModel.modelId }
                             val nextName = fallback.first.displayName.ifBlank { fallback.first.modelId }
@@ -975,6 +1204,52 @@ class GenerationHandler(
                                 message = "Switched from ${failedName} to ${nextName}: ${reason}",
                             )
                             Log.w(TAG, "model fallback: ${failedName} -> ${nextName} (${reason})", failure)
+                            if (fallbackCycleWrapped) {
+                                fallbackCycleNotBeforeMs = maxOf(
+                                    fallbackCycleNotBeforeMs,
+                                    System.currentTimeMillis().saturatingAdd(cycleCooldownMs),
+                                )
+                                executionTelemetry.recordTaskStageEvent(
+                                    taskId = taskId,
+                                    eventType = "MODEL_FALLBACK_CYCLE_COOLDOWN",
+                                    status = "WAITING",
+                                    message = "Fallback list wrapped; cooldown ${assistant.fallbackCycleCooldownSeconds.coerceIn(1, 3600)}s before the next cycle",
+                                )
+                            }
+                            continue
+                        }
+
+                        if (!requestReceivedMeaningfulOutput && (quotaExhausted || rateLimitFailure) &&
+                            !isCancellationFailure(failure)
+                        ) {
+                            val retryAtMs = modelCooldownUntilMs[activeModel.id]
+                                ?: nowMs.saturatingAdd(cycleCooldownMs)
+                            modelCooldownUntilMs[activeModel.id] = retryAtMs
+                            messages = messagesBeforeRequest
+                            emit(GenerationChunk.Messages(messages))
+                            val waitMs = (retryAtMs - System.currentTimeMillis()).coerceAtLeast(1_000L)
+                            val activeName = activeModel.displayName.ifBlank { activeModel.modelId }
+                            val waitSeconds = kotlin.math.ceil(waitMs / 1_000.0).toInt()
+                            processingStatus.value = context.getString(
+                                io.github.nastechresearch.nastech.R.string.chat_page_rate_limit_wait,
+                                activeName,
+                                waitSeconds,
+                            )
+                            executionTelemetry.recordTaskStageEvent(
+                                taskId = taskId,
+                                eventType = "MODEL_RATE_LIMIT_WAIT_STARTED",
+                                status = "WAITING",
+                                message = "No eligible fallback; waiting ${waitSeconds}s before retrying ${activeModel.modelId}",
+                            )
+                            delay(waitMs)
+                            turnStartMs += waitMs
+                            modelCooldownUntilMs.remove(activeModel.id)
+                            executionTelemetry.recordTaskStageEvent(
+                                taskId = taskId,
+                                eventType = "MODEL_RATE_LIMIT_WAIT_COMPLETED",
+                                status = "SUCCESS",
+                                message = "Wait completed; retrying ${activeModel.modelId}",
+                            )
                             continue
                         }
 
