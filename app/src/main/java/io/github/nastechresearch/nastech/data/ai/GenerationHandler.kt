@@ -195,6 +195,11 @@ private fun failureStatusCode(failure: Throwable): Int? =
 internal fun isRateLimitFailure(failure: Throwable): Boolean {
     val text = failureText(failure)
     val statusCode = failureStatusCode(failure)
+    if (statusCode == 401 || statusCode == 403 || listOf(
+            "invalid api key", "incorrect api key", "api key not valid",
+            "authentication error", "unauthorized", "invalid token",
+        ).any { it in text }
+    ) return false
     val hardQuotaMarkers = listOf(
         "insufficient quota",
         "insufficient credits",
@@ -230,6 +235,12 @@ internal fun isRateLimitFailure(failure: Throwable): Boolean {
 
 internal fun isQuotaExhaustionFailure(failure: Throwable): Boolean {
     val text = failureText(failure)
+    val statusCode = failureStatusCode(failure)
+    if (statusCode == 401 || statusCode == 403 || listOf(
+            "invalid api key", "incorrect api key", "api key not valid",
+            "authentication error", "unauthorized", "invalid token",
+        ).any { it in text }
+    ) return false
     val hardQuotaMarkers = listOf(
         "insufficient quota",
         "insufficient credits",
