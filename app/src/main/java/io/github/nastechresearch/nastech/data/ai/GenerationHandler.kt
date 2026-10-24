@@ -202,7 +202,6 @@ internal fun isRateLimitFailure(failure: Throwable): Boolean {
     ) return false
     val hardQuotaMarkers = listOf(
         "insufficient quota",
-        "exceeded your current quota",
         "insufficient credits",
         "out of credits",
         "billing hard limit",
@@ -245,7 +244,6 @@ internal fun isQuotaExhaustionFailure(failure: Throwable): Boolean {
     ) return false
     val hardQuotaMarkers = listOf(
         "insufficient quota",
-        "exceeded your current quota",
         "insufficient credits",
         "out of credits",
         "billing hard limit",
@@ -257,7 +255,7 @@ internal fun isQuotaExhaustionFailure(failure: Throwable): Boolean {
     )
     if (hardQuotaMarkers.any { it in text }) return true
     if (isRateLimitFailure(failure)) return false
-    return failureStatusCode(failure) == 402 ||
+    return statusCode == 402 ||
         "quota exceeded" in text ||
         "exceeded your current quota" in text
 }
