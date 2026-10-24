@@ -345,9 +345,11 @@ private fun findActiveActivity(
         when (event.eventType) {
             "STEP_STARTED" -> active = null
             "SUCCESS", "FAILED" -> active = null
-            "MODEL_REQUEST_STARTED", "ACTION_STARTED", "VERIFICATION_STARTED", "WAIT_STARTED" ->
+            "MODEL_REQUEST_STARTED", "ACTION_STARTED", "VERIFICATION_STARTED", "WAIT_STARTED",
+            "MODEL_RATE_LIMIT_WAIT_STARTED" ->
                 active = event
             "MODEL_RESPONSE_RECEIVED", "MODEL_REQUEST_FAILED", "MODEL_REQUEST_CANCELLED",
+            "MODEL_RATE_LIMIT_WAIT_COMPLETED",
             "ACTION_COMPLETED", "ACTION_FAILED", "ACTION_AWAITING_APPROVAL",
             "VERIFICATION_COMPLETED", "WAIT_COMPLETED", "WAIT_FAILED",
             "WAIT_AWAITING_APPROVAL" -> {
@@ -361,7 +363,7 @@ private fun findActiveActivity(
         "MODEL_REQUEST_STARTED" -> "MODEL_REQUEST"
         "ACTION_STARTED" -> "ACTION"
         "VERIFICATION_STARTED" -> "VERIFICATION"
-        "WAIT_STARTED" -> "WAIT"
+        "WAIT_STARTED", "MODEL_RATE_LIMIT_WAIT_STARTED" -> "WAIT"
         else -> "STEP"
     }
     return TaskExecutionActivity(
@@ -382,5 +384,6 @@ private fun matchingEnd(startType: String, endType: String): Boolean = when (sta
     )
     "VERIFICATION_STARTED" -> endType == "VERIFICATION_COMPLETED"
     "WAIT_STARTED" -> endType in setOf("WAIT_COMPLETED", "WAIT_FAILED", "WAIT_AWAITING_APPROVAL")
+    "MODEL_RATE_LIMIT_WAIT_STARTED" -> endType == "MODEL_RATE_LIMIT_WAIT_COMPLETED"
     else -> false
 }
