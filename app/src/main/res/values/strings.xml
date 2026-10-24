@@ -1983,7 +1983,7 @@
   <string name="setting_model_page_response_stream_retries_desc">When a Response API stream closes before completion, retry the request this many times. Set 0 to disable automatic retries.</string>
   <string name="setting_model_page_response_stream_retries_input">Maximum retry count</string>
   <string name="assistant_page_fallback_chain_title">Model fallback chain</string>
-  <string name="assistant_page_fallback_chain_desc">Try up to five chat models in order after quota, rate-limit, network, or server failures before useful output. Context-window failures switch only when a fallback advertises a larger context. Invalid API keys and invalid requests do not trigger a switch. Fallback models must support the task’s tools and images.</string>
+  <string name="assistant_page_fallback_chain_desc">Add and order any number of fallback chat models. The app cycles through them on quota, rate-limit, network, or server failures before useful output. Context-limit fallback requires a larger advertised context. Authentication errors and invalid requests are not fixed by switching models.</string>
   <string name="assistant_page_fallback_chain_add">Add fallback model</string>
   <string name="assistant_page_fallback_chain_empty">No fallback models configured. The fallback chain is disabled.</string>
   <string name="assistant_page_fallback_chain_move_up">Move up</string>
@@ -2178,4 +2178,13 @@
   <string name="assistant_page_local_tools_wait_until_condition_text_disappears">Text disappears</string>
   <string name="assistant_page_local_tools_wait_until_condition_screen_stable">Screen stable</string>
   <string name="assistant_page_local_tools_wait_until_save">Save</string>
+
+    <string name="assistant_page_fallback_max_wait_title">Maximum wait before switching (minutes)</string>
+    <string name="assistant_page_fallback_max_wait_desc">If the retry delay returned by the provider is longer than this, switch to a fallback. Set 0 to switch immediately for any positive retry delay.</string>
+    <string name="assistant_page_fallback_missing_retry_title">Wait when retry delay is missing (minutes)</string>
+    <string name="assistant_page_fallback_missing_retry_desc">When rate-limited without a supplied delay, wait this long and retry the same model once.</string>
+    <string name="assistant_page_fallback_cycle_cooldown_title">Cooldown between fallback cycles (seconds)</string>
+    <string name="assistant_page_fallback_cycle_cooldown_desc">Wait after all fallback models have been tried before starting another cycle, preventing a tight loop when every model fails.</string>
+    <string name="chat_page_rate_limit_wait">Model %1$s is rate-limited; waiting %2$d seconds before retry.</string>
+    <string name="chat_page_fallback_cycle_wait">All fallback models have been tried; waiting %1$d seconds before starting the next cycle.</string>
 </resources>
