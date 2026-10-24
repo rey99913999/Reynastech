@@ -858,7 +858,7 @@ class GenerationHandler(
             val needsTools = registry.hasRegisteredTools()
             for (candidateIndex in fallbackCandidateIndexes(fallbackCursor, candidateIds.size)) {
                 val candidateId = candidateIds[candidateIndex]
-                if (previousCursor < 0 && candidateId == activeModel.id) continue
+                if (candidateId == activeModel.id) continue
                 val candidate = settings.findModelById(candidateId) ?: continue
                 if (candidate.type != ModelType.CHAT) continue
                 if (
