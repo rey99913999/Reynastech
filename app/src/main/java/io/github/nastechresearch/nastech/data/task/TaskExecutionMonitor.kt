@@ -223,6 +223,8 @@ internal fun buildTaskExecutionSnapshot(
             TaskExecutionHealth.WAITING_FOR_USER
         task.status == TaskStatus.PENDING.name -> TaskExecutionHealth.PENDING
         task.status != TaskStatus.RUNNING.name -> TaskExecutionHealth.PENDING
+        // A scheduled cooldown is an intentional wait, not a slow or stuck activity.
+        activeActivity?.stage == "WAIT" -> TaskExecutionHealth.RUNNING
         ageMs >= possiblyStuckAfterMs -> TaskExecutionHealth.POSSIBLY_STUCK
         ageMs >= slowAfterMs -> TaskExecutionHealth.SLOW
         else -> TaskExecutionHealth.RUNNING
