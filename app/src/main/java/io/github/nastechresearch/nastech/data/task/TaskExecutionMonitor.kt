@@ -110,7 +110,7 @@ data class TaskExecutionStepTiming(
 )
 
 data class TaskExecutionActivity(
-    /** MODEL_REQUEST, ACTION, VERIFICATION, WAIT, or STEP. */
+    /** MODEL_REQUEST, ACTION, VERIFICATION, WAIT, RATE_LIMIT_WAIT, or STEP. */
     val stage: String,
     val status: String,
     val startedAtMs: Long,
@@ -224,7 +224,7 @@ internal fun buildTaskExecutionSnapshot(
         task.status == TaskStatus.PENDING.name -> TaskExecutionHealth.PENDING
         task.status != TaskStatus.RUNNING.name -> TaskExecutionHealth.PENDING
         // A scheduled cooldown is an intentional wait, not a slow or stuck activity.
-        activeActivity?.stage == "WAIT" -> TaskExecutionHealth.RUNNING
+        activeActivity?.stage == "RATE_LIMIT_WAIT" -> TaskExecutionHealth.RUNNING
         ageMs >= possiblyStuckAfterMs -> TaskExecutionHealth.POSSIBLY_STUCK
         ageMs >= slowAfterMs -> TaskExecutionHealth.SLOW
         else -> TaskExecutionHealth.RUNNING
@@ -365,7 +365,8 @@ private fun findActiveActivity(
         "MODEL_REQUEST_STARTED" -> "MODEL_REQUEST"
         "ACTION_STARTED" -> "ACTION"
         "VERIFICATION_STARTED" -> "VERIFICATION"
-        "WAIT_STARTED", "MODEL_RATE_LIMIT_WAIT_STARTED" -> "WAIT"
+        "WAIT_STARTED" -> "WAIT"
+        "MODEL_RATE_LIMIT_WAIT_STARTED" -> "RATE_LIMIT_WAIT"
         else -> "STEP"
     }
     return TaskExecutionActivity(
