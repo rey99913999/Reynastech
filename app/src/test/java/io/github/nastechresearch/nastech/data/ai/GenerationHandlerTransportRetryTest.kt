@@ -30,11 +30,12 @@ class GenerationHandlerTransportRetryTest {
     @Test
     fun `distinguishes rate limits from exhausted quota`() {
         val googlePerMinuteLimit = HttpException(
-            "Quota exceeded for metric generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15. Please retry in 39.8s.",
+            "You exceeded your current quota, please check your plan and billing details. Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite. Please retry in 39.865980821s.",
             statusCode = 429,
         )
         assertTrue(isRateLimitFailure(googlePerMinuteLimit))
         assertFalse(isQuotaExhaustionFailure(googlePerMinuteLimit))
+        assertTrue(isQuotaExhaustionFailure(HttpException("You exceeded your current quota, check billing", statusCode = 400)))
         assertFalse(isRateLimitFailure(HttpException("insufficient_quota", statusCode = 429)))
         assertTrue(isQuotaExhaustionFailure(HttpException("insufficient_quota", statusCode = 429)))
         assertTrue(isQuotaExhaustionFailure(HttpException("You exceeded your current quota, check billing", statusCode = 429)))
