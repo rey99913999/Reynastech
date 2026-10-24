@@ -53,8 +53,14 @@ data class WaitUntilSettings(
 data class Assistant(
     val id: Uuid = Uuid.random(),
     val chatModelId: Uuid? = null, // 如果为null, 使用全局默认模型
-    /** Ordered, assistant-specific fallback chat models. */
+    /** Ordered, assistant-specific fallback chat models. There is no application-level item cap. */
     val modelFallbackIds: List<Uuid> = emptyList(),
+    /** If Retry-After is longer than this many minutes, move to a fallback model immediately. */
+    val fallbackMaxRateLimitWaitMinutes: Int = 5,
+    /** Wait this long when a rate-limit error does not provide a retry delay. */
+    val fallbackMissingRetryAfterWaitMinutes: Int = 2,
+    /** Cooldown between complete failed fallback cycles, to prevent a tight retry loop. */
+    val fallbackCycleCooldownSeconds: Int = 60,
 
     // Assistant-scoped strategist model. This is a direct model-to-model consultation
     // inside the same Assistant, not a sub-agent.
