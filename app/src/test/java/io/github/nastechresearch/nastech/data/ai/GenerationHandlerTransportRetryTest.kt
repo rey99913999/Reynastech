@@ -37,6 +37,7 @@ class GenerationHandlerTransportRetryTest {
         assertFalse(isQuotaExhaustionFailure(googlePerMinuteLimit))
         assertFalse(isRateLimitFailure(HttpException("insufficient_quota", statusCode = 429)))
         assertTrue(isQuotaExhaustionFailure(HttpException("insufficient_quota", statusCode = 429)))
+        assertTrue(isQuotaExhaustionFailure(HttpException("You exceeded your current quota, check billing", statusCode = 429)))
     }
 
     @Test
