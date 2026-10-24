@@ -6,6 +6,7 @@ import me.rerere.ai.provider.providers.openai.ResponseStreamErrorException
 import me.rerere.ai.util.HttpException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -23,7 +24,7 @@ class GenerationHandlerTransportRetryTest {
         )
         assertEquals(120_000L, extractRetryAfterDelayMs(HttpException("""{"retryDelay":"2m"}""")))
         assertEquals(40_000L, extractRetryAfterDelayMs(HttpException("Retry-After: 40")))
-        assertEquals(null, extractRetryAfterDelayMs(HttpException("rate limited without a duration")))
+        assertNull(extractRetryAfterDelayMs(HttpException("rate limited without a duration")))
     }
 
     @Test
