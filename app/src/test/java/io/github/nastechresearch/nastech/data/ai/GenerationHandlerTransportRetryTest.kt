@@ -4,11 +4,67 @@ import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import me.rerere.ai.provider.providers.openai.ResponseStreamErrorException
 import me.rerere.ai.util.HttpException
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GenerationHandlerTransportRetryTest {
+    @Test
+    fun `parses provider retry durations`() {
+        assertEquals(
+            39_866L,
+            extractRetryAfterDelayMs(
+                HttpException(
+                    "Quota exceeded for metric generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15. Please retry in 39.865980821s.",
+                    statusCode = 429,
+                ),
+            ),
+        )
+        assertEquals(120_000L, extractRetryAfterDelayMs(HttpException("""{"retryDelay":"2m"}""")))
+        assertEquals(40_000L, extractRetryAfterDelayMs(HttpException("Retry-After: 40")))
+        assertEquals(null, extractRetryAfterDelayMs(HttpException("rate limited without a duration")))
+    }
+
+    @Test
+    fun `distinguishes rate limits from exhausted quota`() {
+        val googlePerMinuteLimit = HttpException(
+            "Quota exceeded for metric generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15. Please retry in 39.8s.",
+            statusCode = 429,
+        )
+        assertTrue(isRateLimitFailure(googlePerMinuteLimit))
+        assertFalse(isQuotaExhaustionFailure(googlePerMinuteLimit))
+        assertFalse(isRateLimitFailure(HttpException("insufficient_quota", statusCode = 429)))
+        assertTrue(isQuotaExhaustionFailure(HttpException("insufficient_quota", statusCode = 429)))
+    }
+
+    @Test
+    fun `rate limit policy waits or switches according to user threshold`() {
+        assertEquals(
+            RateLimitRecoveryDecision(RateLimitRecoveryAction.WAIT_AND_RETRY, 45_000L),
+            decideRateLimitRecovery(40_000L, 300_000L, 120_000L, alreadyWaitedOnThisModel = false),
+        )
+        assertEquals(
+            RateLimitRecoveryDecision(RateLimitRecoveryAction.SWITCH_MODEL),
+            decideRateLimitRecovery(420_000L, 300_000L, 120_000L, alreadyWaitedOnThisModel = false),
+        )
+        assertEquals(
+            RateLimitRecoveryDecision(RateLimitRecoveryAction.WAIT_AND_RETRY, 120_000L),
+            decideRateLimitRecovery(null, 300_000L, 120_000L, alreadyWaitedOnThisModel = false),
+        )
+        assertEquals(
+            RateLimitRecoveryDecision(RateLimitRecoveryAction.SWITCH_MODEL),
+            decideRateLimitRecovery(40_000L, 300_000L, 120_000L, alreadyWaitedOnThisModel = true),
+        )
+    }
+
+    @Test
+    fun `fallback candidate indexes cycle without a fixed retry cap`() {
+        assertEquals(listOf(0, 1, 2, 3), fallbackCandidateIndexes(-1, 4))
+        assertEquals(listOf(1, 2, 3, 0), fallbackCandidateIndexes(0, 4))
+        assertEquals(listOf(0, 1, 2, 3), fallbackCandidateIndexes(3, 4))
+        assertEquals(emptyList<Int>(), fallbackCandidateIndexes(0, 0))
+    }
     @Test
     fun `falls back on exhausted quota and transient server failures before output`() {
         assertTrue(shouldFallbackToModel(HttpException("insufficient_quota", statusCode = 429), false))
@@ -174,8 +230,9 @@ class GenerationHandlerTransportRetryTest {
                 receivedMeaningfulOutput = false,
             )
         )
-        // A generic 429 is still treated as a transient rate-limit failure.
-        assertTrue(
+        // Rate limits are handled by the outer policy so Retry-After and the user threshold
+        // are respected instead of being consumed by the short transport retry loop.
+        assertFalse(
             shouldRetryGenerationStreamFailure(
                 failure = HttpException("rate limit exceeded", statusCode = 429),
                 retryAttempt = 0,
@@ -187,7 +244,7 @@ class GenerationHandlerTransportRetryTest {
 
     @Test
     fun `retries the 4xx statuses that signal a transient condition`() {
-        for (statusCode in listOf(408, 409, 425, 429)) {
+        for (statusCode in listOf(408, 409, 425)) {
             assertTrue(
                 "status $statusCode should retry",
                 shouldRetryGenerationStreamFailure(
