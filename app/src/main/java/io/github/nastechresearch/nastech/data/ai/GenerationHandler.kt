@@ -33,6 +33,9 @@ import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.ModelType
+import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
@@ -134,7 +137,11 @@ internal fun shouldRetryGenerationStreamFailure(
     if (receivedMeaningfulOutput || retryAttempt >= maxRetries.coerceAtLeast(0).toLong()) {
         return false
     }
-    if (failure is ResponseStreamErrorException || isContextLimitFailure(failure)) {
+    if (
+        failure is ResponseStreamErrorException ||
+        isContextLimitFailure(failure) ||
+        isQuotaExhaustionFailure(failure)
+    ) {
         return false
     }
     if (isNonRetryableClientError(failure)) {
@@ -170,9 +177,156 @@ private fun isContextLimitFailure(failure: Throwable): Boolean =
                 "maximum context window" in text
         }
 
+private fun isQuotaExhaustionFailure(failure: Throwable): Boolean {
+    val text = generateSequence(failure) { it.cause }
+        .take(8)
+        .joinToString(" ") { cause -> cause.message.orEmpty() + " " + cause.toString() }
+        .lowercase()
+        .replace('_', ' ')
+    return listOf(
+        "insufficient quota",
+        "quota exceeded",
+        "exceeded your current quota",
+        "insufficient credits",
+        "out of credits",
+        "billing hard limit",
+        "billing not active",
+        "payment required",
+        "credit balance",
+    ).any { marker -> marker in text }
+}
+
 private fun generationStreamRetryDelayMs(retryAttempt: Long): Long =
     ((retryAttempt + 1) * GENERATION_STREAM_RETRY_INITIAL_DELAY_MS)
         .coerceAtMost(GENERATION_STREAM_RETRY_MAX_DELAY_MS)
+
+/**
+ * Whether an exhausted model request may safely move to the next configured model.
+ *
+ * Fallback is only safe before any meaningful output has reached the conversation. A partial
+ * response may contain an incomplete tool call or an action whose outcome is uncertain, so it
+ * must never be replayed automatically by another provider. Authentication, malformed-request,
+ * and context-limit failures are also excluded: those require configuration or compaction rather
+ * than cycling through providers.
+ */
+/** A context-limit switch is only useful when metadata proves the candidate has more room. */
+internal fun hasLargerContextWindow(currentContextLength: Int?, candidateContextLength: Int?): Boolean =
+    currentContextLength != null &&
+        candidateContextLength != null &&
+        candidateContextLength > currentContextLength
+
+internal fun shouldFallbackToModel(
+    failure: Throwable,
+    receivedMeaningfulOutput: Boolean,
+): Boolean {
+    if (receivedMeaningfulOutput || isCancellationFailure(failure) || isContextLimitFailure(failure)) {
+        return false
+    }
+    val causes = generateSequence(failure) { it.cause }.take(8).toList()
+    val text = causes.joinToString(" ") { cause ->
+        (cause.message.orEmpty() + " " + cause.toString())
+    }.lowercase().replace('_', ' ')
+
+    val statusCode = causes.filterIsInstance<HttpException>()
+        .firstOrNull()
+        ?.statusCode
+
+    // Never conceal a bad key or permission/configuration failure by changing providers.
+    if (
+        statusCode == 401 || statusCode == 403 ||
+        listOf(
+            "invalid api key",
+            "incorrect api key",
+            "api key not valid",
+            "authentication error",
+            "unauthorized",
+            "invalid token",
+        ).any { it in text }
+    ) {
+        return false
+    }
+
+    // Providers sometimes signal exhausted account quota as a 400/429 business error.
+    if (isQuotaExhaustionFailure(failure)) return true
+
+    if (statusCode == 402 || statusCode == 408 || statusCode == 409 ||
+        statusCode == 425 || statusCode == 429
+    ) {
+        return true
+    }
+    if (statusCode != null && statusCode in 500..599) return true
+    if (statusCode != null && statusCode in 400..499) return false
+
+    if (
+        listOf(
+            "rate limit",
+            "too many requests",
+            "temporarily unavailable",
+            "service unavailable",
+            "gateway timeout",
+            "bad gateway",
+            "server error",
+            "internal server error",
+            "server had an error",
+            "internal error",
+            "upstream error",
+            "upstream connect error",
+            "temporarily overloaded",
+            "overloaded",
+            "connection reset",
+            "connection refused",
+            "socket timeout",
+            "timed out",
+            "timeout",
+        ).any { it in text }
+    ) {
+        return true
+    }
+
+    // For unknown-status transport failures, only network/IO errors qualify. Parser and local
+    // programming errors must remain visible instead of silently selecting another model.
+    return causes.any { it is IOException }
+}
+
+/**
+ * A short, safe status label for the user. Do not surface raw provider bodies, which may contain
+ * request details or other diagnostics not suitable for the transient status line.
+ */
+private fun modelFallbackFailureLabel(failure: Throwable): String {
+    val causes = generateSequence(failure) { it.cause }.take(8).toList()
+    val text = causes.joinToString(" ") { it.message.orEmpty() }
+        .lowercase()
+        .replace('_', ' ')
+    val statusCode = causes.filterIsInstance<HttpException>()
+        .firstOrNull()
+        ?.statusCode
+
+    return when {
+        isContextLimitFailure(failure) -> "context window limit"
+        listOf(
+            "insufficient quota",
+            "quota exceeded",
+            "insufficient credits",
+            "out of credits",
+            "billing hard limit",
+            "billing not active",
+            "payment required",
+            "credit balance",
+        ).any { it in text } || statusCode == 402 -> "quota or billing limit"
+        statusCode == 429 || "rate limit" in text || "too many requests" in text -> "rate limit"
+        statusCode != null && statusCode in 500..599 -> "server error"
+        listOf(
+            "server error",
+            "internal server error",
+            "server had an error",
+            "internal error",
+            "upstream error",
+            "overloaded",
+        ).any { it in text } -> "server error"
+        causes.any { it is IOException } -> "network or transport error"
+        else -> "provider request failed"
+    }
+}
 
 private fun retryFailureReason(failure: Throwable): String =
     generateSequence(failure) { it.cause }
@@ -473,8 +627,13 @@ class GenerationHandler(
         conversationLorebookIds: Set<Uuid> = emptySet(),
         workspaceCwd: String? = null,
     ): Flow<GenerationChunk> = flow {
-        val provider = model.findProvider(settings.providers) ?: error("Provider not found")
-        val providerImpl = providerManager.getProviderByType(provider)
+        var activeModel: Model = model
+        var activeProvider: ProviderSetting = activeModel.findProvider(settings.providers)
+            ?: error("Provider not found")
+        var activeProviderImpl: Provider<ProviderSetting> =
+            providerManager.getProviderByType(activeProvider)
+        val attemptedModelIds = mutableSetOf(activeModel.id)
+        var fallbackContextAddendum: String? = null
 
         // Replay safety: scan the input messages for tools that were Approved + began
         // execution but never produced output (process killed mid-execute). Without this
@@ -517,7 +676,7 @@ class GenerationHandler(
         if (toolRegistry != null && memoryTools.isNotEmpty()) {
             registry.registerAll(memoryTools)
         }
-        registry.setModel(model)
+        registry.setModel(activeModel)
         if (registry.hasRegisteredTools()) {
             val structuredPlanTool = buildStructuredPlanTool(
                 json = json,
@@ -541,6 +700,62 @@ class GenerationHandler(
                     .distinct()
             )
         }
+        var toolsInternal = registry.providerTools(activeModel)
+
+        /**
+         * Return the next enabled chat model in the configured order, skipping known-incompatible
+         * candidates instead of repeatedly failing on a model that cannot serve this task.
+         */
+        fun findNextFallbackModel(
+            requireLargerContextThan: Int? = null,
+        ): Triple<Model, ProviderSetting, Provider<ProviderSetting>>? {
+            val needsImages = messages.any { message ->
+                message.parts.any { part ->
+                    part is UIMessagePart.Image ||
+                        (part is UIMessagePart.Tool && part.output.any { it is UIMessagePart.Image })
+                }
+            }
+            val needsTools = registry.hasRegisteredTools()
+            for (candidateId in assistant.modelFallbackIds.distinct()) {
+                if (!attemptedModelIds.add(candidateId)) continue
+                val candidate = settings.findModelById(candidateId) ?: continue
+                if (candidate.type != ModelType.CHAT) continue
+                if (
+                    requireLargerContextThan != null &&
+                    !hasLargerContextWindow(requireLargerContextThan, candidate.contextLength)
+                ) {
+                    Log.i(TAG, "fallback: skip ${candidate.modelId}; larger context window is not confirmed")
+                    continue
+                }
+                val candidateProvider = candidate.findProvider(settings.providers) ?: continue
+                if (!candidateProvider.enabled) continue
+                if (
+                    needsTools &&
+                    candidate.abilities.isNotEmpty() &&
+                    ModelAbility.TOOL !in candidate.abilities
+                ) {
+                    Log.i(TAG, "fallback: skip ${candidate.modelId}; advertised capabilities omit tools")
+                    continue
+                }
+                if (needsTools && registry.providerTools(candidate).isEmpty()) {
+                    Log.i(TAG, "fallback: skip ${candidate.modelId}; tool calling is unavailable")
+                    continue
+                }
+                if (needsImages && Modality.IMAGE !in candidate.inputModalities) {
+                    Log.i(TAG, "fallback: skip ${candidate.modelId}; image input is required")
+                    continue
+                }
+                val candidateImpl = try {
+                    providerManager.getProviderByType(candidateProvider)
+                } catch (failure: Exception) {
+                    Log.w(TAG, "fallback: no provider adapter for ${candidate.modelId}", failure)
+                    continue
+                }
+                return Triple(candidate, candidateProvider, candidateImpl)
+            }
+            return null
+        }
+
         val latestUserText = messages.asReversed()
             .firstOrNull { it.role == MessageRole.USER }
             ?.toText()
@@ -581,14 +796,11 @@ class GenerationHandler(
         var deviceCompletionGuardRetried = false
         var deviceExecutionEvidence = DeviceExecutionEvidence()
 
-        val baseRegistrySystemAddendum = listOfNotNull(
-            systemAddendum,
-            registry.discoverySummary(model).takeIf { registry.hasRegisteredTools() },
-        ).joinToString("\n\n")
-
         fun currentRegistrySystemAddendum(): String =
             listOfNotNull(
-                baseRegistrySystemAddendum,
+                systemAddendum,
+                registry.discoverySummary(activeModel).takeIf { registry.hasRegisteredTools() },
+                fallbackContextAddendum,
                 deviceGuardInstruction,
             ).joinToString("\n\n")
 
@@ -615,9 +827,8 @@ class GenerationHandler(
                 break
             }
 
-            Log.i(TAG, "streamText: start step #$stepIndex (${model.id})")
+            Log.i(TAG, "streamText: start step #$stepIndex (${activeModel.id})")
 
-            val toolsInternal = registry.providerTools(model)
 
             // Check if we have tool calls ready to continue after user interaction.
             val pendingTools = messages.lastOrNull()?.getTools()?.filter {
@@ -643,116 +854,171 @@ class GenerationHandler(
 
             // Skip generation if we have approved/denied tool calls to handle
             if (pendingTools.isEmpty()) {
-                var modelRequestStartedAtMs: Long? = null
-                try {
-                    onBeforeModelRequest()
-                    if (devicePreflight.isDeviceTask) {
-                        executionTelemetry.recordGeneralDeviceModelRequest(taskId)
-                    }
-                    modelRequestStartedAtMs = android.os.SystemClock.elapsedRealtime()
-                    executionTelemetry.recordTaskStageEvent(
-                        taskId = taskId,
-                        eventType = "MODEL_REQUEST_STARTED",
-                        status = "RUNNING",
-                        message = "Model request started (${model.id})",
-                    )
-                    generateInternal(
-                        assistant = assistant,
-                        settings = settings,
-                        systemAddendum = currentRegistrySystemAddendum(),
-                        messages = messages,
-                        onUpdateMessages = {
-                            messages = it.transforms(
-                                transformers = outputTransformers,
-                                context = context,
-                                model = model,
-                                assistant = assistant,
-                                settings = settings
-                            )
-                            emit(
-                                GenerationChunk.Messages(
-                                    messages.visualTransforms(
-                                        transformers = outputTransformers,
-                                        context = context,
-                                        model = model,
-                                        assistant = assistant,
-                                        settings = settings
+                while (true) {
+                    // Snapshot the last confirmed conversation state. A safe fallback can restore
+                    // this snapshot only when the failed request never produced useful output.
+                    val messagesBeforeRequest = messages
+                    var requestReceivedMeaningfulOutput = false
+                    var modelRequestStartedAtMs: Long? = null
+                    registry.setModel(activeModel)
+                    toolsInternal = registry.providerTools(activeModel)
+                    try {
+                        onBeforeModelRequest()
+                        if (devicePreflight.isDeviceTask) {
+                            executionTelemetry.recordGeneralDeviceModelRequest(taskId)
+                        }
+                        modelRequestStartedAtMs = android.os.SystemClock.elapsedRealtime()
+                        executionTelemetry.recordTaskStageEvent(
+                            taskId = taskId,
+                            eventType = "MODEL_REQUEST_STARTED",
+                            status = "RUNNING",
+                            message = "Model request started (${activeModel.id})",
+                        )
+                        generateInternal(
+                            assistant = assistant,
+                            settings = settings,
+                            systemAddendum = currentRegistrySystemAddendum(),
+                            messages = messages,
+                            onUpdateMessages = {
+                                messages = it.transforms(
+                                    transformers = outputTransformers,
+                                    context = context,
+                                    model = activeModel,
+                                    assistant = assistant,
+                                    settings = settings
+                                )
+                                emit(
+                                    GenerationChunk.Messages(
+                                        messages.visualTransforms(
+                                            transformers = outputTransformers,
+                                            context = context,
+                                            model = activeModel,
+                                            assistant = assistant,
+                                            settings = settings
+                                        )
                                     )
                                 )
+                            },
+                            transformers = inputTransformers,
+                            model = activeModel,
+                            providerImpl = activeProviderImpl,
+                            provider = activeProvider,
+                            tools = toolsInternal,
+                            memories = memories ?: emptyList(),
+                            stream = assistant.streamOutput,
+                            processingStatus = processingStatus,
+                            onModelOutputStarted = { requestReceivedMeaningfulOutput = true },
+                            conversationSystemPrompt = conversationSystemPrompt,
+                            conversationModeInjectionIds = conversationModeInjectionIds,
+                            conversationLorebookIds = conversationLorebookIds,
+                            workspaceCwd = workspaceCwd,
+                        )
+                        modelRequestStartedAtMs?.let { startedAt ->
+                            val durationMs = (android.os.SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(0L)
+                            executionTelemetry.recordTaskStageEvent(
+                                taskId = taskId,
+                                eventType = "MODEL_RESPONSE_RECEIVED",
+                                status = "SUCCESS",
+                                message = "Model response received in ${durationMs}ms",
                             )
-                        },
-                        transformers = inputTransformers,
-                        model = model,
-                        providerImpl = providerImpl,
-                        provider = provider,
-                        tools = toolsInternal,
-                        memories = memories ?: emptyList(),
-                        stream = assistant.streamOutput,
-                        processingStatus = processingStatus,
-                        conversationSystemPrompt = conversationSystemPrompt,
-                        conversationModeInjectionIds = conversationModeInjectionIds,
-                        conversationLorebookIds = conversationLorebookIds,
-                        workspaceCwd = workspaceCwd,
-                    )
-                    modelRequestStartedAtMs?.let { startedAt ->
-                        val durationMs = (android.os.SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(0L)
-                        executionTelemetry.recordTaskStageEvent(
-                            taskId = taskId,
-                            eventType = "MODEL_RESPONSE_RECEIVED",
-                            status = "SUCCESS",
-                            message = "Model response received in ${durationMs}ms",
-                        )
-                    }
-                    modelRequestStartedAtMs = null
-                } catch (t: Throwable) {
-                    modelRequestStartedAtMs?.let { startedAt ->
-                        val durationMs = (android.os.SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(0L)
-                        val cancelled = t is CancellationException
-                        executionTelemetry.recordTaskStageEvent(
-                            taskId = taskId,
-                            eventType = if (cancelled) "MODEL_REQUEST_CANCELLED" else "MODEL_REQUEST_FAILED",
-                            status = if (cancelled) "CANCELLED" else "FAILED",
-                            message = "Model request ${if (cancelled) "cancelled" else "failed"} after ${durationMs}ms (${t.javaClass.simpleName})",
-                        )
-                    }
-                    // CancellationException is honoured verbatim — stopGeneration has its
-                    // own cancelToolByUser path that marks tools cancelled. We only need
-                    // to handle non-cancel failures here.
-                    if (t !is CancellationException) {
-                        // Server 5xx, JSON parse failure, OOM during chunk-merge, etc. Without
-                        // this transition, any tool already at Auto/Pending in the just-built
-                        // assistant message is stranded — the next user turn replays the
-                        // conversation with tool parts in an in-between state and downstream
-                        // filtering misbehaves. We mark them Denied with a generation_failed
-                        // envelope so the shape is deterministic on replay.
-                        val lastMsg = messages.lastOrNull()
-                        if (lastMsg != null) {
-                            val newParts = lastMsg.parts.map { part ->
-                                if (part is UIMessagePart.Tool &&
-                                    (part.approvalState is ToolApprovalState.Auto ||
-                                        part.approvalState is ToolApprovalState.Pending)) {
-                                    part.copy(approvalState = ToolApprovalState.Denied(
-                                        "generation_failed: ${t.javaClass.simpleName}: ${t.message.orEmpty()}"
-                                    ))
-                                } else part
-                            }
-                            messages = messages.dropLast(1) + lastMsg.copy(parts = newParts)
-                            emit(GenerationChunk.Messages(messages))
                         }
+                        modelRequestStartedAtMs = null
+                        break
+                    } catch (failure: Throwable) {
+                        modelRequestStartedAtMs?.let { startedAt ->
+                            val durationMs = (android.os.SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(0L)
+                            val cancelled = failure is CancellationException
+                            executionTelemetry.recordTaskStageEvent(
+                                taskId = taskId,
+                                eventType = if (cancelled) "MODEL_REQUEST_CANCELLED" else "MODEL_REQUEST_FAILED",
+                                status = if (cancelled) "CANCELLED" else "FAILED",
+                                message = "Model request ${if (cancelled) "cancelled" else "failed"} after ${durationMs}ms (${failure.javaClass.simpleName})",
+                            )
+                        }
+                        modelRequestStartedAtMs = null
+
+                        val contextLimitFailure = isContextLimitFailure(failure)
+                        val fallback = when {
+                            requestReceivedMeaningfulOutput || isCancellationFailure(failure) -> null
+                            contextLimitFailure -> activeModel.contextLength?.let { contextLength ->
+                                findNextFallbackModel(requireLargerContextThan = contextLength)
+                            }
+                            shouldFallbackToModel(failure, receivedMeaningfulOutput = false) ->
+                                findNextFallbackModel()
+                            else -> null
+                        }
+                        if (fallback != null) {
+                            val failedName = activeModel.displayName.ifBlank { activeModel.modelId }
+                            val nextName = fallback.first.displayName.ifBlank { fallback.first.modelId }
+                            val reason = modelFallbackFailureLabel(failure)
+                            messages = messagesBeforeRequest
+                            emit(GenerationChunk.Messages(messages))
+                            activeModel = fallback.first
+                            activeProvider = fallback.second
+                            activeProviderImpl = fallback.third
+                            registry.setModel(activeModel)
+                            fallbackContextAddendum =
+                                "Continue the same task after a model switch. The previous model failed before a usable " +
+                                "response. Use this conversation history, confirmed tool results, and current observations. " +
+                                "Never blindly repeat a side-effecting action with uncertain outcome; verify the target " +
+                                "state first and then perform only the next uncompleted step."
+                            processingStatus.value = context.getString(
+                                io.github.nastechresearch.nastech.R.string.chat_page_model_fallback,
+                                failedName,
+                                nextName,
+                                reason,
+                            )
+                            executionTelemetry.recordTaskStageEvent(
+                                taskId = taskId,
+                                eventType = "MODEL_FALLBACK",
+                                status = "RUNNING",
+                                message = "Switched from ${failedName} to ${nextName}: ${reason}",
+                            )
+                            Log.w(TAG, "model fallback: ${failedName} -> ${nextName} (${reason})", failure)
+                            continue
+                        }
+
+                        // Never leave a pre-output provider failure as a half-written assistant
+                        // message, even when the chain is empty or all candidates are incompatible.
+                        // The caller receives the original failure while confirmed task history stays intact.
+                        if (!requestReceivedMeaningfulOutput) {
+                            messages = messagesBeforeRequest
+                            emit(GenerationChunk.Messages(messages))
+                            throw failure
+                        }
+
+                        // Once output has started, don't replay it on another model. Mark any
+                        // in-flight tool parts as denied to preserve a deterministic replay state.
+                        if (failure !is CancellationException) {
+                            val lastMsg = messages.lastOrNull()
+                            if (lastMsg != null) {
+                                val newParts = lastMsg.parts.map { part ->
+                                    if (part is UIMessagePart.Tool &&
+                                        (part.approvalState is ToolApprovalState.Auto ||
+                                            part.approvalState is ToolApprovalState.Pending)) {
+                                        part.copy(approvalState = ToolApprovalState.Denied(
+                                            "generation_failed: ${failure.javaClass.simpleName}: ${failure.message.orEmpty()}"
+                                        ))
+                                    } else part
+                                }
+                                messages = messages.dropLast(1) + lastMsg.copy(parts = newParts)
+                                emit(GenerationChunk.Messages(messages))
+                            }
+                        }
+                        throw failure
                     }
-                    throw t
                 }
                 messages = messages.visualTransforms(
                     transformers = outputTransformers,
                     context = context,
-                    model = model,
+                    model = activeModel,
                     assistant = assistant,
                     settings = settings
                 )
                 messages = messages.onGenerationFinish(
                     transformers = outputTransformers,
                     context = context,
-                    model = model,
+                    model = activeModel,
                     assistant = assistant,
                     settings = settings
                 )
@@ -1328,7 +1594,7 @@ class GenerationHandler(
                     messages.transforms(
                         transformers = outputTransformers,
                         context = context,
-                        model = model,
+                        model = activeModel,
                         assistant = assistant,
                         settings = settings
                     )
@@ -1414,6 +1680,7 @@ class GenerationHandler(
         memories: List<AssistantMemory>,
         stream: Boolean,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+        onModelOutputStarted: () -> Unit = {},
         conversationSystemPrompt: String? = null,
         conversationModeInjectionIds: Set<Uuid> = emptySet(),
         conversationLorebookIds: Set<Uuid> = emptySet(),
@@ -1551,6 +1818,7 @@ class GenerationHandler(
                 receivedAnyChunk = true
                 if (isMeaningfulStreamChunk(it)) {
                     receivedMeaningfulOutput = true
+                    onModelOutputStarted()
                     clearRetryStatus(processingStatus)
                 }
                 messages = streamChunkHandler.handle(messages, it)
@@ -1582,6 +1850,7 @@ class GenerationHandler(
                     params = params,
                 )
             }
+            onModelOutputStarted()
             messages = messages.handleTextGenerationResult(result = result, model = model)
             onUpdateMessages(messages)
         }

@@ -20,6 +20,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -40,6 +41,8 @@ import io.github.nastechresearch.nastech.R
 import io.github.nastechresearch.nastech.data.db.entity.WorkspaceEntity
 import io.github.nastechresearch.nastech.data.model.Assistant
 import io.github.nastechresearch.nastech.ui.components.ai.ModelSelector
+import io.github.nastechresearch.nastech.ui.components.ai.ModelListSheet
+import io.github.nastechresearch.nastech.ui.components.ai.rememberModelListState
 import io.github.nastechresearch.nastech.ui.components.ai.ReasoningButton
 import io.github.nastechresearch.nastech.ui.components.nav.BackButton
 import io.github.nastechresearch.nastech.ui.components.ui.FormItem
@@ -63,6 +66,7 @@ fun AssistantBasicPage(id: String) {
         }
     )
     val assistant by vm.assistant.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
     val providers by vm.providers.collectAsStateWithLifecycle()
     val tags by vm.tags.collectAsStateWithLifecycle()
     val workspaces by vm.workspaces.collectAsStateWithLifecycle()
@@ -88,6 +92,7 @@ fun AssistantBasicPage(id: String) {
             innerPadding = innerPadding,
             assistant = assistant,
             providers = providers,
+            defaultChatModelId = settings.chatModelId,
             tags = tags,
             workspaces = workspaces,
             onUpdate = { vm.update(it) },
@@ -101,6 +106,7 @@ internal fun AssistantBasicContent(
     innerPadding: PaddingValues,
     assistant: Assistant,
     providers: List<me.rerere.ai.provider.ProviderSetting>,
+    defaultChatModelId: Uuid?,
     tags: List<DataTag>,
     workspaces: List<WorkspaceEntity>,
     onUpdate: (Assistant) -> Unit,
@@ -108,6 +114,40 @@ internal fun AssistantBasicContent(
 ) {
     var strategistLimitText by remember(assistant.id) {
         mutableStateOf(assistant.strategistConsultationLimit?.toString() ?: "3")
+    }
+
+    val fallbackPickerState = rememberModelListState(
+        modelId = null,
+        providers = providers,
+        type = ModelType.CHAT,
+    )
+    val availableChatModels = remember(providers) {
+        providers.flatMap { provider ->
+            provider.models.filter { it.type == ModelType.CHAT }
+        }.distinctBy { it.id }
+    }
+    val activeModelId = assistant.chatModelId ?: defaultChatModelId
+    val fallbackModels = assistant.modelFallbackIds
+        .distinct()
+        .mapNotNull { id -> availableChatModels.firstOrNull { it.id == id } }
+        .filterNot { it.id == activeModelId }
+
+    fun moveFallbackModel(modelId: Uuid, delta: Int) {
+        vm.updateAssistant { current ->
+            val currentModelId = current.chatModelId ?: defaultChatModelId
+            val ids = current.modelFallbackIds.distinct()
+                .filter { id -> availableChatModels.any { it.id == id } && id != currentModelId }
+                .take(5)
+                .toMutableList()
+            val from = ids.indexOf(modelId)
+            val to = from + delta
+            if (from !in ids.indices || to !in ids.indices) {
+                current.copy(modelFallbackIds = ids)
+            } else {
+                ids.add(to, ids.removeAt(from))
+                current.copy(modelFallbackIds = ids.take(5))
+            }
+        }
     }
     var strategistPolicyText by remember(assistant.id) {
         mutableStateOf(assistant.strategistConsultationPolicy)
@@ -276,6 +316,84 @@ internal fun AssistantBasicContent(
                         },
                     )
                 }
+            )
+            HorizontalDivider()
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = { Text(stringResource(R.string.assistant_page_fallback_chain_title)) },
+                description = {
+                    Text(stringResource(R.string.assistant_page_fallback_chain_desc))
+                },
+                content = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (fallbackModels.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.assistant_page_fallback_chain_empty),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        fallbackModels.forEachIndexed { index, fallbackModel ->
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                Text(
+                                    text = "${index + 1}. ${fallbackModel.displayName.ifBlank { fallbackModel.modelId }}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                androidx.compose.foundation.layout.Row(
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    TextButton(
+                                        enabled = index > 0,
+                                        onClick = { moveFallbackModel(fallbackModel.id, -1) },
+                                    ) {
+                                        Text(stringResource(R.string.assistant_page_fallback_chain_move_up))
+                                    }
+                                    TextButton(
+                                        enabled = index < fallbackModels.lastIndex,
+                                        onClick = { moveFallbackModel(fallbackModel.id, 1) },
+                                    ) {
+                                        Text(stringResource(R.string.assistant_page_fallback_chain_move_down))
+                                    }
+                                    TextButton(
+                                        onClick = {
+                                            vm.updateAssistant { current ->
+                                                current.copy(modelFallbackIds = current.modelFallbackIds.filterNot { it == fallbackModel.id })
+                                            }
+                                        },
+                                    ) {
+                                        Text(stringResource(R.string.assistant_page_fallback_chain_remove))
+                                    }
+                                }
+                            }
+                        }
+                        TextButton(
+                            enabled = fallbackModels.size < 5,
+                            onClick = { fallbackPickerState.open() },
+                        ) {
+                            Text(stringResource(R.string.assistant_page_fallback_chain_add))
+                        }
+                        ModelListSheet(state = fallbackPickerState) { selectedModel ->
+                            vm.updateAssistant { current ->
+                                val currentModelId = current.chatModelId ?: defaultChatModelId
+                                val normalized = current.modelFallbackIds.distinct()
+                                    .filter { id -> availableChatModels.any { it.id == id } && id != currentModelId }
+                                if (
+                                    normalized.size >= 5 ||
+                                    selectedModel.type != ModelType.CHAT ||
+                                    selectedModel.id == currentModelId ||
+                                    selectedModel.id in normalized
+                                ) {
+                                    current.copy(modelFallbackIds = normalized.take(5))
+                                } else {
+                                    current.copy(modelFallbackIds = (normalized + selectedModel.id).take(5))
+                                }
+                            }
+                        }
+                    }
+                },
             )
             HorizontalDivider()
             FormItem(

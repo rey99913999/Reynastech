@@ -10,6 +10,53 @@ import org.junit.Test
 
 class GenerationHandlerTransportRetryTest {
     @Test
+    fun `falls back on exhausted quota and transient server failures before output`() {
+        assertTrue(shouldFallbackToModel(HttpException("insufficient_quota", statusCode = 429), false))
+        assertTrue(shouldFallbackToModel(HttpException("insufficient_quota", statusCode = 400), false))
+        assertTrue(shouldFallbackToModel(HttpException("payment required", statusCode = 402), false))
+        assertTrue(shouldFallbackToModel(HttpException("upstream error", statusCode = 503), false))
+        assertTrue(shouldFallbackToModel(HttpException("The server had an error processing your request"), false))
+        assertTrue(shouldFallbackToModel(HttpException("overloaded_error"), false))
+        assertTrue(shouldFallbackToModel(IOException("connection reset"), false))
+    }
+
+    @Test
+    fun `does not fall back after meaningful partial output`() {
+        assertFalse(shouldFallbackToModel(IOException("connection reset"), true))
+        assertFalse(shouldFallbackToModel(HttpException("rate limited", statusCode = 429), true))
+    }
+
+    @Test
+    fun `does not fall back for invalid credentials or deterministic requests`() {
+        assertFalse(shouldFallbackToModel(HttpException("invalid API key", statusCode = 401), false))
+        assertFalse(shouldFallbackToModel(HttpException("forbidden", statusCode = 403), false))
+        assertFalse(shouldFallbackToModel(HttpException("bad request", statusCode = 400), false))
+    }
+
+    @Test
+    fun `context fallback requires a known strictly larger context window`() {
+        assertTrue(hasLargerContextWindow(8_000, 32_000))
+        assertFalse(hasLargerContextWindow(32_000, 8_000))
+        assertFalse(hasLargerContextWindow(8_000, 8_000))
+        assertFalse(hasLargerContextWindow(null, 32_000))
+        assertFalse(hasLargerContextWindow(8_000, null))
+    }
+
+    @Test
+    fun `does not fall back for context limits or cancellation`() {
+        assertFalse(
+            shouldFallbackToModel(
+                ResponseStreamErrorException(
+                    code = "context_length_exceeded",
+                    message = "maximum context length exceeded",
+                ),
+                receivedMeaningfulOutput = false,
+            )
+        )
+        assertFalse(shouldFallbackToModel(CancellationException("user cancelled"), false))
+    }
+
+    @Test
     fun `does not report an empty stream once a chunk arrived, even without parseable parts`() {
         assertFalse(shouldReportEmptyGenerationStream(receivedAnyChunk = true))
     }
@@ -107,6 +154,35 @@ class GenerationHandlerTransportRetryTest {
                 )
             )
         }
+    }
+
+    @Test
+    fun `does not waste retries on a confirmed exhausted quota`() {
+        assertFalse(
+            shouldRetryGenerationStreamFailure(
+                failure = HttpException("insufficient_quota", statusCode = 429),
+                retryAttempt = 0,
+                maxRetries = 5,
+                receivedMeaningfulOutput = false,
+            )
+        )
+        assertFalse(
+            shouldRetryGenerationStreamFailure(
+                failure = HttpException("billing_hard_limit_reached", statusCode = 400),
+                retryAttempt = 0,
+                maxRetries = 5,
+                receivedMeaningfulOutput = false,
+            )
+        )
+        // A generic 429 is still treated as a transient rate-limit failure.
+        assertTrue(
+            shouldRetryGenerationStreamFailure(
+                failure = HttpException("rate limit exceeded", statusCode = 429),
+                retryAttempt = 0,
+                maxRetries = 5,
+                receivedMeaningfulOutput = false,
+            )
+        )
     }
 
     @Test

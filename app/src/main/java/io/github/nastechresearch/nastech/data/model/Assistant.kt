@@ -53,6 +53,8 @@ data class WaitUntilSettings(
 data class Assistant(
     val id: Uuid = Uuid.random(),
     val chatModelId: Uuid? = null, // 如果为null, 使用全局默认模型
+    /** Ordered, assistant-specific fallback chat models. */
+    val modelFallbackIds: List<Uuid> = emptyList(),
 
     // Assistant-scoped strategist model. This is a direct model-to-model consultation
     // inside the same Assistant, not a sub-agent.
