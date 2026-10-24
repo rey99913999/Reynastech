@@ -263,10 +263,10 @@ internal fun isQuotaExhaustionFailure(failure: Throwable): Boolean {
 }
 
 private val RETRY_IN_PATTERN = Regex(
-    """(?i)\\bretry(?:\\s+again)?\\s+in\\s+([0-9]+(?:\\.[0-9]+)?)\\s*(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h)\\b"""
+    """(?i)\bretry(?:\s+again)?\s+in\s+([0-9]+(?:\.[0-9]+)?)\s*(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h)\b"""
 )
 private val RETRY_AFTER_PATTERN = Regex(
-    """(?i)\\bretry[-_ ]?(?:after|delay)["']?\\s*[:=]\\s*["']?([0-9]+(?:\\.[0-9]+)?)\\s*(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h)?\\b"""
+    """(?i)\bretry[-_ ]?(?:after|delay)["']?\s*[:=]\s*["']?([0-9]+(?:\.[0-9]+)?)\s*(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h)?\b"""
 )
 
 /** Extract Retry-After-style durations from structured error details or provider messages. */
