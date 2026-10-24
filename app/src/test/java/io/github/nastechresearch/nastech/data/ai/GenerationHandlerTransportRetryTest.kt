@@ -55,8 +55,14 @@ class GenerationHandlerTransportRetryTest {
             RateLimitRecoveryDecision(RateLimitRecoveryAction.WAIT_AND_RETRY, 120_000L),
             decideRateLimitRecovery(null, 300_000L, 120_000L, alreadyWaitedOnThisModel = false),
         )
+        // Explicit provider retry windows may be followed repeatedly; the "already waited"
+        // state is reserved for the no-duration two-minute retry path.
         assertEquals(
             RateLimitRecoveryDecision(RateLimitRecoveryAction.WAIT_AND_RETRY, 45_000L),
+            decideRateLimitRecovery(40_000L, 300_000L, 120_000L, alreadyWaitedOnThisModel = false),
+        )
+        assertEquals(
+            RateLimitRecoveryDecision(RateLimitRecoveryAction.SWITCH_MODEL),
             decideRateLimitRecovery(40_000L, 300_000L, 120_000L, alreadyWaitedOnThisModel = true),
         )
         assertEquals(
