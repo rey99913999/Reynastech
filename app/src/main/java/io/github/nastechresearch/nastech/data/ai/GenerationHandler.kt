@@ -309,19 +309,22 @@ internal fun decideRateLimitRecovery(
     alreadyWaitedOnThisModel: Boolean,
     safetyMarginMs: Long = 5_000L,
 ): RateLimitRecoveryDecision {
+    // This flag means we already used the configured two-minute fallback path for a
+    // rate-limit response that lacked a retry duration. If that retry is rejected, switch
+    // models even if the second response happens to include a duration.
+    if (alreadyWaitedOnThisModel) {
+        return RateLimitRecoveryDecision(RateLimitRecoveryAction.SWITCH_MODEL)
+    }
     if (retryAfterMs != null) {
         if (retryAfterMs > maxWaitMs) {
             return RateLimitRecoveryDecision(RateLimitRecoveryAction.SWITCH_MODEL)
         }
-        // Honor every provider-supplied retry window that is within the user's threshold.
-        // The one-retry-then-switch rule applies only when no delay was supplied.
+        // Repeated provider-supplied retry windows are honored on each response as long as
+        // each one is within the user's threshold.
         return RateLimitRecoveryDecision(
             RateLimitRecoveryAction.WAIT_AND_RETRY,
             retryAfterMs.coerceAtLeast(0L).saturatingAdd(safetyMarginMs.coerceAtLeast(0L)),
         )
-    }
-    if (alreadyWaitedOnThisModel) {
-        return RateLimitRecoveryDecision(RateLimitRecoveryAction.SWITCH_MODEL)
     }
     val waitMs = missingRetryAfterWaitMs.coerceAtLeast(0L)
     return RateLimitRecoveryDecision(RateLimitRecoveryAction.WAIT_AND_RETRY, waitMs)
@@ -765,7 +768,7 @@ class GenerationHandler(
             providerManager.getProviderByType(activeProvider)
         var fallbackCursor = -1
         var fallbackCycleWrapped = false
-        val rateLimitWaitAttemptedModels = mutableSetOf<Uuid>()
+        val missingRetryAfterWaitAttemptedModels = mutableSetOf<Uuid>()
         val modelCooldownUntilMs = mutableMapOf<Uuid, Long>()
         var fallbackCycleNotBeforeMs = 0L
         var fallbackContextAddendum: String? = null
@@ -1146,10 +1149,12 @@ class GenerationHandler(
                                         retryAfterMs = retryAfterMs,
                                         maxWaitMs = maxWaitMs,
                                         missingRetryAfterWaitMs = missingRetryWaitMs,
-                                        alreadyWaitedOnThisModel = activeModel.id in rateLimitWaitAttemptedModels,
+                                        alreadyWaitedOnThisModel = activeModel.id in missingRetryAfterWaitAttemptedModels,
                                     )
                                     if (decision.action == RateLimitRecoveryAction.WAIT_AND_RETRY) {
-                                        rateLimitWaitAttemptedModels.add(activeModel.id)
+                                        if (retryAfterMs == null) {
+                                            missingRetryAfterWaitAttemptedModels.add(activeModel.id)
+                                        }
                                         retrySameModelAfterMs = decision.waitMs ?: missingRetryWaitMs
                                     } else {
                                         val cooldownMs = retryAfterMs?.let {
@@ -1227,7 +1232,7 @@ class GenerationHandler(
                             )
                             Log.w(TAG, "model fallback: ${failedName} -> ${nextName} (${reason})", failure)
                             if (fallbackCycleWrapped) {
-                                rateLimitWaitAttemptedModels.clear()
+                                missingRetryAfterWaitAttemptedModels.clear()
                                 fallbackCycleNotBeforeMs = maxOf(
                                     fallbackCycleNotBeforeMs,
                                     System.currentTimeMillis().saturatingAdd(cycleCooldownMs),
