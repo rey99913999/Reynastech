@@ -115,6 +115,15 @@ internal fun AssistantBasicContent(
     var strategistLimitText by remember(assistant.id) {
         mutableStateOf(assistant.strategistConsultationLimit?.toString() ?: "3")
     }
+    var fallbackMaxWaitMinutesText by remember(assistant.id) {
+        mutableStateOf(assistant.fallbackMaxRateLimitWaitMinutes.toString())
+    }
+    var fallbackMissingWaitMinutesText by remember(assistant.id) {
+        mutableStateOf(assistant.fallbackMissingRetryAfterWaitMinutes.toString())
+    }
+    var fallbackCycleCooldownSecondsText by remember(assistant.id) {
+        mutableStateOf(assistant.fallbackCycleCooldownSeconds.toString())
+    }
 
     val fallbackPickerState = rememberModelListState(
         modelId = null,
@@ -137,7 +146,6 @@ internal fun AssistantBasicContent(
             val currentModelId = current.chatModelId ?: defaultChatModelId
             val ids = current.modelFallbackIds.distinct()
                 .filter { id -> availableChatModels.any { it.id == id } && id != currentModelId }
-                .take(5)
                 .toMutableList()
             val from = ids.indexOf(modelId)
             val to = from + delta
@@ -145,7 +153,7 @@ internal fun AssistantBasicContent(
                 current.copy(modelFallbackIds = ids)
             } else {
                 ids.add(to, ids.removeAt(from))
-                current.copy(modelFallbackIds = ids.take(5))
+                current.copy(modelFallbackIds = ids)
             }
         }
     }
@@ -370,7 +378,7 @@ internal fun AssistantBasicContent(
                             }
                         }
                         TextButton(
-                            enabled = fallbackModels.size < 5,
+                            enabled = true,
                             onClick = { fallbackPickerState.open() },
                         ) {
                             Text(stringResource(R.string.assistant_page_fallback_chain_add))
@@ -381,18 +389,80 @@ internal fun AssistantBasicContent(
                                 val normalized = current.modelFallbackIds.distinct()
                                     .filter { id -> availableChatModels.any { it.id == id } && id != currentModelId }
                                 if (
-                                    normalized.size >= 5 ||
                                     selectedModel.type != ModelType.CHAT ||
                                     selectedModel.id == currentModelId ||
                                     selectedModel.id in normalized
                                 ) {
-                                    current.copy(modelFallbackIds = normalized.take(5))
+                                    current.copy(modelFallbackIds = normalized)
                                 } else {
-                                    current.copy(modelFallbackIds = (normalized + selectedModel.id).take(5))
+                                    current.copy(modelFallbackIds = normalized + selectedModel.id)
                                 }
                             }
                         }
                     }
+                },
+            )
+            HorizontalDivider()
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = { Text(stringResource(R.string.assistant_page_fallback_max_wait_title)) },
+                description = { Text(stringResource(R.string.assistant_page_fallback_max_wait_desc)) },
+                content = {
+                    OutlinedTextField(
+                        value = fallbackMaxWaitMinutesText,
+                        onValueChange = { input ->
+                            val digits = input.filter(Char::isDigit).take(4)
+                            fallbackMaxWaitMinutesText = digits
+                            digits.toIntOrNull()?.let { value ->
+                                vm.updateAssistant { current -> current.copy(fallbackMaxRateLimitWaitMinutes = value.coerceIn(0, 1440)) }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                },
+            )
+            HorizontalDivider()
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = { Text(stringResource(R.string.assistant_page_fallback_missing_retry_title)) },
+                description = { Text(stringResource(R.string.assistant_page_fallback_missing_retry_desc)) },
+                content = {
+                    OutlinedTextField(
+                        value = fallbackMissingWaitMinutesText,
+                        onValueChange = { input ->
+                            val digits = input.filter(Char::isDigit).take(4)
+                            fallbackMissingWaitMinutesText = digits
+                            digits.toIntOrNull()?.let { value ->
+                                vm.updateAssistant { current -> current.copy(fallbackMissingRetryAfterWaitMinutes = value.coerceIn(1, 1440)) }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                },
+            )
+            HorizontalDivider()
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = { Text(stringResource(R.string.assistant_page_fallback_cycle_cooldown_title)) },
+                description = { Text(stringResource(R.string.assistant_page_fallback_cycle_cooldown_desc)) },
+                content = {
+                    OutlinedTextField(
+                        value = fallbackCycleCooldownSecondsText,
+                        onValueChange = { input ->
+                            val digits = input.filter(Char::isDigit).take(5)
+                            fallbackCycleCooldownSecondsText = digits
+                            digits.toIntOrNull()?.let { value ->
+                                vm.updateAssistant { current -> current.copy(fallbackCycleCooldownSeconds = value.coerceIn(1, 3600)) }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
                 },
             )
             HorizontalDivider()

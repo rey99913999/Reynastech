@@ -48,6 +48,44 @@ class TaskExecutionMonitorTest {
     }
 
     @Test
+    fun rateLimitCooldownAppearsAsAWaitActivityUntilTheCooldownCompletes() {
+        val task = TaskEntity(
+            taskId = "task-rate-limit",
+            conversationId = "conversation-1",
+            goal = "Continue a model-backed task",
+            status = TaskStatus.RUNNING.name,
+            currentStepId = "step-rate-limit",
+            createdAt = 1_000L,
+            updatedAt = 2_000L,
+        )
+        val step = TaskStepEntity(
+            id = "step-rate-limit",
+            taskId = task.taskId,
+            orderIndex = 0,
+            logicalGoal = "Wait for rate limit",
+            executionInstruction = "Wait and retry the model",
+            status = TaskStepStatus.RUNNING.name,
+            startedAt = 1_500L,
+        )
+        val audit = listOf(
+            event("step-start", task.taskId, step.id, "STEP_STARTED", 1_500L),
+            event("rate-wait-start", task.taskId, step.id, "MODEL_RATE_LIMIT_WAIT_STARTED", 2_000L),
+        )
+        val snapshot = buildTaskExecutionSnapshot(
+            task = task,
+            steps = listOf(step),
+            audit = audit,
+            nowMs = 9_000L,
+            slowAfterMs = 3_000L,
+            possiblyStuckAfterMs = 5_000L,
+        )
+        assertEquals(TaskExecutionHealth.RUNNING, snapshot.health)
+        assertEquals("RATE_LIMIT_WAIT", snapshot.currentActivity?.stage)
+        assertEquals("RUNNING", snapshot.currentActivity?.status)
+        assertEquals(7_000L, snapshot.currentActivity?.elapsedMs)
+    }
+
+    @Test
     fun completedTaskHasNoActiveActivityAndKeepsCompletedElapsedTime() {
         val task = TaskEntity(
             taskId = "task-2",

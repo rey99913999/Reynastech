@@ -110,7 +110,7 @@ data class TaskExecutionStepTiming(
 )
 
 data class TaskExecutionActivity(
-    /** MODEL_REQUEST, ACTION, VERIFICATION, WAIT, or STEP. */
+    /** MODEL_REQUEST, ACTION, VERIFICATION, WAIT, RATE_LIMIT_WAIT, or STEP. */
     val stage: String,
     val status: String,
     val startedAtMs: Long,
@@ -223,6 +223,8 @@ internal fun buildTaskExecutionSnapshot(
             TaskExecutionHealth.WAITING_FOR_USER
         task.status == TaskStatus.PENDING.name -> TaskExecutionHealth.PENDING
         task.status != TaskStatus.RUNNING.name -> TaskExecutionHealth.PENDING
+        // A scheduled cooldown is an intentional wait, not a slow or stuck activity.
+        activeActivity?.stage == "RATE_LIMIT_WAIT" -> TaskExecutionHealth.RUNNING
         ageMs >= possiblyStuckAfterMs -> TaskExecutionHealth.POSSIBLY_STUCK
         ageMs >= slowAfterMs -> TaskExecutionHealth.SLOW
         else -> TaskExecutionHealth.RUNNING
@@ -345,9 +347,11 @@ private fun findActiveActivity(
         when (event.eventType) {
             "STEP_STARTED" -> active = null
             "SUCCESS", "FAILED" -> active = null
-            "MODEL_REQUEST_STARTED", "ACTION_STARTED", "VERIFICATION_STARTED", "WAIT_STARTED" ->
+            "MODEL_REQUEST_STARTED", "ACTION_STARTED", "VERIFICATION_STARTED", "WAIT_STARTED",
+            "MODEL_RATE_LIMIT_WAIT_STARTED" ->
                 active = event
             "MODEL_RESPONSE_RECEIVED", "MODEL_REQUEST_FAILED", "MODEL_REQUEST_CANCELLED",
+            "MODEL_RATE_LIMIT_WAIT_COMPLETED",
             "ACTION_COMPLETED", "ACTION_FAILED", "ACTION_AWAITING_APPROVAL",
             "VERIFICATION_COMPLETED", "WAIT_COMPLETED", "WAIT_FAILED",
             "WAIT_AWAITING_APPROVAL" -> {
@@ -362,6 +366,7 @@ private fun findActiveActivity(
         "ACTION_STARTED" -> "ACTION"
         "VERIFICATION_STARTED" -> "VERIFICATION"
         "WAIT_STARTED" -> "WAIT"
+        "MODEL_RATE_LIMIT_WAIT_STARTED" -> "RATE_LIMIT_WAIT"
         else -> "STEP"
     }
     return TaskExecutionActivity(
@@ -382,5 +387,6 @@ private fun matchingEnd(startType: String, endType: String): Boolean = when (sta
     )
     "VERIFICATION_STARTED" -> endType == "VERIFICATION_COMPLETED"
     "WAIT_STARTED" -> endType in setOf("WAIT_COMPLETED", "WAIT_FAILED", "WAIT_AWAITING_APPROVAL")
+    "MODEL_RATE_LIMIT_WAIT_STARTED" -> endType == "MODEL_RATE_LIMIT_WAIT_COMPLETED"
     else -> false
 }
