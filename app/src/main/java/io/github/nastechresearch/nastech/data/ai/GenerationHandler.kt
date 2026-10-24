@@ -202,6 +202,7 @@ internal fun isRateLimitFailure(failure: Throwable): Boolean {
     ) return false
     val hardQuotaMarkers = listOf(
         "insufficient quota",
+        "exceeded your current quota",
         "insufficient credits",
         "out of credits",
         "billing hard limit",
@@ -223,6 +224,7 @@ internal fun isRateLimitFailure(failure: Throwable): Boolean {
         "tokens per minute",
         "free tier requests",
         "free tier tokens",
+        "resource exhausted",
         "retry in",
         "retry after",
         "retry-after",
@@ -243,6 +245,7 @@ internal fun isQuotaExhaustionFailure(failure: Throwable): Boolean {
     ) return false
     val hardQuotaMarkers = listOf(
         "insufficient quota",
+        "exceeded your current quota",
         "insufficient credits",
         "out of credits",
         "billing hard limit",
