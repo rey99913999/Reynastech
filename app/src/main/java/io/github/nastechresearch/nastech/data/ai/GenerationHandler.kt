@@ -200,7 +200,10 @@ internal fun isRateLimitFailure(failure: Throwable): Boolean {
             "authentication error", "unauthorized", "invalid token",
         ).any { it in text }
     ) return false
-    val hardQuotaMarkers = listOf(
+
+    // Strong evidence of a time-window rate limit takes precedence over generic wording
+    // such as "quota exceeded" in Google free-tier errors.
+    val hardBillingMarkers = listOf(
         "insufficient quota",
         "insufficient credits",
         "out of credits",
@@ -211,9 +214,9 @@ internal fun isRateLimitFailure(failure: Throwable): Boolean {
         "quota is exhausted",
         "quota exhausted",
     )
-    if (hardQuotaMarkers.any { it in text }) return false
+    if (hardBillingMarkers.any { it in text }) return false
 
-    val rateLimitMarkers = listOf(
+    val explicitRateWindowMarkers = listOf(
         "rate limit",
         "rate limited",
         "too many requests",
@@ -223,14 +226,16 @@ internal fun isRateLimitFailure(failure: Throwable): Boolean {
         "tokens per minute",
         "free tier requests",
         "free tier tokens",
-        "resource exhausted",
         "retry in",
         "retry after",
         "retry-after",
         "retry delay",
         "retrydelay",
     )
-    if (rateLimitMarkers.any { it in text }) return true
+    if (explicitRateWindowMarkers.any { it in text }) return true
+
+    // Without an explicit time-window signal, quota/billing language wins over a bare 429.
+    if ("exceeded your current quota" in text || "quota exceeded" in text) return false
     return statusCode == 429
 }
 
@@ -242,6 +247,7 @@ internal fun isQuotaExhaustionFailure(failure: Throwable): Boolean {
             "authentication error", "unauthorized", "invalid token",
         ).any { it in text }
     ) return false
+
     val hardQuotaMarkers = listOf(
         "insufficient quota",
         "insufficient credits",
